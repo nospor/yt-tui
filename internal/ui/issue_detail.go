@@ -51,12 +51,14 @@ func newDetailModel(client *ytcli.Client) detailModel {
 	ti.Prompt = " ✏️  "
 
 	return detailModel{
-		client:       client,
-		spinner:      s,
-		loading:      true,
-		mode:         modeNormal,
-		textInput:    ti,
-		stateOptions: []string{"Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"},
+		client:           client,
+		spinner:          s,
+		loading:          true,
+		mode:             modeNormal,
+		textInput:        ti,
+		stateOptions:     []string{"Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"},
+		descViewport:     viewport.New(0, 0),
+		commentsViewport: viewport.New(0, 0),
 	}
 }
 
@@ -95,8 +97,10 @@ func (m detailModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, m.loadDetailCmd())
 }
 
-func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
-	var cmd tea.Cmd
+func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
+	defer func() {
+		res.updateViewportSizes()
+	}()
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -111,30 +115,9 @@ func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
 		m.issue = msg.issue
 		m.comments = msg.comments
 
-		// Initialize viewports
+		// Initialize viewports and set content
 		m.updateViewportSizes()
-		m.descViewport.SetContent(m.issue.Description)
-
-		var commentsStr strings.Builder
-		if len(m.comments) == 0 {
-			commentsStr.WriteString("No comments yet.")
-		} else {
-			for idx, c := range m.comments {
-				if idx > 0 {
-					commentsStr.WriteString("\n\n---\n\n")
-				}
-				authorName := "System"
-				if c.Author != nil {
-					authorName = c.Author.DisplayName()
-				}
-				commentsStr.WriteString(fmt.Sprintf("%s (%s):\n%s",
-					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
-					StyleSubtext.Render(c.CreatedTime()),
-					c.Text,
-				))
-			}
-		}
-		m.commentsViewport.SetContent(commentsStr.String())
+		m.updateViewportContents()
 
 		return m, nil
 
@@ -231,6 +214,20 @@ func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
 				m.activeViewport = 0
 			}
 			return m, nil
+		case "J":
+			if m.activeViewport == 0 {
+				m.descViewport.LineDown(1)
+			} else {
+				m.commentsViewport.LineDown(1)
+			}
+			return m, nil
+		case "K":
+			if m.activeViewport == 0 {
+				m.descViewport.LineUp(1)
+			} else {
+				m.commentsViewport.LineUp(1)
+			}
+			return m, nil
 		case "c":
 			m.mode = modeCommentInput
 			m.textInput.Placeholder = "Add a comment..."
@@ -277,15 +274,82 @@ func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
 }
 
 func (m *detailModel) updateViewportSizes() {
-	spacing := 6
-	topPanelHeight := 7
-	bottomHeight := m.height - topPanelHeight - spacing
+	var actionHeight int
+	if m.mode != modeNormal {
+		actionHeight = 5
+	}
+	bottomHeight := m.height - 9 - actionHeight
+	if bottomHeight < 3 {
+		bottomHeight = 3
+	}
 
-	descWidth := (m.width - 4) * 2 / 3
-	commentsWidth := (m.width - 4) / 3
+	availWidth := m.width - 5 // leave 1 column for separator, 4 columns for margin
+	descWidth := availWidth * 2 / 3
+	commentsWidth := availWidth - descWidth
 
-	m.descViewport = viewport.New(descWidth, bottomHeight)
-	m.commentsViewport = viewport.New(commentsWidth, bottomHeight)
+	viewportHeight := bottomHeight - 4
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	viewportDescWidth := descWidth - 4
+	if viewportDescWidth < 1 {
+		viewportDescWidth = 1
+	}
+	viewportCommentsWidth := commentsWidth - 4
+	if viewportCommentsWidth < 1 {
+		viewportCommentsWidth = 1
+	}
+
+	// Check if the dimensions actually changed
+	descWidthChanged := m.descViewport.Width != viewportDescWidth
+	commentsWidthChanged := m.commentsViewport.Width != viewportCommentsWidth
+
+	m.descViewport.Width = viewportDescWidth
+	m.descViewport.Height = viewportHeight
+	m.commentsViewport.Width = viewportCommentsWidth
+	m.commentsViewport.Height = viewportHeight
+
+	// Only re-wrap and set content if the width changed and we have the issue loaded
+	if m.issue != nil {
+		if descWidthChanged || commentsWidthChanged {
+			m.updateViewportContents()
+		}
+	}
+}
+
+func (m *detailModel) updateViewportContents() {
+	if m.issue == nil {
+		return
+	}
+
+	// Wrap description
+	descWrapped := lipgloss.NewStyle().Width(m.descViewport.Width).Render(m.issue.Description)
+	m.descViewport.SetContent(descWrapped)
+
+	// Format and wrap comments
+	var commentsStr strings.Builder
+	if len(m.comments) == 0 {
+		commentsStr.WriteString("No comments yet.")
+	} else {
+		for idx, c := range m.comments {
+			if idx > 0 {
+				commentsStr.WriteString("\n\n---\n\n")
+			}
+			authorName := "System"
+			if c.Author != nil {
+				authorName = c.Author.DisplayName()
+			}
+			
+			header := fmt.Sprintf("%s (%s):", 
+				lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
+				StyleSubtext.Render(c.CreatedTime()),
+			)
+			bodyWrapped := lipgloss.NewStyle().Width(m.commentsViewport.Width).Render(c.Text)
+			
+			commentsStr.WriteString(header + "\n" + bodyWrapped)
+		}
+	}
+	m.commentsViewport.SetContent(commentsStr.String())
 }
 
 func (m detailModel) View() string {
@@ -333,8 +397,8 @@ func (m detailModel) View() string {
 	}
 	descTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" Description ")
 	descView := descBorder.
-		Width(m.descViewport.Width).
-		Height(m.descViewport.Height).
+		Width(m.descViewport.Width + 4).
+		Height(m.descViewport.Height + 4).
 		Render(lipgloss.JoinVertical(lipgloss.Left, descTitle, "", m.descViewport.View()))
 
 	commentsBorder := StyleNormalBorder
@@ -343,8 +407,8 @@ func (m detailModel) View() string {
 	}
 	commentsTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" Comments ")
 	commentsView := commentsBorder.
-		Width(m.commentsViewport.Width).
-		Height(m.commentsViewport.Height).
+		Width(m.commentsViewport.Width + 4).
+		Height(m.commentsViewport.Height + 4).
 		Render(lipgloss.JoinVertical(lipgloss.Left, commentsTitle, "", m.commentsViewport.View()))
 
 	splitView := lipgloss.JoinHorizontal(lipgloss.Top, descView, " ", commentsView)

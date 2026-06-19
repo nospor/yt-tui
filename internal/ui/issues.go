@@ -308,9 +308,9 @@ func (m issuesModel) View() string {
 	title := StyleTitle.Render(titleText)
 
 	// Adjust table height based on search bar visibility
-	tableHeight := m.height - 7
+	tableHeight := m.height - 6
 	if m.searchMode {
-		tableHeight = m.height - 9
+		tableHeight = m.height - 10
 	}
 	m.table.SetHeight(tableHeight)
 

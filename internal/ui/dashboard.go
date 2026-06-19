@@ -203,7 +203,7 @@ func (m dashboardModel) View() string {
 
 	// Calculate size
 	panelWidth := (m.width - 6) / 2
-	panelHeight := m.height - 5
+	panelHeight := m.height - 4
 
 	// Issues Panel
 	var issuesContent string

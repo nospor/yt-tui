@@ -95,7 +95,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Propagate sizes to child models (adjusting for headers and footers)
 		childWidth := m.width
-		childHeight := m.height - 3 // leave space for top title and bottom status bar
+		childHeight := m.height - 5 // leave space for top title and bottom status bar
 
 		m.welcome.width = m.width
 		m.welcome.height = m.height
