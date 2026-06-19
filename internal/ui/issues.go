@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -64,7 +65,7 @@ func newIssuesModel(client *ytcli.Client, pageSize int) issuesModel {
 	t.SetStyles(ts)
 
 	ti := textinput.New()
-	ti.Placeholder = "Search query (e.g. state: Open, priority: Critical)..."
+	ti.Placeholder = "Filter by ID or summary..."
 	ti.Prompt = " 🔍 / "
 	ti.Focus()
 
@@ -90,7 +91,7 @@ type issuesDataMsg struct {
 
 func (m issuesModel) loadIssuesCmd() tea.Cmd {
 	projectCode := m.projectCode
-	query := m.searchInput.Value()
+	query := "" // Fetch all issues, search is done locally in the UI
 	skip := m.skip
 	pageSize := m.pageSize
 
@@ -106,6 +107,26 @@ func (m issuesModel) loadIssuesCmd() tea.Cmd {
 	}
 }
 
+func (m *issuesModel) updateTableRows() {
+	rows := []table.Row{}
+	filterPhrase := strings.ToLower(m.searchInput.Value())
+
+	for _, issue := range m.issues {
+		if filterPhrase == "" ||
+			strings.Contains(strings.ToLower(issue.Summary), filterPhrase) ||
+			strings.Contains(strings.ToLower(issue.IDReadable), filterPhrase) {
+			rows = append(rows, table.Row{
+				issue.IDReadable,
+				issue.Summary,
+				issue.State(),
+				issue.Priority(),
+				issue.Assignee(),
+			})
+		}
+	}
+	m.table.SetRows(rows)
+}
+
 func (m *issuesModel) initProject(projectCode string) tea.Cmd {
 	m.projectCode = projectCode
 	m.searchInput.SetValue("")
@@ -118,18 +139,8 @@ func (m *issuesModel) initProject(projectCode string) tea.Cmd {
 		m.loading = false
 		m.err = nil
 
-		rows := []table.Row{}
-		for _, issue := range m.issues {
-			rows = append(rows, table.Row{
-				issue.IDReadable,
-				issue.Summary,
-				issue.State(),
-				issue.Priority(),
-				issue.Assignee(),
-			})
-		}
-		m.table.SetRows(rows)
-		if len(rows) > 0 {
+		m.updateTableRows()
+		if len(m.table.Rows()) > 0 {
 			m.table.SetCursor(0)
 		}
 		if !m.loadedAll {
@@ -159,9 +170,8 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		return m, cmd
 
 	case issuesDataMsg:
-		// Discard stale message from previous project or search query.
-		currentQuery := m.searchInput.Value()
-		if msg.projectCode != m.projectCode || msg.query != currentQuery {
+		// Discard stale message from previous project.
+		if msg.projectCode != m.projectCode {
 			return m, nil
 		}
 
@@ -179,27 +189,15 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.issues = append(m.issues, msg.issues...)
 		}
 
-		// Update cache for this project (only if query is empty)
-		if msg.query == "" {
-			m.cache[m.projectCode] = projectCache{
-				issues:    m.issues,
-				skip:      msg.skip,
-				loadedAll: len(msg.issues) < m.pageSize,
-			}
+		// Update cache for this project
+		m.cache[m.projectCode] = projectCache{
+			issues:    m.issues,
+			skip:      msg.skip,
+			loadedAll: len(msg.issues) < m.pageSize,
 		}
 
-		rows := []table.Row{}
-		for _, issue := range m.issues {
-			rows = append(rows, table.Row{
-				issue.IDReadable,
-				issue.Summary,
-				issue.State(),
-				issue.Priority(),
-				issue.Assignee(),
-			})
-		}
-		m.table.SetRows(rows)
-		if msg.skip == 0 && len(rows) > 0 {
+		m.updateTableRows()
+		if msg.skip == 0 && len(m.table.Rows()) > 0 {
 			m.table.SetCursor(0)
 		}
 
@@ -215,19 +213,17 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.searchMode {
 			switch msg.String() {
-			case "enter":
-				m.loading = true
-				m.searchMode = false
-				m.skip = 0
-				m.loadedAll = false
-				m.issues = nil
-				return m, m.loadIssuesCmd()
-			case "esc":
+			case "enter", "esc":
 				m.searchMode = false
 				m.searchInput.Blur()
 				return m, nil
 			}
+			oldValue := m.searchInput.Value()
 			m.searchInput, cmd = m.searchInput.Update(msg)
+			if m.searchInput.Value() != oldValue {
+				m.updateTableRows()
+				m.table.SetCursor(0)
+			}
 			return m, cmd
 		}
 
@@ -244,6 +240,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.searchMode = true
 			m.searchInput.Focus()
 			m.searchInput.SetValue("")
+			m.updateTableRows()
 			return m, nil
 		case "enter":
 			if len(m.table.Rows()) > 0 {
@@ -286,10 +283,19 @@ func (m issuesModel) View() string {
 
 	var statusSuffix string
 	if len(m.issues) > 0 {
-		if !m.loadedAll {
-			statusSuffix = fmt.Sprintf(" (Loaded %d, loading more...)", len(m.issues))
+		visibleCount := len(m.table.Rows())
+		if visibleCount != len(m.issues) {
+			if !m.loadedAll {
+				statusSuffix = fmt.Sprintf(" (Showing %d of %d loaded, loading more...)", visibleCount, len(m.issues))
+			} else {
+				statusSuffix = fmt.Sprintf(" (Showing %d of %d loaded)", visibleCount, len(m.issues))
+			}
 		} else {
-			statusSuffix = fmt.Sprintf(" (Loaded %d)", len(m.issues))
+			if !m.loadedAll {
+				statusSuffix = fmt.Sprintf(" (Loaded %d, loading more...)", len(m.issues))
+			} else {
+				statusSuffix = fmt.Sprintf(" (Loaded %d)", len(m.issues))
+			}
 		}
 	}
 
