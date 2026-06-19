@@ -27,12 +27,12 @@ type KeyMap struct {
 // Keys returns a default KeyMap.
 var Keys = KeyMap{
 	Up: key.NewBinding(
-		key.WithKeys("up", "j"),
-		key.WithHelp("↑/j", "move up"),
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "move up"),
 	),
 	Down: key.NewBinding(
-		key.WithKeys("down", "k"),
-		key.WithHelp("↓/k", "move down"),
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "move down"),
 	),
 	Left: key.NewBinding(
 		key.WithKeys("left", "h"),

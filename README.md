@@ -45,7 +45,7 @@ A terminal-based interface for JetBrains YouTrack, written in Go using the **Bub
 
 ### Dashboard View (Home Screen)
 * `Tab` / `Shift+Tab`: Switch between **My Open Issues** and **Projects** panels.
-* `↑` / `↓` (or `j` / `k`): Navigate items within the active panel.
+* `↑` / `↓` (or `k` / `j`): Navigate items within the active panel.
 * `Enter`: Select the highlighted item.
   - Selecting an issue goes to the **Issue Detail** view.
   - Selecting a project opens the **Issues List** filtered by that project.
@@ -55,14 +55,14 @@ A terminal-based interface for JetBrains YouTrack, written in Go using the **Bub
 * `q`: Quit.
 
 ### Issues List View
-* `↑` / `↓` (or `j` / `k`): Scroll through issues.
+* `↑` / `↓` (or `k` / `j`): Scroll through issues.
 * `Enter`: View details of the selected issue.
 * `/`: Toggle search/filter mode. Type a keyword to search issues. Press `Esc` or `Enter` to close search mode.
 * `n`: Create a new issue in this project.
 * `Esc`: Go back to the previous screen.
 
 ### Issue Detail View
-* `↑` / `↓` (or `j` / `k`): Scroll the issue description viewport.
+* `↑` / `↓` (or `k` / `j`): Scroll the issue description viewport.
 * `PageUp` / `PageDown` (or `Ctrl+U` / `Ctrl+D`): Scroll the comments list viewport.
 * `c`: Add a comment. Type your comment and press `Ctrl+S` to submit, or `Esc` to cancel.
 * `s`: Transition issue state (opens state input, type a state like `Open`, `In Progress`, `Fixed`, and press `Enter`).

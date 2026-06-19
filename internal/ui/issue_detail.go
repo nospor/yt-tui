@@ -194,12 +194,12 @@ func (m detailModel) Update(msg tea.Msg) (detailModel, tea.Cmd) {
 
 		case modeStateSelect:
 			switch msg.String() {
-			case "left", "h", "up", "j":
+			case "left", "h", "up", "k":
 				m.stateCursor--
 				if m.stateCursor < 0 {
 					m.stateCursor = len(m.stateOptions) - 1
 				}
-			case "right", "l", "down", "k":
+			case "right", "l", "down", "j":
 				m.stateCursor++
 				if m.stateCursor >= len(m.stateOptions) {
 					m.stateCursor = 0

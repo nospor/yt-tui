@@ -129,7 +129,7 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 			} else {
 				m.active = panelIssues
 			}
-		case "up", "j":
+		case "up", "k":
 			if m.active == panelIssues && len(m.issues) > 0 {
 				m.issueCursor--
 				if m.issueCursor < 0 {
@@ -141,7 +141,7 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 					m.projectCursor = len(m.projects) - 1
 				}
 			}
-		case "down", "k":
+		case "down", "j":
 			if m.active == panelIssues && len(m.issues) > 0 {
 				m.issueCursor++
 				if m.issueCursor >= len(m.issues) {
