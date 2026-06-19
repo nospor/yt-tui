@@ -378,8 +378,82 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 	return nil
 }
 
+// GetCurrentUserLogin retrieves the login username of the currently authenticated user.
+func (c *Client) GetCurrentUserLogin() (string, error) {
+	baseURL, token, err := c.GetCredentials()
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	apiURL := baseURL + "api/users/me?fields=login"
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create http GET request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch current user details: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("failed to fetch current user details, status %s: %s", resp.Status, string(respBody))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read current user details response: %w", err)
+	}
+
+	var userData struct {
+		Login string `json:"login"`
+	}
+
+	if err := json.Unmarshal(respBody, &userData); err != nil {
+		return "", fmt.Errorf("failed to parse current user JSON: %w", err)
+	}
+
+	if userData.Login == "" {
+		return "", fmt.Errorf("received empty login for current user")
+	}
+
+	return userData.Login, nil
+}
+
+// normalizeAssignee converts the assignee username input to lowercase and replaces spaces with dots.
+func normalizeAssignee(assignee string) string {
+	assignee = strings.TrimSpace(assignee)
+	if assignee == "" {
+		return ""
+	}
+	parts := strings.Fields(assignee)
+	if len(parts) == 0 {
+		return ""
+	}
+	for i, part := range parts {
+		parts[i] = strings.ToLower(part)
+	}
+	return strings.Join(parts, ".")
+}
+
 // AssignIssue assigns an issue to a user. id must be the readable issue ID (e.g., "PROJECT-123").
 func (c *Client) AssignIssue(id string, assignee string) error {
+	assignee = normalizeAssignee(assignee)
+	if assignee == "me" {
+		if resolved, err := c.GetCurrentUserLogin(); err == nil {
+			assignee = resolved
+		}
+	}
 	stdout, stderr, err := c.runCommand("issues", "assign", id, assignee)
 	if err != nil {
 		return formatError("failed to assign issue", stdout, stderr, err)
@@ -389,6 +463,13 @@ func (c *Client) AssignIssue(id string, assignee string) error {
 
 // CreateIssue creates a new issue.
 func (c *Client) CreateIssue(projectID, summary, description, priority, issueType, assignee string) (string, error) {
+	assignee = normalizeAssignee(assignee)
+	if assignee == "me" {
+		if resolved, err := c.GetCurrentUserLogin(); err == nil {
+			assignee = resolved
+		}
+	}
+
 	args := []string{"issues", "create", projectID, summary}
 	if description != "" {
 		args = append(args, "--description", description)
