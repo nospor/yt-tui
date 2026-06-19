@@ -1,4 +1,14 @@
 
+## [0.1.1] - 2026-06-19
+
+### Features
+
+- Add versioning, goreleaser, and github release workflows ([c0bd57b](https://github.com/nospor/yt-tui/commit/c0bd57b3046b496d40ffe152b0f53d6c2b09ce45))
+
+### Bug Fixes
+
+- Ignore release notes and goreleaser outputs in gitignore ([479a33d](https://github.com/nospor/yt-tui/commit/479a33db4a7ee9b9e53da1d6109cee271532b011))
+
 ## [0.1.0] - 2026-06-19
 
 ### Features
