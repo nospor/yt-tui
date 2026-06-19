@@ -80,7 +80,7 @@ func (m detailModel) loadDetailCmd() tea.Cmd {
 		}
 
 		// Also fetch comments
-		comments, err2 := m.client.ListComments(issue.ID)
+		comments, err2 := m.client.ListComments(issue.IDReadable)
 		return detailDataMsg{issue: issue, comments: comments, err: err2}
 	}
 }
@@ -146,7 +146,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				if val != "" {
 					m.loading = true
 					return m, func() tea.Msg {
-						err := m.client.AddComment(m.issue.ID, val)
+						err := m.client.AddComment(m.issue.IDReadable, val)
 						return detailActionFinishedMsg{err: err}
 					}
 				}
@@ -164,7 +164,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				if val != "" {
 					m.loading = true
 					return m, func() tea.Msg {
-						err := m.client.AssignIssue(m.issue.ID, val)
+						err := m.client.AssignIssue(m.issue.IDReadable, val)
 						return detailActionFinishedMsg{err: err}
 					}
 				}
@@ -191,7 +191,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.loading = true
 				selectedState := m.stateOptions[m.stateCursor]
 				return m, func() tea.Msg {
-					err := m.client.UpdateIssueState(m.issue.ID, selectedState)
+					err := m.client.UpdateIssueState(m.issue.IDReadable, selectedState)
 					return detailActionFinishedMsg{err: err}
 				}
 			case "esc":

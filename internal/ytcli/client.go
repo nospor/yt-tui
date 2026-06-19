@@ -225,7 +225,7 @@ func (c *Client) GetIssue(id string) (*Issue, error) {
 	return &issues[0], nil
 }
 
-// AddComment adds a comment to an issue.
+// AddComment adds a comment to an issue. id must be the readable issue ID (e.g., "PROJECT-123").
 func (c *Client) AddComment(id string, text string) error {
 	if text == "" {
 		return errors.New("comment text cannot be empty")
@@ -237,7 +237,7 @@ func (c *Client) AddComment(id string, text string) error {
 	return nil
 }
 
-// UpdateIssueState moves an issue to a new state.
+// UpdateIssueState moves an issue to a new state. id must be the readable issue ID (e.g., "PROJECT-123").
 func (c *Client) UpdateIssueState(id string, state string) error {
 	// 1. Get credentials (base URL and token)
 	baseURL, token, err := c.GetCredentials()
@@ -378,7 +378,7 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 	return nil
 }
 
-// AssignIssue assigns an issue to a user.
+// AssignIssue assigns an issue to a user. id must be the readable issue ID (e.g., "PROJECT-123").
 func (c *Client) AssignIssue(id string, assignee string) error {
 	stdout, stderr, err := c.runCommand("issues", "assign", id, assignee)
 	if err != nil {
@@ -413,7 +413,7 @@ func (c *Client) CreateIssue(projectID, summary, description, priority, issueTyp
 	return outStr, nil
 }
 
-// ListComments lists comments for a specific issue.
+// ListComments lists comments for a specific issue. id must be the readable issue ID (e.g., "PROJECT-123").
 func (c *Client) ListComments(id string) ([]Comment, error) {
 	stdout, stderr, err := c.runCommand("issues", "comments", "list", id, "--format", "json")
 	if err != nil {
