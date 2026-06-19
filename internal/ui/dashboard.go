@@ -214,18 +214,25 @@ func (m dashboardModel) View() string {
 		for i, issue := range m.issues {
 			var line string
 			badge := GetStateBadge(issue.State())
-			keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan))
-			issueLine := fmt.Sprintf("%-10s %-25s %s", keyStyle.Render(issue.IDReadable), issue.Summary, badge)
+			badgeWidth := lipgloss.Width(badge)
 
-			// Truncate line to fit panel width
-			if lipgloss.Width(issueLine) > panelWidth-2 {
-				issueLine = issueLine[:panelWidth-5] + "..."
+			// Calculate remaining width for summary (padding safety margin of 6)
+			availWidth := panelWidth - 10 - badgeWidth - 6
+			if availWidth < 10 {
+				availWidth = 10
 			}
 
+			summaryTrunc := truncateString(issue.Summary, availWidth)
+
 			if i == m.issueCursor && m.active == panelIssues {
-				line = StyleSelected.Width(panelWidth - 2).Render(issueLine)
+				// Highlighted: style the entire line. Do not apply Cyan styling to the ID
+				// so that it gets the contrasting background/foreground highlight colors.
+				plainLine := fmt.Sprintf("%-10s %-*s %s", issue.IDReadable, availWidth, summaryTrunc, badge)
+				line = StyleSelected.Width(panelWidth - 2).Render(plainLine)
 			} else {
-				line = issueLine
+				// Normal: style the ID with Cyan
+				keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan))
+				line = fmt.Sprintf("%-10s %-*s %s", keyStyle.Render(issue.IDReadable), availWidth, summaryTrunc, badge)
 			}
 			lines = append(lines, line)
 		}
@@ -250,12 +257,15 @@ func (m dashboardModel) View() string {
 		lines := []string{}
 		for i, proj := range m.projects {
 			var line string
-			projLine := fmt.Sprintf("%-8s  %s", proj.ShortName, proj.Name)
 
-			// Truncate
-			if lipgloss.Width(projLine) > panelWidth-2 {
-				projLine = projLine[:panelWidth-5] + "..."
+			// Calculate remaining width for project name
+			availWidth := panelWidth - 8 - 4
+			if availWidth < 10 {
+				availWidth = 10
 			}
+
+			nameTrunc := truncateString(proj.Name, availWidth)
+			projLine := fmt.Sprintf("%-8s  %-*s", proj.ShortName, availWidth, nameTrunc)
 
 			if i == m.projectCursor && m.active == panelProjects {
 				line = StyleSelected.Width(panelWidth - 2).Render(projLine)
@@ -283,4 +293,15 @@ func (m dashboardModel) View() string {
 	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Enter] Select  [n] New Issue  [p] Projects List  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, panels, "", help)
+}
+
+func truncateString(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		if maxLen > 3 {
+			return string(runes[:maxLen-3]) + "..."
+		}
+		return string(runes[:maxLen])
+	}
+	return s
 }
