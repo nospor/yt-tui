@@ -1,4 +1,10 @@
 
+## [0.1.3] - 2026-06-19
+
+### Styling
+
+- Format Go files and update AGENTS.md formatting rule ([395e39a](https://github.com/nospor/yt-tui/commit/395e39ad932ec4991f4f3b14899c44b633d220b1))
+
 ## [0.1.2] - 2026-06-19
 
 ### Features
