@@ -69,7 +69,8 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 
 ```json
 {
-  "page_size": 20
+  "page_size": 20,
+  "max_issues": 500
 }
 ```
 
@@ -78,6 +79,7 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `page_size` | Integer | `20` | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments. |
+| `max_issues` | Integer | `500` | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
 
 ---
 

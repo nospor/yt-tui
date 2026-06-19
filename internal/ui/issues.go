@@ -32,11 +32,12 @@ type issuesModel struct {
 	height      int
 	skip        int
 	pageSize    int
+	maxIssues   int
 	loadedAll   bool
 	cache       map[string]projectCache
 }
 
-func newIssuesModel(client *ytcli.Client, pageSize int) issuesModel {
+func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int) issuesModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
@@ -76,6 +77,7 @@ func newIssuesModel(client *ytcli.Client, pageSize int) issuesModel {
 		loading:     true,
 		spinner:     s,
 		pageSize:    pageSize,
+		maxIssues:   maxIssues,
 		skip:        0,
 		cache:       make(map[string]projectCache),
 	}
@@ -144,6 +146,10 @@ func (m *issuesModel) initProject(projectCode string) tea.Cmd {
 			m.table.SetCursor(0)
 		}
 		if !m.loadedAll {
+			if m.maxIssues > 0 && len(m.issues) >= m.maxIssues {
+				m.loadedAll = true
+				return nil
+			}
 			m.skip = cache.skip + m.pageSize
 			return m.loadIssuesCmd()
 		}
@@ -189,11 +195,13 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.issues = append(m.issues, msg.issues...)
 		}
 
+		limitReached := m.maxIssues > 0 && len(m.issues) >= m.maxIssues
+
 		// Update cache for this project
 		m.cache[m.projectCode] = projectCache{
 			issues:    m.issues,
 			skip:      msg.skip,
-			loadedAll: len(msg.issues) < m.pageSize,
+			loadedAll: len(msg.issues) < m.pageSize || limitReached,
 		}
 
 		m.updateTableRows()
@@ -201,7 +209,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.table.SetCursor(0)
 		}
 
-		if len(msg.issues) == m.pageSize {
+		if len(msg.issues) == m.pageSize && !limitReached {
 			m.skip = msg.skip + m.pageSize
 			m.loadedAll = false
 			return m, m.loadIssuesCmd()

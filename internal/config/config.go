@@ -8,11 +8,13 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	PageSize int `json:"page_size"`
+	PageSize  int `json:"page_size"`
+	MaxIssues int `json:"max_issues"`
 }
 
 const (
-	DefaultPageSize = 20
+	DefaultPageSize  = 20
+	DefaultMaxIssues = 500
 )
 
 // LoadConfig loads config from ~/.config/yt-tui/config.json.
@@ -20,7 +22,7 @@ const (
 func LoadConfig() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return &Config{PageSize: DefaultPageSize}, err
+		return &Config{PageSize: DefaultPageSize, MaxIssues: DefaultMaxIssues}, err
 	}
 
 	configDir := filepath.Join(home, ".config", "yt-tui")
@@ -28,12 +30,13 @@ func LoadConfig() (*Config, error) {
 
 	// Ensure the directory exists
 	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return &Config{PageSize: DefaultPageSize}, err
+		return &Config{PageSize: DefaultPageSize, MaxIssues: DefaultMaxIssues}, err
 	}
 
 	// Default config
 	cfg := &Config{
-		PageSize: DefaultPageSize,
+		PageSize:  DefaultPageSize,
+		MaxIssues: DefaultMaxIssues,
 	}
 
 	// Check if file exists
@@ -61,9 +64,18 @@ func LoadConfig() (*Config, error) {
 		return cfg, err
 	}
 
-	// If page_size is not set or invalid, set it to default and write it back
+	// If page_size or max_issues is not set or invalid, set it to default and write it back
+	needsWrite := false
 	if fileCfg.PageSize <= 0 {
 		fileCfg.PageSize = DefaultPageSize
+		needsWrite = true
+	}
+	if fileCfg.MaxIssues <= 0 {
+		fileCfg.MaxIssues = DefaultMaxIssues
+		needsWrite = true
+	}
+
+	if needsWrite {
 		// Save the corrected config back
 		if data, err := json.MarshalIndent(fileCfg, "", "  "); err == nil {
 			_ = os.WriteFile(configPath, data, 0644)

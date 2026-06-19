@@ -70,7 +70,7 @@ func NewAppModel() AppModel {
 		welcome:   newWelcomeModel(client),
 		dashboard: newDashboardModel(client),
 		projects:  newProjectsModel(client),
-		issues:    newIssuesModel(client, cfg.PageSize),
+		issues:    newIssuesModel(client, cfg.PageSize, cfg.MaxIssues),
 		detail:    newDetailModel(client),
 		form:      newFormModel(client),
 	}
