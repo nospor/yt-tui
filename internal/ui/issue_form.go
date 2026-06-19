@@ -268,8 +268,14 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
+		var proj string
+		if len(m.projects) > 0 && m.projectIndex >= 0 && m.projectIndex < len(m.projects) {
+			proj = m.projects[m.projectIndex].ShortName
+		} else {
+			proj = m.initialProjectCode
+		}
 		return m, func() tea.Msg {
-			return popStateMsg{}
+			return popStateMsg{projectCodeToInvalidate: proj}
 		}
 
 	case tea.KeyMsg:

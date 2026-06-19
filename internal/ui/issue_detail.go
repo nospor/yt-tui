@@ -40,6 +40,7 @@ type detailModel struct {
 	textInput    textinput.Model
 	stateOptions []string
 	stateCursor  int
+	isModified   bool
 }
 
 func newDetailModel(client *ytcli.Client, states []string) detailModel {
@@ -128,6 +129,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
+		m.isModified = true
 		// Reload issue data
 		m.loading = true
 		return m, m.loadDetailCmd()
@@ -203,8 +205,12 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		// Normal Mode Key Handling
 		switch msg.String() {
 		case "esc", "backspace":
+			var proj string
+			if m.isModified && m.issue != nil && m.issue.Project != nil {
+				proj = m.issue.Project.ShortName
+			}
 			return m, func() tea.Msg {
-				return popStateMsg{}
+				return popStateMsg{projectCodeToInvalidate: proj}
 			}
 		case "tab":
 			// Switch focus between Description and Comments viewports

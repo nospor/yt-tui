@@ -38,7 +38,9 @@ type pushStateMsg struct {
 	data  string
 }
 
-type popStateMsg struct{}
+type popStateMsg struct {
+	projectCodeToInvalidate string
+}
 
 // AppModel is the root Bubble Tea model.
 type AppModel struct {
@@ -149,6 +151,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case popStateMsg:
 		if len(m.history) > 0 {
+			if msg.projectCodeToInvalidate != "" {
+				m.issues.invalidateCache(msg.projectCodeToInvalidate)
+			}
 			// Pop last state
 			last := m.history[len(m.history)-1]
 			m.history = m.history[:len(m.history)-1]
@@ -215,6 +220,7 @@ func (m *AppModel) switchState(state State, data string) tea.Cmd {
 		m.detail.loading = true
 		m.detail.err = nil
 		m.detail.mode = modeNormal
+		m.detail.isModified = false
 		return m.detail.loadDetailCmd()
 	case stateForm:
 		return m.form.setupForm(data)

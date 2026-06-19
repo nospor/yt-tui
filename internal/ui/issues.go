@@ -188,6 +188,10 @@ func (m *issuesModel) updateTableRows() {
 	m.table.SetRows(rows)
 }
 
+func (m *issuesModel) invalidateCache(projectCode string) {
+	delete(m.cache, projectCode)
+}
+
 func (m *issuesModel) initProject(projectCode string) tea.Cmd {
 	m.projectCode = projectCode
 	m.searchInput.SetValue("")
