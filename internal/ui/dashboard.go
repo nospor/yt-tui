@@ -53,7 +53,7 @@ type dashboardDataMsg struct {
 func (m dashboardModel) loadDataCmd() tea.Cmd {
 	return func() tea.Msg {
 		// Run both fetches
-		issues, err1 := m.client.ListIssues("", "assignee: me #Unresolved")
+		issues, err1 := m.client.ListIssues("", "assignee: me #Unresolved", 0, 0)
 		projects, err2 := m.client.ListProjects()
 
 		var err error

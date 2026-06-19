@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbletea"
@@ -60,6 +61,7 @@ type AppModel struct {
 
 func NewAppModel() AppModel {
 	client := ytcli.NewClient()
+	cfg, _ := config.LoadConfig()
 
 	return AppModel{
 		client:    client,
@@ -67,7 +69,7 @@ func NewAppModel() AppModel {
 		welcome:   newWelcomeModel(client),
 		dashboard: newDashboardModel(client),
 		projects:  newProjectsModel(client),
-		issues:    newIssuesModel(client),
+		issues:    newIssuesModel(client, cfg.PageSize),
 		detail:    newDetailModel(client),
 		form:      newFormModel(client),
 	}

@@ -165,14 +165,20 @@ func (c *Client) ListProjects() ([]Project, error) {
 	return projects, nil
 }
 
-// ListIssues gets issues for a specific project.
-func (c *Client) ListIssues(projectID string, query string) ([]Issue, error) {
+// ListIssues gets issues for a specific project with optional limit and skip pagination.
+func (c *Client) ListIssues(projectID string, query string, limit int, skip int) ([]Issue, error) {
 	args := []string{"issues", "list", "--format", "json"}
 	if projectID != "" {
 		args = append(args, "--project-id", projectID)
 	}
 	if query != "" {
 		args = append(args, "--query", query)
+	}
+	if limit > 0 {
+		args = append(args, "--top", fmt.Sprintf("%d", limit))
+	}
+	if skip > 0 {
+		args = append(args, "--skip", fmt.Sprintf("%d", skip))
 	}
 
 	stdout, stderr, err := c.runCommand(args...)

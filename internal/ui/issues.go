@@ -23,9 +23,11 @@ type issuesModel struct {
 	spinner     spinner.Model
 	width       int
 	height      int
+	skip        int
+	pageSize    int
 }
 
-func newIssuesModel(client *ytcli.Client) issuesModel {
+func newIssuesModel(client *ytcli.Client, pageSize int) issuesModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
@@ -64,6 +66,8 @@ func newIssuesModel(client *ytcli.Client) issuesModel {
 		searchInput: ti,
 		loading:     true,
 		spinner:     s,
+		pageSize:    pageSize,
+		skip:        0,
 	}
 }
 
@@ -78,7 +82,7 @@ func (m issuesModel) loadIssuesCmd() tea.Cmd {
 		if m.searchMode && m.searchInput.Value() != "" {
 			query = m.searchInput.Value()
 		}
-		issues, err := m.client.ListIssues(m.projectCode, query)
+		issues, err := m.client.ListIssues(m.projectCode, query, m.pageSize, m.skip)
 		return issuesDataMsg{issues: issues, err: err}
 	}
 }
@@ -89,6 +93,7 @@ func (m *issuesModel) setProject(projectCode string) tea.Cmd {
 	m.err = nil
 	m.searchInput.SetValue("")
 	m.searchMode = false
+	m.skip = 0
 	return m.loadIssuesCmd()
 }
 
@@ -133,6 +138,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			case "enter":
 				m.loading = true
 				m.searchMode = false
+				m.skip = 0
 				return m, m.loadIssuesCmd()
 			case "esc":
 				m.searchMode = false
@@ -151,6 +157,20 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		case "esc", "backspace":
 			return m, func() tea.Msg {
 				return popStateMsg{}
+			}
+		case "[", "pgup":
+			if m.skip >= m.pageSize {
+				m.skip -= m.pageSize
+				m.loading = true
+				m.err = nil
+				return m, m.loadIssuesCmd()
+			}
+		case "]", "pgdn":
+			if len(m.issues) >= m.pageSize {
+				m.skip += m.pageSize
+				m.loading = true
+				m.err = nil
+				return m, m.loadIssuesCmd()
 			}
 		case "/":
 			m.searchMode = true
@@ -192,11 +212,18 @@ func (m issuesModel) View() string {
 			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading issues..."))
 	}
 
+	var pageInfo string
+	if len(m.issues) > 0 {
+		pageInfo = fmt.Sprintf(" (Page %d: %d-%d)", m.skip/m.pageSize+1, m.skip+1, m.skip+len(m.issues))
+	} else if m.skip > 0 {
+		pageInfo = fmt.Sprintf(" (Page %d: empty)", m.skip/m.pageSize+1)
+	}
+
 	var titleText string
 	if m.projectCode != "" {
-		titleText = fmt.Sprintf(" Issues in Project: %s ", m.projectCode)
+		titleText = fmt.Sprintf(" Issues in Project: %s%s ", m.projectCode, pageInfo)
 	} else {
-		titleText = " Issues "
+		titleText = fmt.Sprintf(" Issues%s ", pageInfo)
 	}
 	title := StyleTitle.Render(titleText)
 
@@ -217,7 +244,7 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] View Details  [/] Search/Filter  [n] New Issue  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [ [ ] Prev  [ ] ] Next  [Enter] Detail  [/] Search  [n] New  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 }
