@@ -225,9 +225,9 @@ func (m dashboardModel) View() string {
 			summaryTrunc := truncateString(issue.Summary, availWidth)
 
 			if i == m.issueCursor && m.active == panelIssues {
-				// Highlighted: style the entire line. Do not apply Cyan styling to the ID
-				// so that it gets the contrasting background/foreground highlight colors.
-				plainLine := fmt.Sprintf("%-10s %-*s %s", issue.IDReadable, availWidth, summaryTrunc, badge)
+				// Highlighted: style the entire line. Do not apply styling to the ID or state
+				// so that they get the contrasting background/foreground highlight colors.
+				plainLine := fmt.Sprintf("%-10s %-*s %s", issue.IDReadable, availWidth, summaryTrunc, issue.State())
 				line = StyleSelected.Width(panelWidth - 2).Render(plainLine)
 			} else {
 				// Normal: style the ID with Cyan

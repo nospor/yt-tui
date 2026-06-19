@@ -52,33 +52,23 @@ var (
 
 	// Status Badges
 	BadgeOpen = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorBg)).
-			Background(lipgloss.Color(ColorCyan)).
-			Padding(0, 1).
+			Foreground(lipgloss.Color(ColorCyan)).
 			Bold(true)
 
 	BadgeInProgress = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorBg)).
-			Background(lipgloss.Color(ColorViolet)).
-			Padding(0, 1).
+			Foreground(lipgloss.Color(ColorViolet)).
 			Bold(true)
 
 	BadgeDone = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorBg)).
-			Background(lipgloss.Color(ColorGreen)).
-			Padding(0, 1).
+			Foreground(lipgloss.Color(ColorGreen)).
 			Bold(true)
 
 	BadgeError = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorBg)).
-			Background(lipgloss.Color(ColorRed)).
-			Padding(0, 1).
+			Foreground(lipgloss.Color(ColorRed)).
 			Bold(true)
 
 	BadgeWarning = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorBg)).
-			Background(lipgloss.Color(ColorYellow)).
-			Padding(0, 1).
+			Foreground(lipgloss.Color(ColorYellow)).
 			Bold(true)
 
 	StyleHelp = lipgloss.NewStyle().
@@ -110,8 +100,7 @@ func GetStateBadge(state string) string {
 	default:
 		return lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorText)).
-			Background(lipgloss.Color(ColorSurface)).
-			Padding(0, 1).
+			Bold(true).
 			Render(state)
 	}
 }
