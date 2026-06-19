@@ -140,13 +140,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case switchStateMsg:
-		cmd := m.switchState(msg.state, msg.data)
+		cmd := m.switchState(msg.state, msg.data, false)
 		return m, cmd
 
 	case pushStateMsg:
 		// Push current state to history
 		m.history = append(m.history, navEntry{state: m.state, data: m.stateData})
-		cmd := m.switchState(msg.state, msg.data)
+		cmd := m.switchState(msg.state, msg.data, false)
 		return m, cmd
 
 	case popStateMsg:
@@ -157,7 +157,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Pop last state
 			last := m.history[len(m.history)-1]
 			m.history = m.history[:len(m.history)-1]
-			cmd := m.switchState(last.state, last.data)
+			cmd := m.switchState(last.state, last.data, true)
 			return m, cmd
 		} else {
 			// No history, exit on double back in welcome/dashboard
@@ -197,7 +197,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *AppModel) switchState(state State, data string) tea.Cmd {
+func (m *AppModel) switchState(state State, data string, isBack bool) tea.Cmd {
 	m.state = state
 	m.stateData = data
 
@@ -214,7 +214,7 @@ func (m *AppModel) switchState(state State, data string) tea.Cmd {
 	case stateProjects:
 		return m.projects.loadProjectsCmd()
 	case stateIssues:
-		return m.issues.initProject(data)
+		return m.issues.initProject(data, isBack)
 	case stateDetail:
 		m.detail.issueKey = data
 		m.detail.loading = true

@@ -68,7 +68,7 @@ func TestIssuesModel_MaxIssuesLimit(t *testing.T) {
 	}
 
 	// 3. Test initProject with the cached state where limit is already reached
-	cmd = m.initProject("TEST")
+	cmd = m.initProject("TEST", false)
 	if cmd != nil {
 		t.Error("expected initProject to return nil cmd because cache.loadedAll is true")
 	}

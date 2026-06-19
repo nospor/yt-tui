@@ -26,24 +26,25 @@ type issueField struct {
 }
 
 type issuesModel struct {
-	client          *ytcli.Client
-	projectCode     string // empty if general search
-	issues          []ytcli.Issue
-	table           table.Model
-	searchInput     textinput.Model
-	searchMode      bool
-	loading         bool
-	err             error
-	spinner         spinner.Model
-	width           int
-	height          int
-	skip            int
-	pageSize        int
-	maxIssues       int
-	loadedAll       bool
-	cache           map[string]projectCache
-	fields          []issueField
-	visibleIssueIDs []string
+	client              *ytcli.Client
+	projectCode         string // empty if general search
+	issues              []ytcli.Issue
+	table               table.Model
+	searchInput         textinput.Model
+	searchMode          bool
+	loading             bool
+	err                 error
+	spinner             spinner.Model
+	width               int
+	height              int
+	skip                int
+	pageSize            int
+	maxIssues           int
+	loadedAll           bool
+	cache               map[string]projectCache
+	fields              []issueField
+	visibleIssueIDs     []string
+	lastSelectedIssueID string
 }
 
 func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int, fieldNames []string) issuesModel {
@@ -192,10 +193,27 @@ func (m *issuesModel) invalidateCache(projectCode string) {
 	delete(m.cache, projectCode)
 }
 
-func (m *issuesModel) initProject(projectCode string) tea.Cmd {
+func (m *issuesModel) restoreCursor() {
+	if m.lastSelectedIssueID != "" {
+		for i, id := range m.visibleIssueIDs {
+			if id == m.lastSelectedIssueID {
+				m.table.SetCursor(i)
+				return
+			}
+		}
+	}
+	if len(m.table.Rows()) > 0 {
+		m.table.SetCursor(0)
+	}
+}
+
+func (m *issuesModel) initProject(projectCode string, isBack bool) tea.Cmd {
 	m.projectCode = projectCode
-	m.searchInput.SetValue("")
-	m.searchMode = false
+	if !isBack {
+		m.searchInput.SetValue("")
+		m.searchMode = false
+		m.lastSelectedIssueID = ""
+	}
 
 	if cache, exists := m.cache[projectCode]; exists {
 		m.issues = cache.issues
@@ -205,8 +223,12 @@ func (m *issuesModel) initProject(projectCode string) tea.Cmd {
 		m.err = nil
 
 		m.updateTableRows()
-		if len(m.table.Rows()) > 0 {
-			m.table.SetCursor(0)
+		if isBack {
+			m.restoreCursor()
+		} else {
+			if len(m.table.Rows()) > 0 {
+				m.table.SetCursor(0)
+			}
 		}
 		if !m.loadedAll {
 			if m.maxIssues > 0 && len(m.issues) >= m.maxIssues {
@@ -268,8 +290,8 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		}
 
 		m.updateTableRows()
-		if msg.skip == 0 && len(m.table.Rows()) > 0 {
-			m.table.SetCursor(0)
+		if msg.skip == 0 {
+			m.restoreCursor()
 		}
 
 		if len(msg.issues) == m.pageSize && !limitReached {
@@ -318,6 +340,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				cursor := m.table.Cursor()
 				if cursor >= 0 && cursor < len(m.visibleIssueIDs) {
 					issueKey := m.visibleIssueIDs[cursor]
+					m.lastSelectedIssueID = issueKey
 					return m, func() tea.Msg {
 						return pushStateMsg{state: stateDetail, data: issueKey}
 					}
