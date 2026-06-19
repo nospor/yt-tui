@@ -11,6 +11,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type projectCache struct {
+	issues    []ytcli.Issue
+	skip      int
+	loadedAll bool
+}
+
 type issuesModel struct {
 	client      *ytcli.Client
 	projectCode string // empty if general search
@@ -25,6 +31,8 @@ type issuesModel struct {
 	height      int
 	skip        int
 	pageSize    int
+	loadedAll   bool
+	cache       map[string]projectCache
 }
 
 func newIssuesModel(client *ytcli.Client, pageSize int) issuesModel {
@@ -68,32 +76,74 @@ func newIssuesModel(client *ytcli.Client, pageSize int) issuesModel {
 		spinner:     s,
 		pageSize:    pageSize,
 		skip:        0,
+		cache:       make(map[string]projectCache),
 	}
 }
 
 type issuesDataMsg struct {
-	issues []ytcli.Issue
-	err    error
+	projectCode string
+	query       string
+	skip        int
+	issues      []ytcli.Issue
+	err         error
 }
 
 func (m issuesModel) loadIssuesCmd() tea.Cmd {
+	projectCode := m.projectCode
+	query := m.searchInput.Value()
+	skip := m.skip
+	pageSize := m.pageSize
+
 	return func() tea.Msg {
-		var query string
-		if m.searchMode && m.searchInput.Value() != "" {
-			query = m.searchInput.Value()
+		issues, err := m.client.ListIssues(projectCode, query, pageSize, skip)
+		return issuesDataMsg{
+			projectCode: projectCode,
+			query:       query,
+			skip:        skip,
+			issues:      issues,
+			err:         err,
 		}
-		issues, err := m.client.ListIssues(m.projectCode, query, m.pageSize, m.skip)
-		return issuesDataMsg{issues: issues, err: err}
 	}
 }
 
-func (m *issuesModel) setProject(projectCode string) tea.Cmd {
+func (m *issuesModel) initProject(projectCode string) tea.Cmd {
 	m.projectCode = projectCode
-	m.loading = true
-	m.err = nil
 	m.searchInput.SetValue("")
 	m.searchMode = false
+
+	if cache, exists := m.cache[projectCode]; exists {
+		m.issues = cache.issues
+		m.skip = cache.skip
+		m.loadedAll = cache.loadedAll
+		m.loading = false
+		m.err = nil
+
+		rows := []table.Row{}
+		for _, issue := range m.issues {
+			rows = append(rows, table.Row{
+				issue.IDReadable,
+				issue.Summary,
+				issue.State(),
+				issue.Priority(),
+				issue.Assignee(),
+			})
+		}
+		m.table.SetRows(rows)
+		if len(rows) > 0 {
+			m.table.SetCursor(0)
+		}
+		if !m.loadedAll {
+			m.skip = cache.skip + m.pageSize
+			return m.loadIssuesCmd()
+		}
+		return nil
+	}
+
+	m.issues = nil
 	m.skip = 0
+	m.loadedAll = false
+	m.loading = true
+	m.err = nil
 	return m.loadIssuesCmd()
 }
 
@@ -109,15 +159,37 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		return m, cmd
 
 	case issuesDataMsg:
-		m.loading = false
+		// Discard stale message from previous project or search query.
+		currentQuery := m.searchInput.Value()
+		if msg.projectCode != m.projectCode || msg.query != currentQuery {
+			return m, nil
+		}
+
 		if msg.err != nil {
+			m.loading = false
 			m.err = msg.err
 			return m, nil
 		}
 
-		m.issues = msg.issues
+		m.loading = false
+
+		if msg.skip == 0 {
+			m.issues = msg.issues
+		} else {
+			m.issues = append(m.issues, msg.issues...)
+		}
+
+		// Update cache for this project (only if query is empty)
+		if msg.query == "" {
+			m.cache[m.projectCode] = projectCache{
+				issues:    m.issues,
+				skip:      msg.skip,
+				loadedAll: len(msg.issues) < m.pageSize,
+			}
+		}
+
 		rows := []table.Row{}
-		for _, issue := range msg.issues {
+		for _, issue := range m.issues {
 			rows = append(rows, table.Row{
 				issue.IDReadable,
 				issue.Summary,
@@ -127,8 +199,16 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			})
 		}
 		m.table.SetRows(rows)
-		if len(rows) > 0 {
+		if msg.skip == 0 && len(rows) > 0 {
 			m.table.SetCursor(0)
+		}
+
+		if len(msg.issues) == m.pageSize {
+			m.skip = msg.skip + m.pageSize
+			m.loadedAll = false
+			return m, m.loadIssuesCmd()
+		} else {
+			m.loadedAll = true
 		}
 		return m, nil
 
@@ -139,6 +219,8 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				m.loading = true
 				m.searchMode = false
 				m.skip = 0
+				m.loadedAll = false
+				m.issues = nil
 				return m, m.loadIssuesCmd()
 			case "esc":
 				m.searchMode = false
@@ -157,20 +239,6 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		case "esc", "backspace":
 			return m, func() tea.Msg {
 				return popStateMsg{}
-			}
-		case "[", "pgup":
-			if m.skip >= m.pageSize {
-				m.skip -= m.pageSize
-				m.loading = true
-				m.err = nil
-				return m, m.loadIssuesCmd()
-			}
-		case "]", "pgdn":
-			if len(m.issues) >= m.pageSize {
-				m.skip += m.pageSize
-				m.loading = true
-				m.err = nil
-				return m, m.loadIssuesCmd()
 			}
 		case "/":
 			m.searchMode = true
@@ -192,6 +260,10 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		case "r":
 			m.loading = true
 			m.err = nil
+			m.skip = 0
+			m.loadedAll = false
+			m.issues = nil
+			delete(m.cache, m.projectCode)
 			return m, m.loadIssuesCmd()
 		}
 
@@ -212,18 +284,20 @@ func (m issuesModel) View() string {
 			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading issues..."))
 	}
 
-	var pageInfo string
+	var statusSuffix string
 	if len(m.issues) > 0 {
-		pageInfo = fmt.Sprintf(" (Page %d: %d-%d)", m.skip/m.pageSize+1, m.skip+1, m.skip+len(m.issues))
-	} else if m.skip > 0 {
-		pageInfo = fmt.Sprintf(" (Page %d: empty)", m.skip/m.pageSize+1)
+		if !m.loadedAll {
+			statusSuffix = fmt.Sprintf(" (Loaded %d, loading more...)", len(m.issues))
+		} else {
+			statusSuffix = fmt.Sprintf(" (Loaded %d)", len(m.issues))
+		}
 	}
 
 	var titleText string
 	if m.projectCode != "" {
-		titleText = fmt.Sprintf(" Issues in Project: %s%s ", m.projectCode, pageInfo)
+		titleText = fmt.Sprintf(" Issues in Project: %s%s ", m.projectCode, statusSuffix)
 	} else {
-		titleText = fmt.Sprintf(" Issues%s ", pageInfo)
+		titleText = fmt.Sprintf(" Issues%s ", statusSuffix)
 	}
 	title := StyleTitle.Render(titleText)
 
@@ -244,7 +318,7 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [ [ ] Prev  [ ] ] Next  [Enter] Detail  [/] Search  [n] New  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [n] New  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 }

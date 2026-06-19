@@ -121,22 +121,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case switchStateMsg:
-		m.switchState(msg.state, msg.data)
-		return m, m.getInitCmdForState(msg.state)
+		cmd := m.switchState(msg.state, msg.data)
+		return m, cmd
 
 	case pushStateMsg:
 		// Push current state to history
 		m.history = append(m.history, navEntry{state: m.state, data: m.stateData})
-		m.switchState(msg.state, msg.data)
-		return m, m.getInitCmdForState(msg.state)
+		cmd := m.switchState(msg.state, msg.data)
+		return m, cmd
 
 	case popStateMsg:
 		if len(m.history) > 0 {
 			// Pop last state
 			last := m.history[len(m.history)-1]
 			m.history = m.history[:len(m.history)-1]
-			m.switchState(last.state, last.data)
-			return m, m.getInitCmdForState(last.state)
+			cmd := m.switchState(last.state, last.data)
+			return m, cmd
 		} else {
 			// No history, exit on double back in welcome/dashboard
 			if m.state == stateDashboard {
@@ -175,7 +175,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *AppModel) switchState(state State, data string) {
+func (m *AppModel) switchState(state State, data string) tea.Cmd {
 	m.state = state
 	m.stateData = data
 
@@ -183,19 +183,22 @@ func (m *AppModel) switchState(state State, data string) {
 	m.status = ""
 	m.isStatusErr = false
 
-	// Parameterize models if they accept inputs
+	// Parameterize models if they accept inputs and return appropriate init commands
 	switch state {
+	case stateWelcome:
+		return m.welcome.checkAuthCmd()
+	case stateDashboard:
+		return m.dashboard.loadDataCmd()
+	case stateProjects:
+		return m.projects.loadProjectsCmd()
 	case stateIssues:
-		m.issues.projectCode = data
-		m.issues.loading = true
-		m.issues.err = nil
-		m.issues.searchInput.SetValue("")
-		m.issues.searchMode = false
+		return m.issues.initProject(data)
 	case stateDetail:
 		m.detail.issueKey = data
 		m.detail.loading = true
 		m.detail.err = nil
 		m.detail.mode = modeNormal
+		return m.detail.loadDetailCmd()
 	case stateForm:
 		// Setup form for either clone or create
 		m.form.projectInput.SetValue("")
@@ -214,6 +217,7 @@ func (m *AppModel) switchState(state State, data string) {
 			m.form.isClone = true
 			m.form.cloneKey = strings.TrimPrefix(data, "clone:")
 			m.form.loading = true
+			return m.form.loadCloneDataCmd(m.form.cloneKey)
 		} else if data != "" {
 			m.form.projectInput.SetValue(data)
 			m.form.focusIndex = fieldSummary
@@ -221,25 +225,6 @@ func (m *AppModel) switchState(state State, data string) {
 			m.form.summaryInput.Focus()
 		} else {
 			m.form.projectInput.Focus()
-		}
-	}
-}
-
-func (m AppModel) getInitCmdForState(state State) tea.Cmd {
-	switch state {
-	case stateWelcome:
-		return m.welcome.checkAuthCmd()
-	case stateDashboard:
-		return m.dashboard.loadDataCmd()
-	case stateProjects:
-		return m.projects.loadProjectsCmd()
-	case stateIssues:
-		return m.issues.loadIssuesCmd()
-	case stateDetail:
-		return m.detail.loadDetailCmd()
-	case stateForm:
-		if m.form.isClone {
-			return m.form.loadCloneDataCmd(m.form.cloneKey)
 		}
 	}
 	return nil
