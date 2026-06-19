@@ -95,6 +95,62 @@ func formatError(prefix string, stdout, stderr []byte, err error) error {
 	return fmt.Errorf("%s: %s (%w)", prefix, strings.Join(details, " | "), err)
 }
 
+// sanitizeJSON escapes invalid backslash escape codes (like \[ or single \) in JSON output
+// that got corrupted by the YouTrack CLI using python's rich console printer.
+func sanitizeJSON(input []byte) []byte {
+	var result []byte
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(input); i++ {
+		c := input[i]
+
+		if inString {
+			if escaped {
+				isValid := false
+				switch c {
+				case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+					isValid = true
+				case 'u':
+					if i+4 < len(input) {
+						isHex := true
+						for j := 1; j <= 4; j++ {
+							h := input[i+j]
+							if !((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f') || (h >= 'A' && h <= 'F')) {
+								isHex = false
+								break
+							}
+						}
+						if isHex {
+							isValid = true
+						}
+					}
+				}
+
+				if !isValid {
+					result = append(result, '\\')
+				}
+				result = append(result, c)
+				escaped = false
+			} else if c == '\\' {
+				escaped = true
+				result = append(result, c)
+			} else {
+				if c == '"' {
+					inString = false
+				}
+				result = append(result, c)
+			}
+		} else {
+			if c == '"' {
+				inString = true
+			}
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
 // ListProjects lists YouTrack projects.
 func (c *Client) ListProjects() ([]Project, error) {
 	stdout, stderr, err := c.runCommand("projects", "list", "--format", "json")
@@ -103,7 +159,7 @@ func (c *Client) ListProjects() ([]Project, error) {
 	}
 
 	var projects []Project
-	if err := json.Unmarshal(stdout, &projects); err != nil {
+	if err := json.Unmarshal(sanitizeJSON(stdout), &projects); err != nil {
 		return nil, fmt.Errorf("failed to parse projects JSON: %w (output: %s)", err, string(stdout))
 	}
 	return projects, nil
@@ -125,7 +181,7 @@ func (c *Client) ListIssues(projectID string, query string) ([]Issue, error) {
 	}
 
 	var issues []Issue
-	if err := json.Unmarshal(stdout, &issues); err != nil {
+	if err := json.Unmarshal(sanitizeJSON(stdout), &issues); err != nil {
 		return nil, fmt.Errorf("failed to parse issues JSON: %w", err)
 	}
 	return issues, nil
@@ -142,7 +198,7 @@ func (c *Client) SearchIssues(query string) ([]Issue, error) {
 	}
 
 	var issues []Issue
-	if err := json.Unmarshal(stdout, &issues); err != nil {
+	if err := json.Unmarshal(sanitizeJSON(stdout), &issues); err != nil {
 		return nil, fmt.Errorf("failed to parse search issues JSON: %w", err)
 	}
 	return issues, nil
@@ -225,7 +281,7 @@ func (c *Client) ListComments(id string) ([]Comment, error) {
 	}
 
 	var comments []Comment
-	if err := json.Unmarshal(stdout, &comments); err != nil {
+	if err := json.Unmarshal(sanitizeJSON(stdout), &comments); err != nil {
 		return nil, fmt.Errorf("failed to parse comments JSON: %w (output: %s)", err, string(stdout))
 	}
 	return comments, nil
@@ -239,7 +295,7 @@ func (c *Client) ListUsers() ([]User, error) {
 	}
 
 	var users []User
-	if err := json.Unmarshal(stdout, &users); err != nil {
+	if err := json.Unmarshal(sanitizeJSON(stdout), &users); err != nil {
 		return nil, fmt.Errorf("failed to parse users JSON: %w (output: %s)", err, string(stdout))
 	}
 	return users, nil
