@@ -176,7 +176,7 @@ func (m *issuesModel) updateTableRows() {
 		if filterPhrase == "" ||
 			strings.Contains(strings.ToLower(issue.Summary), filterPhrase) ||
 			strings.Contains(strings.ToLower(issue.IDReadable), filterPhrase) {
-			
+
 			row := table.Row{}
 			for _, f := range m.fields {
 				row = append(row, f.value(issue))

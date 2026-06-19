@@ -43,15 +43,15 @@ type formModel struct {
 	assigneeInput textinput.Model
 
 	// Dropdowns
-	projects            []ytcli.Project
-	projectIndex        int
-	initialProjectCode  string
+	projects           []ytcli.Project
+	projectIndex       int
+	initialProjectCode string
 
-	typeIndex           int
-	customTypes         []string
+	typeIndex   int
+	customTypes []string
 
-	priorityIndex       int
-	customPriorities    []string
+	priorityIndex    int
+	customPriorities []string
 }
 
 func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
