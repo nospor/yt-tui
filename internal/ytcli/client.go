@@ -213,7 +213,7 @@ func (c *Client) SearchIssues(query string) ([]Issue, error) {
 // GetIssue fetches details of a single issue.
 func (c *Client) GetIssue(id string) (*Issue, error) {
 	// Search specifically for this ID
-	issues, err := c.SearchIssues("id: " + id)
+	issues, err := c.SearchIssues("issue id: " + id)
 	if err != nil {
 		return nil, err
 	}
