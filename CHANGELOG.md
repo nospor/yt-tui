@@ -1,4 +1,26 @@
 
+## [0.2.0] - 2026-06-19
+
+### Features
+
+- *(cli)* Implement native API state updates and support custom workflow states ([b7e4a27](https://github.com/nospor/yt-tui/commit/b7e4a27405b651d523bbccc2356c49b78b4eaedd))
+- *(ui)* Auto-refresh tasks list after creation or state updates ([dae25af](https://github.com/nospor/yt-tui/commit/dae25af2ce7c15c37ae4824e143da11168fa158a))
+- *(ui)* Preserve search filter and cursor when navigating back to issues list ([241238d](https://github.com/nospor/yt-tui/commit/241238d7f715e88d834b4f2ac00926bb4f07e9eb))
+
+### Bug Fixes
+
+- Use readable issue ID format for YouTrack CLI commands ([df31a23](https://github.com/nospor/yt-tui/commit/df31a23994625cf242e6dbfb8fbc2321e287f46f))
+- *(ytcli)* Resolve 'me' keyword and normalize assignee usernames ([0017b82](https://github.com/nospor/yt-tui/commit/0017b823f084f750062c78ecf6b45e1d1115a70d))
+
+### Refactor
+
+- Migrate from YouTrack CLI wrapper to direct REST API client ([5f5c3df](https://github.com/nospor/yt-tui/commit/5f5c3dfac05a020bd9391c582ac2e31d1dd2aef7))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.1.2 [skip ci] ([e24cfbe](https://github.com/nospor/yt-tui/commit/e24cfbef6c0686405b3ebe815ac2e0ede8399812))
+- Update CHANGELOG.md for v0.1.3 [skip ci] ([8e35fe2](https://github.com/nospor/yt-tui/commit/8e35fe2d286aff1d58d6575140b4d94b155c294f))
+
 ## [0.1.3] - 2026-06-19
 
 ### Styling
