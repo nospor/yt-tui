@@ -1,4 +1,36 @@
 
+## [0.1.2] - 2026-06-19
+
+### Features
+
+- Add configurable issue load limit to prevent performance degradation ([0dd01c7](https://github.com/nospor/yt-tui/commit/0dd01c76f4239c55db06f601c7c8462e5d130916))
+
+            - Added `max_issues` configuration option (default: 500) in
+            `internal/config/config.go`
+            - Updated `issuesModel` in `internal/ui/issues.go` to cease background
+            paging when the threshold is met
+            - Ensured cache state correctly updates and treats limit exhaustion as
+            fully loaded
+- *(ui)* Improve issue creation form layout and add dropdown inputs ([f2cac29](https://github.com/nospor/yt-tui/commit/f2cac296d281e5818ba26060e19d6e86438ab3a3))
+- *(config)* Support custom YouTrack types/priorities and improve issue creation ([283b6a5](https://github.com/nospor/yt-tui/commit/283b6a5fa5f67fc2ccd9ce3f34cdec061412345f))
+
+### Bug Fixes
+
+- Enable 'q' key to quit app on non-input screens ([98b0a98](https://github.com/nospor/yt-tui/commit/98b0a98c9fb278efae28cb9ec020b411de50cd1b))
+
+### Documentation
+
+- Update README with configuration details and add agent documentation rule ([669f5cc](https://github.com/nospor/yt-tui/commit/669f5cca7239ec8d00e29eb5a0e057c5bdcc013a))
+
+### Styling
+
+- Remove background color from state badges ([b514bfd](https://github.com/nospor/yt-tui/commit/b514bfdbfd485066ebdb588e6a7b50a568c23830))
+- *(ui)* Modernize top header layout and design ([9d47cff](https://github.com/nospor/yt-tui/commit/9d47cffc4e65007f43aa066846fc3c19b95dacdf))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.1.1 [skip ci] ([3033184](https://github.com/nospor/yt-tui/commit/3033184167553901be973f8e649f59cf10566378))
+
 ## [0.1.1] - 2026-06-19
 
 ### Features
