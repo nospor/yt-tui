@@ -7,190 +7,220 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"yt-tui/internal/config"
 )
 
-// Client wraps YouTrack CLI operations.
+// Client wraps YouTrack API operations.
 type Client struct {
-	ytPath string
+	baseURL string
+	token   string
 }
 
-// NewClient creates a new Client and finds the yt binary.
+// NewClient creates a new REST Client and loads credentials from config.json.
 func NewClient() *Client {
-	// 1. Check if 'yt' is in system PATH
-	path, err := exec.LookPath("yt")
+	c := &Client{}
+	cfg, err := config.LoadConfig()
 	if err == nil {
-		return &Client{ytPath: path}
+		c.baseURL = cfg.URL
+		c.token = cfg.Token
 	}
 
-	// 2. Fallback to ~/.local/bin/yt
-	home, err := os.UserHomeDir()
-	if err == nil {
-		localBinPath := filepath.Join(home, ".local", "bin", "yt")
-		if _, err := os.Stat(localBinPath); err == nil {
-			return &Client{ytPath: localBinPath}
+	// Environment variable overrides
+	if envURL := os.Getenv("YOUTRACK_BASE_URL"); envURL != "" {
+		c.baseURL = envURL
+	}
+	if envToken := os.Getenv("YOUTRACK_TOKEN"); envToken != "" {
+		c.token = envToken
+	}
+
+	// If still empty, check legacy ~/.config/youtrack-cli/.env for migration
+	if c.baseURL == "" || c.token == "" {
+		legacyURL, legacyToken, err := getLegacyCredentials()
+		if err == nil {
+			if c.baseURL == "" {
+				c.baseURL = legacyURL
+			}
+			if c.token == "" {
+				c.token = legacyToken
+			}
+			// Migrate legacy credentials into yt-tui config.json
+			if cfg != nil && cfg.URL == "" && cfg.Token == "" {
+				cfg.URL = c.baseURL
+				cfg.Token = c.token
+				_ = config.SaveConfig(cfg)
+			}
 		}
 	}
 
-	// 3. Default to just "yt" and let exec fail if not found
-	return &Client{ytPath: "yt"}
+	return c
 }
 
-// GetBinaryPath returns the resolved path of the yt CLI.
+// GetBinaryPath returns an empty string or dummy info as we don't use CLI anymore.
 func (c *Client) GetBinaryPath() string {
-	return c.ytPath
+	return ""
 }
 
-// runCommand runs a yt subcommand and returns stdout, stderr, and error.
-func (c *Client) runCommand(args ...string) ([]byte, []byte, error) {
-	cmd := exec.Command(c.ytPath, args...)
-	cmd.Env = append(os.Environ(), "COLUMNS=999999")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return stdout.Bytes(), stderr.Bytes(), err
-}
-
-// CheckAuth check YouTrack CLI auth status.
-func (c *Client) CheckAuth() (bool, error) {
-	stdout, stderr, err := c.runCommand("auth", "status")
+// newRequest helper initializes an http.Request with necessary headers.
+func (c *Client) newRequest(method, endpoint string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, endpoint, body)
 	if err != nil {
-		return false, nil
+		return nil, err
 	}
-	outStr := string(stdout)
-	errStr := string(stderr)
-
-	// If keyring decryption failed, or if we have encrypted values leaked in output
-	if strings.Contains(errStr, "Failed to decrypt") || strings.Contains(outStr, "Failed to decrypt") {
-		return false, nil
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
-	if strings.Contains(outStr, "gAAAAA") {
-		return false, nil
-	}
-
-	// If "No authentication credentials found" is printed, we are not logged in.
-	if strings.Contains(errStr, "No authentication") || strings.Contains(errStr, "Not authenticated") ||
-		strings.Contains(outStr, "No authentication") || strings.Contains(outStr, "Not authenticated") {
-		return false, nil
-	}
-	return true, nil
+	return req, nil
 }
 
-// formatError merges stdout and stderr messages for detailed error reporting.
-func formatError(prefix string, stdout, stderr []byte, err error) error {
-	outStr := strings.TrimSpace(string(stdout))
-	errStr := strings.TrimSpace(string(stderr))
-	var details []string
-	if outStr != "" {
-		details = append(details, outStr)
+// doRequest helper executes the http.Request and returns body and status.
+func (c *Client) doRequest(req *http.Request) ([]byte, int, error) {
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
 	}
-	if errStr != "" {
-		details = append(details, errStr)
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
 	}
-	if len(details) == 0 {
-		return fmt.Errorf("%s: %w", prefix, err)
-	}
-	return fmt.Errorf("%s: %s (%w)", prefix, strings.Join(details, " | "), err)
+	return respBody, resp.StatusCode, nil
 }
 
-// sanitizeJSON escapes invalid backslash escape codes (like \[ or single \) in JSON output
-// that got corrupted by the YouTrack CLI using python's rich console printer.
-func sanitizeJSON(input []byte) []byte {
-	var result []byte
-	inString := false
-	escaped := false
-
-	for i := 0; i < len(input); i++ {
-		c := input[i]
-
-		if inString {
-			if escaped {
-				isValid := false
-				switch c {
-				case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
-					isValid = true
-				case 'u':
-					if i+4 < len(input) {
-						isHex := true
-						for j := 1; j <= 4; j++ {
-							h := input[i+j]
-							if !((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f') || (h >= 'A' && h <= 'F')) {
-								isHex = false
-								break
-							}
-						}
-						if isHex {
-							isValid = true
-						}
-					}
-				}
-
-				if !isValid {
-					result = append(result, '\\')
-				}
-				result = append(result, c)
-				escaped = false
-			} else if c == '\\' {
-				escaped = true
-				result = append(result, c)
-			} else {
-				if c == '"' {
-					inString = false
-				}
-				result = append(result, c)
-			}
-		} else {
-			if c == '"' {
-				inString = true
-			}
-			result = append(result, c)
-		}
+// parseAPIError formats YouTrack API error responses.
+func parseAPIError(statusCode int, body []byte) error {
+	var apiErr struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
 	}
-	return result
+	if json.Unmarshal(body, &apiErr) == nil && apiErr.ErrorDescription != "" {
+		return fmt.Errorf("API error: %s (%s)", apiErr.ErrorDescription, apiErr.Error)
+	}
+	return fmt.Errorf("API returned status %d: %s", statusCode, string(body))
+}
+
+// CheckAuth check YouTrack API auth status.
+func (c *Client) CheckAuth() (bool, error) {
+	if c.baseURL == "" || c.token == "" {
+		return false, nil
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/users/me?fields=login"
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return false, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return false, err
+	}
+
+	if statusCode == http.StatusOK {
+		return true, nil
+	}
+	if statusCode == http.StatusUnauthorized {
+		return false, nil
+	}
+	return false, parseAPIError(statusCode, body)
 }
 
 // ListProjects lists YouTrack projects.
 func (c *Client) ListProjects() ([]Project, error) {
-	stdout, stderr, err := c.runCommand("projects", "list", "--format", "json")
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/admin/projects?fields=id,name,shortName,description"
+
+	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, formatError("failed to list projects", stdout, stderr, err)
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
 	}
 
 	var projects []Project
-	if err := json.Unmarshal(sanitizeJSON(stdout), &projects); err != nil {
-		return nil, fmt.Errorf("failed to parse projects JSON: %w (output: %s)", err, string(stdout))
+	if err := json.Unmarshal(body, &projects); err != nil {
+		return nil, err
 	}
 	return projects, nil
 }
 
-// ListIssues gets issues for a specific project with optional limit and skip pagination.
+// ListIssues gets issues with optional query, limit and skip pagination.
 func (c *Client) ListIssues(projectID string, query string, limit int, skip int) ([]Issue, error) {
-	args := []string{"issues", "list", "--format", "json"}
-	if projectID != "" {
-		args = append(args, "--project-id", projectID)
-	}
-	if query != "" {
-		args = append(args, "--query", query)
-	}
-	if limit > 0 {
-		args = append(args, "--top", fmt.Sprintf("%d", limit))
-	}
-	if skip > 0 {
-		args = append(args, "--skip", fmt.Sprintf("%d", skip))
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
 	}
 
-	stdout, stderr, err := c.runCommand(args...)
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	var parts []string
+	if projectID != "" {
+		parts = append(parts, "project: "+projectID)
+	}
+	if query != "" {
+		parts = append(parts, query)
+	}
+	fullQuery := strings.Join(parts, " ")
+
+	params := url.Values{}
+	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email))")
+	if fullQuery != "" {
+		params.Set("query", fullQuery)
+	}
+	if limit > 0 {
+		params.Set("$top", fmt.Sprintf("%d", limit))
+	}
+	if skip > 0 {
+		params.Set("$skip", fmt.Sprintf("%d", skip))
+	}
+
+	apiURL := fmt.Sprintf("%sapi/issues?%s", baseURL, params.Encode())
+
+	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, formatError("failed to list issues", stdout, stderr, err)
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
 	}
 
 	var issues []Issue
-	if err := json.Unmarshal(sanitizeJSON(stdout), &issues); err != nil {
-		return nil, fmt.Errorf("failed to parse issues JSON: %w", err)
+	if err := json.Unmarshal(body, &issues); err != nil {
+		return nil, err
 	}
 	return issues, nil
 }
@@ -200,87 +230,114 @@ func (c *Client) SearchIssues(query string) ([]Issue, error) {
 	if query == "" {
 		return nil, errors.New("search query cannot be empty")
 	}
-	stdout, stderr, err := c.runCommand("issues", "search", query, "--format", "json")
-	if err != nil {
-		return nil, formatError("failed to search issues", stdout, stderr, err)
-	}
-
-	var issues []Issue
-	if err := json.Unmarshal(sanitizeJSON(stdout), &issues); err != nil {
-		return nil, fmt.Errorf("failed to parse search issues JSON: %w", err)
-	}
-	return issues, nil
+	return c.ListIssues("", query, 100, 0)
 }
 
 // GetIssue fetches details of a single issue.
 func (c *Client) GetIssue(id string) (*Issue, error) {
-	// Search specifically for this ID
-	issues, err := c.SearchIssues("issue id: " + id)
-	if err != nil {
-		return nil, err
-	}
-	if len(issues) == 0 {
-		return nil, fmt.Errorf("issue %s not found", id)
-	}
-	return &issues[0], nil
-}
-
-// AddComment adds a comment to an issue. id must be the readable issue ID (e.g., "PROJECT-123").
-func (c *Client) AddComment(id string, text string) error {
-	if text == "" {
-		return errors.New("comment text cannot be empty")
-	}
-	stdout, stderr, err := c.runCommand("issues", "comments", "add", id, text)
-	if err != nil {
-		return formatError("failed to add comment", stdout, stderr, err)
-	}
-	return nil
-}
-
-// UpdateIssueState moves an issue to a new state. id must be the readable issue ID (e.g., "PROJECT-123").
-func (c *Client) UpdateIssueState(id string, state string) error {
-	// 1. Get credentials (base URL and token)
-	baseURL, token, err := c.GetCredentials()
-	if err != nil {
-		// Fallback to CLI command if credentials are not found
-		stdout, stderr, cliErr := c.runCommand("issues", "move", id, "--state", state)
-		if cliErr != nil {
-			return formatError("failed to update issue state (fallback)", stdout, stderr, cliErr)
-		}
-		return nil
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
 	}
 
-	// Ensure base URL starts with http/https and ends with a slash
+	baseURL := c.baseURL
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
 
-	// 2. Fetch the issue details directly via YouTrack REST API to discover the correct state field name and bundle type.
-	// This avoids invoking SearchIssues which can fail if we search by internal database ID (e.g. 2-147555).
+	params := url.Values{}
+	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email))")
+	apiURL := fmt.Sprintf("%sapi/issues/%s?%s", baseURL, id, params.Encode())
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("issue %s not found", id)
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var issue Issue
+	if err := json.Unmarshal(body, &issue); err != nil {
+		return nil, err
+	}
+	return &issue, nil
+}
+
+// AddComment adds a comment to an issue.
+func (c *Client) AddComment(id string, text string) error {
+	if text == "" {
+		return errors.New("comment text cannot be empty")
+	}
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + id + "/comments"
+
+	payload := map[string]string{
+		"text": text,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusCreated {
+		return parseAPIError(statusCode, body)
+	}
+	return nil
+}
+
+// UpdateIssueState moves an issue to a new state.
+func (c *Client) UpdateIssueState(id string, state string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	// 1. Fetch details to discover State field name and bundle type
 	apiURL := baseURL + "api/issues/" + id + "?fields=customFields(id,name,value($type,name),$type)"
 
-	req, err := http.NewRequest("GET", apiURL, nil)
+	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create http GET request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to fetch issue details: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to fetch issue details, status %s: %s", resp.Status, string(respBody))
+		return err
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
+	body, statusCode, err := c.doRequest(req)
 	if err != nil {
-		return fmt.Errorf("failed to read issue details response: %w", err)
+		return err
+	}
+
+	if statusCode != http.StatusOK {
+		return parseAPIError(statusCode, body)
 	}
 
 	var issueData struct {
@@ -292,12 +349,12 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 		} `json:"customFields"`
 	}
 
-	if err := json.Unmarshal(respBody, &issueData); err != nil {
-		return fmt.Errorf("failed to parse issue details JSON: %w", err)
+	if err := json.Unmarshal(body, &issueData); err != nil {
+		return err
 	}
 
 	stateFieldName := "State"
-	bundleType := "StateBundleElement" // Default fallback
+	bundleType := "StateBundleElement" // default
 
 	for _, cf := range issueData.CustomFields {
 		isStateField := cf.Type == "StateIssueCustomField"
@@ -315,7 +372,6 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 			} else {
 				bundleType = "EnumBundleElement"
 			}
-			// If value is a map, try to extract its type
 			if valMap, ok := cf.Value.(map[string]interface{}); ok {
 				if t, ok := valMap["$type"].(string); ok && t != "" {
 					bundleType = t
@@ -325,7 +381,7 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 		}
 	}
 
-	// 3. Build HTTP request for state update
+	// 2. Perform updating request
 	postURL := baseURL + "api/issues/" + id + "?fields=id"
 
 	payload := map[string]interface{}{
@@ -344,35 +400,21 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal state update payload: %w", err)
+		return err
 	}
 
-	postReq, err := http.NewRequest("POST", postURL, bytes.NewBuffer(payloadBytes))
+	postReq, err := c.newRequest("POST", postURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return fmt.Errorf("failed to create http POST request: %w", err)
+		return err
 	}
 
-	postReq.Header.Set("Authorization", "Bearer "+token)
-	postReq.Header.Set("Content-Type", "application/json")
-	postReq.Header.Set("Accept", "application/json")
-
-	postResp, err := client.Do(postReq)
+	postBody, postStatusCode, err := c.doRequest(postReq)
 	if err != nil {
-		return fmt.Errorf("failed to send http POST request: %w", err)
+		return err
 	}
-	defer postResp.Body.Close()
 
-	// 4. Handle response
-	if postResp.StatusCode != http.StatusOK && postResp.StatusCode != http.StatusNoContent {
-		respBody, _ = io.ReadAll(postResp.Body)
-		var apiErr struct {
-			Error            string `json:"error"`
-			ErrorDescription string `json:"error_description"`
-		}
-		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.ErrorDescription != "" {
-			return fmt.Errorf("API error: %s (%s)", apiErr.ErrorDescription, apiErr.Error)
-		}
-		return fmt.Errorf("API returned status %s: %s", postResp.Status, string(respBody))
+	if postStatusCode != http.StatusOK && postStatusCode != http.StatusNoContent {
+		return parseAPIError(postStatusCode, postBody)
 	}
 
 	return nil
@@ -380,57 +422,46 @@ func (c *Client) UpdateIssueState(id string, state string) error {
 
 // GetCurrentUserLogin retrieves the login username of the currently authenticated user.
 func (c *Client) GetCurrentUserLogin() (string, error) {
-	baseURL, token, err := c.GetCredentials()
+	if c.baseURL == "" || c.token == "" {
+		return "", errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/users/me?fields=login"
+
+	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
 		return "", err
 	}
 
-	if !strings.HasSuffix(baseURL, "/") {
-		baseURL += "/"
-	}
-
-	apiURL := baseURL + "api/users/me?fields=login"
-
-	req, err := http.NewRequest("GET", apiURL, nil)
+	body, statusCode, err := c.doRequest(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to create http GET request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch current user details: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("failed to fetch current user details, status %s: %s", resp.Status, string(respBody))
+		return "", err
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read current user details response: %w", err)
+	if statusCode != http.StatusOK {
+		return "", parseAPIError(statusCode, body)
 	}
 
 	var userData struct {
 		Login string `json:"login"`
 	}
 
-	if err := json.Unmarshal(respBody, &userData); err != nil {
-		return "", fmt.Errorf("failed to parse current user JSON: %w", err)
+	if err := json.Unmarshal(body, &userData); err != nil {
+		return "", err
 	}
 
 	if userData.Login == "" {
-		return "", fmt.Errorf("received empty login for current user")
+		return "", errors.New("received empty login for current user")
 	}
 
 	return userData.Login, nil
 }
 
-// normalizeAssignee converts the assignee username input to lowercase and replaces spaces with dots.
+// normalizeAssignee converts assignee username input to lowercase and replaces spaces with dots.
 func normalizeAssignee(assignee string) string {
 	assignee = strings.TrimSpace(assignee)
 	if assignee == "" {
@@ -446,7 +477,7 @@ func normalizeAssignee(assignee string) string {
 	return strings.Join(parts, ".")
 }
 
-// AssignIssue assigns an issue to a user. id must be the readable issue ID (e.g., "PROJECT-123").
+// AssignIssue assigns an issue to a user.
 func (c *Client) AssignIssue(id string, assignee string) error {
 	assignee = normalizeAssignee(assignee)
 	if assignee == "me" {
@@ -454,119 +485,275 @@ func (c *Client) AssignIssue(id string, assignee string) error {
 			assignee = resolved
 		}
 	}
-	stdout, stderr, err := c.runCommand("issues", "assign", id, assignee)
+
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + id
+
+	var payload map[string]interface{}
+	if assignee == "" {
+		payload = map[string]interface{}{
+			"customFields": []map[string]interface{}{
+				{
+					"name":  "Assignee",
+					"$type": "SingleUserIssueCustomField",
+					"value": nil,
+				},
+			},
+		}
+	} else {
+		payload = map[string]interface{}{
+			"customFields": []map[string]interface{}{
+				{
+					"name":  "Assignee",
+					"$type": "SingleUserIssueCustomField",
+					"value": map[string]interface{}{
+						"login": assignee,
+					},
+				},
+			},
+		}
+	}
+
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return formatError("failed to assign issue", stdout, stderr, err)
+		return err
+	}
+
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
+		return parseAPIError(statusCode, body)
 	}
 	return nil
 }
 
-// CreateIssue creates a new issue.
+// getProjectIDByShortName maps shortName (e.g. "TEST") to its DB ID.
+func (c *Client) getProjectIDByShortName(shortName string) (string, error) {
+	projects, err := c.ListProjects()
+	if err != nil {
+		return "", err
+	}
+	for _, p := range projects {
+		if strings.EqualFold(p.ShortName, shortName) {
+			return p.ID, nil
+		}
+	}
+	return "", fmt.Errorf("project with short name %s not found", shortName)
+}
+
+// CreateIssue creates a new issue and returns its readable ID.
 func (c *Client) CreateIssue(projectID, summary, description, priority, issueType, assignee string) (string, error) {
+	if c.baseURL == "" || c.token == "" {
+		return "", errors.New("missing YouTrack connection URL or token")
+	}
+
+	projID, err := c.getProjectIDByShortName(projectID)
+	if err != nil {
+		return "", err
+	}
+
+	var customFields []map[string]interface{}
+
+	if priority != "" {
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Priority",
+			"$type": "SingleEnumIssueCustomField",
+			"value": map[string]interface{}{
+				"name": priority,
+			},
+		})
+	}
+
+	if issueType != "" {
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Type",
+			"$type": "SingleEnumIssueCustomField",
+			"value": map[string]interface{}{
+				"name": issueType,
+			},
+		})
+	}
+
 	assignee = normalizeAssignee(assignee)
 	if assignee == "me" {
 		if resolved, err := c.GetCurrentUserLogin(); err == nil {
 			assignee = resolved
 		}
 	}
-
-	args := []string{"issues", "create", projectID, summary}
-	if description != "" {
-		args = append(args, "--description", description)
-	}
-	if priority != "" {
-		args = append(args, "--custom-field", fmt.Sprintf("Priority=%s", priority))
-	}
-	if issueType != "" {
-		args = append(args, "--custom-field", fmt.Sprintf("Type=%s", issueType))
-	}
 	if assignee != "" {
-		args = append(args, "--assignee", assignee)
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Assignee",
+			"$type": "SingleUserIssueCustomField",
+			"value": map[string]interface{}{
+				"login": assignee,
+			},
+		})
 	}
 
-	stdout, stderr, err := c.runCommand(args...)
+	payload := map[string]interface{}{
+		"summary":     summary,
+		"description": description,
+		"project": map[string]interface{}{
+			"id": projID,
+		},
+	}
+	if len(customFields) > 0 {
+		payload["customFields"] = customFields
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues?fields=id,idReadable"
+
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return "", formatError("failed to create issue", stdout, stderr, err)
+		return "", err
 	}
 
-	// Output is typically something like "Created issue ID-123"
-	outStr := strings.TrimSpace(string(stdout))
-	return outStr, nil
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return "", err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return "", err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusCreated {
+		return "", parseAPIError(statusCode, body)
+	}
+
+	var created struct {
+		ID         string `json:"id"`
+		IDReadable string `json:"idReadable"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil {
+		return "", err
+	}
+
+	if created.IDReadable != "" {
+		return created.IDReadable, nil
+	}
+	return created.ID, nil
 }
 
-// ListComments lists comments for a specific issue. id must be the readable issue ID (e.g., "PROJECT-123").
+// ListComments lists comments for a specific issue.
 func (c *Client) ListComments(id string) ([]Comment, error) {
-	stdout, stderr, err := c.runCommand("issues", "comments", "list", id, "--format", "json")
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + id + "/comments?fields=id,text,created,author(login,fullName,email)"
+
+	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, formatError("failed to list comments", stdout, stderr, err)
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
 	}
 
 	var comments []Comment
-	if err := json.Unmarshal(sanitizeJSON(stdout), &comments); err != nil {
-		return nil, fmt.Errorf("failed to parse comments JSON: %w (output: %s)", err, string(stdout))
+	if err := json.Unmarshal(body, &comments); err != nil {
+		return nil, err
 	}
 	return comments, nil
 }
 
 // ListUsers lists YouTrack users.
 func (c *Client) ListUsers() ([]User, error) {
-	stdout, stderr, err := c.runCommand("users", "list", "--format", "json")
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/users?fields=login,fullName,email&$top=500"
+
+	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
-		return nil, formatError("failed to list users", stdout, stderr, err)
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
 	}
 
 	var users []User
-	if err := json.Unmarshal(sanitizeJSON(stdout), &users); err != nil {
-		return nil, fmt.Errorf("failed to parse users JSON: %w (output: %s)", err, string(stdout))
+	if err := json.Unmarshal(body, &users); err != nil {
+		return nil, err
 	}
 	return users, nil
 }
 
-// GetConfiguredBaseURL reads the current base URL from config if it exists.
+// GetConfiguredBaseURL reads the current base URL.
 func (c *Client) GetConfiguredBaseURL() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	configPath := filepath.Join(home, ".config", "youtrack-cli", ".env")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "YOUTRACK_BASE_URL=") {
-			val := strings.TrimPrefix(line, "YOUTRACK_BASE_URL=")
-			val = strings.Trim(val, "'\"")
-			return val
-		}
-	}
-	return ""
+	return c.baseURL
 }
 
-// GetCredentials retrieves the configured YouTrack base URL and token.
-func (c *Client) GetCredentials() (string, string, error) {
-	baseURL := os.Getenv("YOUTRACK_BASE_URL")
-	token := os.Getenv("YOUTRACK_TOKEN")
+// SaveCredentials writes the config.json.
+func (c *Client) SaveCredentials(baseURL, token string) error {
+	c.baseURL = baseURL
+	c.token = token
 
-	if baseURL != "" && token != "" {
-		return baseURL, token, nil
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return err
 	}
+	cfg.URL = baseURL
+	cfg.Token = token
+	return config.SaveConfig(cfg)
+}
 
+// getLegacyCredentials retrieves the legacy config for migration fallback.
+func getLegacyCredentials() (string, string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get user home directory: %w", err)
+		return "", "", err
 	}
 
 	configPath := filepath.Join(home, ".config", "youtrack-cli", ".env")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		if baseURL != "" {
-			return baseURL, "", nil
-		}
-		return "", "", fmt.Errorf("failed to read .env file: %w", err)
+		return "", "", err
 	}
 
+	var baseURL, token string
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "YOUTRACK_BASE_URL=") {
@@ -579,38 +766,8 @@ func (c *Client) GetCredentials() (string, string, error) {
 	}
 
 	if baseURL == "" || token == "" {
-		return "", "", errors.New("missing YOUTRACK_BASE_URL or YOUTRACK_TOKEN in config")
+		return "", "", errors.New("legacy credentials incomplete")
 	}
 
 	return baseURL, token, nil
-}
-
-// SaveCredentials clears any existing keyring credentials and writes the plaintext config.
-func (c *Client) SaveCredentials(baseURL, token string) error {
-	// 1. Run yt auth logout first to clear keyring entries
-	// We run it with a 'y' stdin to confirm confirmation prompt
-	cmd := exec.Command(c.ytPath, "auth", "logout")
-	var stdin bytes.Buffer
-	stdin.WriteString("y\n")
-	cmd.Stdin = &stdin
-	_ = cmd.Run() // ignore error, as it might fail if not logged in
-
-	// 2. Resolve the config file path (~/.config/youtrack-cli/.env)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	configDir := filepath.Join(home, ".config", "youtrack-cli")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	configPath := filepath.Join(configDir, ".env")
-	content := fmt.Sprintf("YOUTRACK_BASE_URL='%s'\nYOUTRACK_TOKEN='%s'\nYOUTRACK_VERIFY_SSL='true'\n", baseURL, token)
-	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
 }

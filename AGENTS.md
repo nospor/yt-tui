@@ -1,6 +1,6 @@
 # YouTrack TUI - Agent Guide & Instructions
 
-Welcome! This workspace contains the **YouTrack TUI (Terminal User Interface)**, an interactive, terminal-based dashboard for managing JetBrains YouTrack issues and projects. It is built in Go using the **Bubble Tea** TUI framework and wraps JetBrains' Python-based command-line interface `youtrack-cli` (executable name `yt`).
+Welcome! This workspace contains the **YouTrack TUI (Terminal User Interface)**, an interactive, terminal-based dashboard for managing JetBrains YouTrack issues and projects. It is built in Go using the **Bubble Tea** TUI framework and communicates directly with YouTrack's REST API.
 
 This document provides a technical guide, architecture map, behavioral rules, and guidelines for AI agents working on this codebase.
 
@@ -11,14 +11,14 @@ This document provides a technical guide, architecture map, behavioral rules, an
 The application is structured into the following key packages:
 
 ### 1. Root Application
-* [main.go](main.go) - Entry point. Verifies that the `youtrack-cli` command `yt` is present in the system `$PATH` (or fallback path `~/.local/bin/yt`), and initializes the Bubble Tea program.
+* [main.go](main.go) - Entry point. Initializes the Bubble Tea program.
 
 ### 2. Configuration Package
-* [config.go](internal/config/config.go) - Handles loading and initializing user configuration from `~/.config/yt-tui/config.json`. Managed properties include default page sizes.
+* [config.go](internal/config/config.go) - Handles loading, parsing, and saving user configuration/credentials from `~/.config/yt-tui/config.json`. Managed properties include URL, API Token, and page sizes.
 
-### 3. YouTrack CLI Wrapper (`ytcli`)
-This package wraps execution of the python `yt` tool and parses its JSON output:
-* [client.go](internal/ytcli/client.go) - Contains the [Client](internal/ytcli/client.go#L15) struct which manages command execution, authentication checks, and formatting errors.
+### 3. YouTrack REST API Client (`ytcli`)
+This package handles native HTTP communication with YouTrack's REST API:
+* [client.go](internal/ytcli/client.go) - Contains the [Client](internal/ytcli/client.go#L15) struct which manages API requests, authentication, and HTTP response handling.
 * [models.go](internal/ytcli/models.go) - Declares Go structures matching YouTrack's schema (e.g. `Issue`, `Project`, `Comment`, `User`, `CustomField`).
 
 ### 4. User Interface Package (`ui`)
@@ -39,24 +39,19 @@ Built using Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), and Bubbles compon
 
 When editing or extending this codebase, you **must** adhere to the following constraints:
 
-### 1. Keyring/Authentication Decryption Bypass
-* **Context**: When CLI wrapper commands run in background subprocesses without a TTY, python `keyring` may fail to read credentials, generate a *new* key, and overwrite the config, corrupting the stored token.
-* **Rule**: Maintain the plaintext configuration bypass recommendation inside `~/.config/youtrack-cli/.env`. Do NOT force keyring utilization. If authentication errors occur, check for the presence of the plaintext fallback first.
+### 1. Credentials Management
+* **Rule**: Store all API connections and token credentials within the local `config.json` via the [config](internal/config/config.go) package. Do not hardcode credentials or log sensitive tokens. Maintain backwards-compatible legacy migration from `~/.config/youtrack-cli/.env` when reading credentials.
 
-### 2. JSON Output Sanitization
-* **Context**: The `youtrack-cli` python library uses `rich.console` formatting which sometimes writes styling/non-JSON noise (or backslash escapes like `\[`) to standard output.
-* **Rule**: When adding or updating calls in `client.go`, you **must** pass command output bytes through [sanitizeJSON](internal/ytcli/client.go#L98) before passing it to `json.Unmarshal`.
-
-### 3. UI State Management and Propagating Events
+### 2. UI State Management and Propagating Events
 * **Context**: Screen navigation and view state is centralized in [AppModel.Update](internal/ui/app.go#L82).
 * **Rule**: Do not manage screen switches directly in sub-models. Instead, emit messages like `pushStateMsg`, `switchStateMsg`, or `popStateMsg` so the parent `AppModel` can coordinate screen history and window sizing correctly.
 
-### 4. Code Aesthetics and Formatting
+### 3. Code Aesthetics and Formatting
 * Keep user interface components aligned with the Catppuccin Mocha theme defined in [styles.go](internal/ui/styles.go).
 * Maintain Bubble Tea model initialization procedures. When implementing new states, add their setup steps under the switch statement in `switchState` inside `app.go`.
 * **Rule**: You **must** run Go formatting (`gofmt -s -w .`) on the workspace root after modifying any Go source files to ensure code format checks pass.
 
-### 5. README / Documentation Maintenance
+### 4. README / Documentation Maintenance
 * **Context**: The [README.md](README.md) acts as the single source of truth for users on keyboard mappings, config files (`config.json`), and available features.
 * **Rule**: When adding new features, command-line arguments, config settings, or keyboard mappings, you **must** update [README.md](README.md) to keep documentation synchronized and styled nicely.
 

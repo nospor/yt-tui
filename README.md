@@ -1,6 +1,6 @@
 # 🎛️ YouTrack Terminal User Interface (TUI)
 
-A sleek, keyboard-driven terminal dashboard for JetBrains YouTrack, written in Go using the **Bubble Tea** framework. It wraps the Python-based YouTrack CLI (`youtrack-cli` / `yt`) to provide high-performance, asynchronous, and interactive issue management.
+A sleek, keyboard-driven terminal dashboard for JetBrains YouTrack, written in Go using the **Bubble Tea** framework. It communicates directly with the YouTrack REST API to provide high-performance, asynchronous, and interactive issue management without requiring any external Python CLI.
 
 Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui` keeps you in your terminal flow while tracking your project tasks.
 
@@ -18,22 +18,13 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
   - **State Transitions**: Transition states (e.g. `Open` ➔ `In Progress` ➔ `Fixed`) dynamically.
   - **Assigning**: Quickly assign tickets to other team members or self-assign with `me`.
   - **Commenting**: Write and submit markdown comments directly from the detail view.
-- **🛡️ Plaintext Auth Bypass**: Integrated bypass configuration to prevent Python keyring locking and credential corruption in background subprocesses.
+- **🛡️ Native REST API Integration**: Directly interacts with YouTrack REST API endpoints, completely avoiding Python keyring lockouts, credential corruption, or subprocess TTY issues.
 
 ---
 
 ## 🚀 Prerequisites
 
 1. **Go Compiler**: Go 1.18+ installed on your system.
-2. **YouTrack CLI (`youtrack-cli`)**:
-   - The TUI acts as an interactive front-end wrapper for the official Python `yt` utility.
-   - Install the CLI via `uv` (recommended) or `pip`:
-     ```bash
-     uv tool install youtrack-cli
-     # OR
-     pip install youtrack-cli
-     ```
-   - Ensure `yt` is in your standard `$PATH`. (The TUI will search your environment paths and automatically fallback to check `~/.local/bin/yt`).
 
 ---
 
@@ -63,12 +54,16 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 
 ## ⚙️ Configuration
 
-`yt-tui` loads its user settings from a JSON file located at `~/.config/yt-tui/config.json`. The file and its parent directories are automatically created with default settings on the first run.
+`yt-tui` loads its user settings and credentials from a JSON file located at `~/.config/yt-tui/config.json`. The file and its parent directories are automatically created with default settings on the first run.
+
+If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they will be automatically migrated to your `config.json` on the first launch.
 
 ### Default Config Structure
 
 ```json
 {
+  "url": "",
+  "token": "",
   "page_size": 20,
   "max_issues": 500,
   "fields": ["ID", "Summary", "State", "Priority", "Assignee"],
@@ -82,6 +77,8 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 
 | Option | Type | Default | Description |
 |---|---|---|---|
+| `url` | String | `""` | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`). |
+| `token` | String | `""` | Your permanent YouTrack API token. |
 | `page_size` | Integer | `20` | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments. |
 | `max_issues` | Integer | `500` | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
 | `fields` | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names. |
@@ -143,43 +140,6 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
 * `Ctrl+S` (or `Enter` on text inputs): Submit the form and create/clone the issue.
 * `Esc`: Cancel and discard changes.
-
----
-
-## 🔑 Troubleshooting: Keyring & Authentication Issues
-
-### The Keyring Decryption Bug
-When running YouTrack CLI commands in background processes without an active TTY session (which is necessary for the TUI to fetch data in the background), the Python `keyring` library may fail to read your secure password vault.
-
-When this occurs, `youtrack-cli` automatically generates a *new* encryption key and overwrites the existing one in the keyring. This immediately corrupts all previously saved credentials, causing:
-* `Failed to decrypt credential` warnings logged to stderr.
-* The CLI outputting raw Fernet-encrypted strings (starting with `gAAAAA...`) as the URL or Token, which causes subsequent network queries to fail.
-
-### The Plaintext Config Bypass (Recommended Fix)
-To bypass the system keyring and prevent decryption errors permanently, store your credentials in plaintext inside the YouTrack CLI configuration file.
-
-1. **Clear corrupted keyring credentials** by running the logout command in your terminal:
-   ```bash
-   yt auth logout
-   ```
-   *(Press `y` and `Enter` when prompted for confirmation)*
-
-2. **Configure plaintext fallback**:
-   Create or edit the configuration file at `~/.config/youtrack-cli/.env` and write your connection variables in plaintext:
-   ```env
-   YOUTRACK_BASE_URL='https://youtrack.example.com/'
-   YOUTRACK_TOKEN='perm:your-api-token-here'
-   YOUTRACK_VERIFY_SSL='true'
-   ```
-   *(Be sure to replace the values with your actual YouTrack instance URL and personal API token)*
-
-3. **Restrict File Permissions**:
-   Because the token is saved in plaintext, restrict read/write access to your user account only:
-   ```bash
-   chmod 600 ~/.config/youtrack-cli/.env
-   ```
-
-Once these environment variables are set in the `.env` file and the keyring entries are cleared, `youtrack-cli` will bypass the keyring entirely, resulting in much faster command execution and avoiding any future authentication errors.
 
 ## License
 

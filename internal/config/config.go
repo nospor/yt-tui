@@ -8,6 +8,8 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
+	URL              string   `json:"url"`
+	Token            string   `json:"token"`
 	PageSize         int      `json:"page_size"`
 	MaxIssues        int      `json:"max_issues"`
 	Fields           []string `json:"fields"`
@@ -128,4 +130,22 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &fileCfg, nil
+}
+
+// SaveConfig saves the configuration to ~/.config/yt-tui/config.json.
+func SaveConfig(cfg *Config) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	configDir := filepath.Join(home, ".config", "yt-tui")
+	configPath := filepath.Join(configDir, "config.json")
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, data, 0644)
 }

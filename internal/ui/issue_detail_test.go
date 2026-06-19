@@ -10,7 +10,7 @@ import (
 
 func TestDetailModel_ViewportScrolling(t *testing.T) {
 	// 1. Create a detailModel
-	m := newDetailModel(nil)
+	m := newDetailModel(nil, nil)
 	m.width = 80
 	m.height = 24
 
