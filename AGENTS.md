@@ -55,6 +55,10 @@ When editing or extending this codebase, you **must** adhere to the following co
 * Keep user interface components aligned with the Catppuccin Mocha theme defined in [styles.go](internal/ui/styles.go).
 * Maintain Bubble Tea model initialization procedures. When implementing new states, add their setup steps under the switch statement in `switchState` inside `app.go`.
 
+### 5. README / Documentation Maintenance
+* **Context**: The [README.md](README.md) acts as the single source of truth for users on keyboard mappings, config files (`config.json`), and available features.
+* **Rule**: When adding new features, command-line arguments, config settings, or keyboard mappings, you **must** update [README.md](README.md) to keep documentation synchronized and styled nicely.
+
 ---
 
 ## 🛠 Build & Run Reference

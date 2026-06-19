@@ -1,89 +1,150 @@
-# YouTrack Terminal User Interface (TUI)
+# 🎛️ YouTrack Terminal User Interface (TUI)
 
-A terminal-based interface for JetBrains YouTrack, written in Go using the **Bubble Tea** framework. It wraps the Python-based YouTrack CLI (`youtrack-cli` / `yt`) to provide interactive issue browsing, project navigation, detail viewing, state updating, assigning, commenting, ticket creation, and ticket cloning.
+A sleek, keyboard-driven terminal dashboard for JetBrains YouTrack, written in Go using the **Bubble Tea** framework. It wraps the Python-based YouTrack CLI (`youtrack-cli` / `yt`) to provide high-performance, asynchronous, and interactive issue management.
+
+Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui` keeps you in your terminal flow while tracking your project tasks.
 
 ---
 
-## Prerequisites
+## ✨ Features
+
+- **🎛️ Interactive Dashboard (Home)**: A split-pane interface showing **My Open Issues** (unresolved issues assigned to you) alongside your **Projects**. Seamlessly toggle focus with `Tab`.
+- **📂 Global Project Browser**: View and browse all accessible YouTrack projects in a clean tabular view.
+- **⚡ Asynchronous Paginated Loading**: Loads issues in the background without blocking the UI, giving you an instantly responsive view even on large codebases.
+- **🔍 Filter & Search**: Instantly query and filter issues in lists by readable ID or summary text using local filtering.
+- **📝 Comprehensive Issue Detail**: Renders full markdown descriptions, assignees, priorities, states, and custom fields. Supports dedicated scrollable viewports for description and comments.
+- **🔄 Complete Issue Lifecycle**:
+  - **Create & Clone**: Instantly spawn new issues or clone existing ones (pre-populating description, type, priority, and assignee details).
+  - **State Transitions**: Transition states (e.g. `Open` ➔ `In Progress` ➔ `Fixed`) dynamically.
+  - **Assigning**: Quickly assign tickets to other team members or self-assign with `me`.
+  - **Commenting**: Write and submit markdown comments directly from the detail view.
+- **🛡️ Plaintext Auth Bypass**: Integrated bypass configuration to prevent Python keyring locking and credential corruption in background subprocesses.
+
+---
+
+## 🚀 Prerequisites
 
 1. **Go Compiler**: Go 1.18+ installed on your system.
 2. **YouTrack CLI (`youtrack-cli`)**:
-   - The TUI wraps the `yt` command-line utility.
-   - Install the CLI via pip/pipx/uv (e.g. `pip install youtrack-cli` or `uv tool install youtrack-cli`).
-   - Verify it is available in your standard system PATH (the TUI will search the PATH and fallback to `~/.local/bin/yt`).
+   - The TUI acts as an interactive front-end wrapper for the official Python `yt` utility.
+   - Install the CLI via `uv` (recommended) or `pip`:
+     ```bash
+     uv tool install youtrack-cli
+     # OR
+     pip install youtrack-cli
+     ```
+   - Ensure `yt` is in your standard `$PATH`. (The TUI will search your environment paths and automatically fallback to check `~/.local/bin/yt`).
 
 ---
 
-## Building and Running
+## 🛠️ Installation & Building
 
 1. **Clone/Navigate** to the project directory:
    ```bash
    cd /home/robertn/projects/vag1/html/yt-tui
    ```
 
-2. **Build** the application:
+2. **Build** the executable:
    ```bash
    go build -o yt-tui
    ```
 
-3. **Run** the executable:
+3. **Run** the dashboard:
    ```bash
    ./yt-tui
    ```
 
+4. **Verify Version**:
+   ```bash
+   ./yt-tui -v
+   ```
+
 ---
 
-## Keyboard Controls & Navigation
+## ⚙️ Configuration
 
-### Global Keys
-* `Ctrl+C`: Force quit the application from any screen at any time.
+`yt-tui` loads its user settings from a JSON file located at `~/.config/yt-tui/config.json`. The file and its parent directories are automatically created with default settings on the first run.
 
-### Welcome / Login View
+### Default Config Structure
+
+```json
+{
+  "page_size": 20
+}
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `page_size` | Integer | `20` | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments. |
+
+---
+
+## ⌨️ Keyboard Controls & Navigation
+
+### 🌐 Global Controls
+* `Ctrl+C`: Force quit the application at any time.
+
+### 🚪 Welcome / Login View
 * `Tab` / `Shift+Tab`: Switch focus between YouTrack Base URL and API Token fields.
 * `Enter`: Save credentials and authenticate.
-* `q`: Exit.
+* `q`: Exit application.
 
-### Dashboard View (Home Screen)
-* `Tab` / `Shift+Tab`: Switch between **My Open Issues** and **Projects** panels.
-* `↑` / `↓` (or `k` / `j`): Navigate items within the active panel.
-* `Enter`: Select the highlighted item.
-  - Selecting an issue goes to the **Issue Detail** view.
-  - Selecting a project opens the **Issues List** filtered by that project.
-* `n`: Create a new issue in the highlighted project.
-* `p`: Open the full **Projects List** table.
-* `r`: Refresh the dashboard data.
-* `q`: Quit.
+### 🏠 Dashboard View (Home Screen)
+* `Tab` / `Shift+Tab`: Switch active focus panel (**My Open Issues** vs **Projects**).
+* `↑` / `↓` (or `k` / `j`): Scroll items inside the active focus panel.
+* `Enter`: Open the highlighted item:
+  - Selecting an issue opens the **Issue Detail** view.
+  - Selecting a project opens the **Issues List** filtered to that project.
+* `n`: Create a new issue (pre-selects the highlighted project if focused).
+* `p`: View the full **Projects List** screen.
+* `r`: Reload and refresh all dashboard data.
+* `q`: Exit application.
 
-### Issues List View
-* `↑` / `↓` (or `k` / `j`): Scroll through issues.
+### 📂 Projects List View
+* `↑` / `↓` (or `k` / `j`): Navigate projects table.
+* `Enter`: View issues inside the selected project.
+* `n`: Create a new issue in the selected project.
+* `r`: Refresh projects list.
+* `Esc` / `Backspace`: Go back to the dashboard.
+
+### 📋 Issues List View
+* `↑` / `↓` (or `k` / `j`): Scroll issues table.
 * `Enter`: View details of the selected issue.
-* `/`: Toggle search/filter mode. Type a keyword to search issues. Press `Esc` or `Enter` to close search mode.
-* `n`: Create a new issue in this project.
-* `Esc`: Go back to the previous screen.
+* `/`: Activate search/filter mode. Type keywords to filter issues by summary/ID. Press `Esc` or `Enter` to close search mode.
+* `n`: Create a new issue in the current project context.
+* `r`: Clear cache and force reload issues list.
+* `Esc` / `Backspace`: Go back to the dashboard/previous screen.
 
-### Issue Detail View
+### 🔍 Issue Detail View
 * `↑` / `↓` (or `k` / `j`): Scroll the issue description viewport.
 * `PageUp` / `PageDown` (or `Ctrl+U` / `Ctrl+D`): Scroll the comments list viewport.
 * `c`: Add a comment. Type your comment and press `Ctrl+S` to submit, or `Esc` to cancel.
-* `s`: Transition issue state (opens state input, type a state like `Open`, `In Progress`, `Fixed`, and press `Enter`).
-* `a`: Assign issue (opens assignee input, type username or `me` and press `Enter`).
+* `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
+* `a`: Assign issue (opens assignee input prompt; type username or `me` and hit `Enter`).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
-* `r`: Refresh issue details.
-* `Esc`: Go back to the previous screen.
+* `r`: Force refresh issue details and comments.
+* `Esc` / `Backspace`: Go back to the issues list.
+
+### 📝 Issue Creation / Clone Form
+* `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee).
+* `Ctrl+S` / `Enter` (on text inputs): Submit the form and create/clone the issue.
+* `Esc`: Cancel and discard changes.
 
 ---
 
-## Troubleshooting: Keyring & Authentication Issues
+## 🔑 Troubleshooting: Keyring & Authentication Issues
 
 ### The Keyring Decryption Bug
-When running YouTrack CLI wrapper commands in background processes without an active TTY session (as is necessary to fetch data in the background for a TUI), the Python `keyring` library may fail to read your secure password vault.
+When running YouTrack CLI commands in background processes without an active TTY session (which is necessary for the TUI to fetch data in the background), the Python `keyring` library may fail to read your secure password vault.
 
-When this read failure occurs, `youtrack-cli` automatically generates a *new* encryption key and overwrites the existing one in the keyring. This immediately corrupts all previously saved credentials, resulting in:
+When this occurs, `youtrack-cli` automatically generates a *new* encryption key and overwrites the existing one in the keyring. This immediately corrupts all previously saved credentials, causing:
 * `Failed to decrypt credential` warnings logged to stderr.
 * The CLI outputting raw Fernet-encrypted strings (starting with `gAAAAA...`) as the URL or Token, which causes subsequent network queries to fail.
 
 ### The Plaintext Config Bypass (Recommended Fix)
-To bypass the system keyring and prevent decryption errors permanently, you can store your credentials in plaintext inside the YouTrack CLI configuration file.
+To bypass the system keyring and prevent decryption errors permanently, store your credentials in plaintext inside the YouTrack CLI configuration file.
 
 1. **Clear corrupted keyring credentials** by running the logout command in your terminal:
    ```bash
@@ -100,10 +161,18 @@ To bypass the system keyring and prevent decryption errors permanently, you can 
    ```
    *(Be sure to replace the values with your actual YouTrack instance URL and personal API token)*
 
-3. **Restricting File Permissions** (Security Best Practice):
+3. **Restrict File Permissions**:
    Because the token is saved in plaintext, restrict read/write access to your user account only:
    ```bash
    chmod 600 ~/.config/youtrack-cli/.env
    ```
 
-When these environment variables are set in the `.env` file and the keyring entries are cleared, `youtrack-cli` will bypass the keyring entirely, running extremely fast and avoiding any future authentication errors.
+Once these environment variables are set in the `.env` file and the keyring entries are cleared, `youtrack-cli` will bypass the keyring entirely, resulting in much faster command execution and avoiding any future authentication errors.
+
+## License
+
+TeamsTUI is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+## Thanks For Visiting
+Hope you liked it. Wanna **[buy Me a coffee](https://www.buymeacoffee.com/nospor)**?
+
