@@ -89,6 +89,22 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		if msg.String() == "q" {
+			canQuit := false
+			switch m.state {
+			case stateDashboard:
+				canQuit = true
+			case stateProjects:
+				canQuit = true
+			case stateIssues:
+				canQuit = !m.issues.searchMode
+			case stateDetail:
+				canQuit = m.detail.mode == modeNormal
+			}
+			if canQuit {
+				return m, tea.Quit
+			}
+		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

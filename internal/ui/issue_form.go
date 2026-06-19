@@ -340,7 +340,7 @@ func (m formModel) View() string {
 
 	formContent := formStyle.Render(builder.String())
 
-	help := StyleHelp.Render(" [Tab/Shift-Tab] Navigate Fields  [Ctrl+S] Save & Submit  [Esc] Cancel/Back  [q] Quit ")
+	help := StyleHelp.Render(" [Tab/Shift-Tab] Navigate Fields  [Ctrl+S] Save & Submit  [Esc] Cancel/Back  [Ctrl+C] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, formContent, "", help)
 }

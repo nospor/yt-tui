@@ -96,7 +96,7 @@ func (m welcomeModel) Update(msg tea.Msg) (welcomeModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.err != nil {
-			if msg.String() == "q" || msg.String() == "ctrl+c" {
+			if msg.String() == "ctrl+c" {
 				return m, tea.Quit
 			}
 			m.err = nil
@@ -146,7 +146,7 @@ func (m welcomeModel) Update(msg tea.Msg) (welcomeModel, tea.Cmd) {
 					return authCheckMsg{authenticated: auth, err: err}
 				}
 
-			case "q", "ctrl+c":
+			case "ctrl+c":
 				return m, tea.Quit
 			}
 
@@ -214,7 +214,7 @@ func (m welcomeModel) View() string {
 		}
 		builder.WriteString(fmt.Sprintf("%s %s\n\n", tokenLabel, tokenView))
 
-		builder.WriteString(StyleHelp.Render(" [Tab] Switch Fields  [Enter] Save & Login  [q] Quit "))
+		builder.WriteString(StyleHelp.Render(" [Tab] Switch Fields  [Enter] Save & Login  [Ctrl+C] Quit "))
 		body = builder.String()
 	} else {
 		body = "Authenticated! Loading dashboard..."
