@@ -1,1 +1,10 @@
+# Binaries and local builds
 yt-tui
+yt-tui.exe
+release-builds/
+
+# GoReleaser output
+dist/
+
+# Release notes generated dynamically in pipelines
+RELEASE_NOTES.md
