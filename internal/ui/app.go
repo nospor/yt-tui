@@ -217,32 +217,7 @@ func (m *AppModel) switchState(state State, data string) tea.Cmd {
 		m.detail.mode = modeNormal
 		return m.detail.loadDetailCmd()
 	case stateForm:
-		// Setup form for either clone or create
-		m.form.projectInput.SetValue("")
-		m.form.summaryInput.SetValue("")
-		m.form.descTextArea.SetValue("")
-		m.form.typeInput.SetValue("")
-		m.form.priorityInput.SetValue("")
-		m.form.assigneeInput.SetValue("")
-		m.form.focusIndex = fieldProject
-		m.form.isClone = false
-		m.form.cloneKey = ""
-		m.form.loading = false
-		m.form.err = nil
-
-		if strings.HasPrefix(data, "clone:") {
-			m.form.isClone = true
-			m.form.cloneKey = strings.TrimPrefix(data, "clone:")
-			m.form.loading = true
-			return m.form.loadCloneDataCmd(m.form.cloneKey)
-		} else if data != "" {
-			m.form.projectInput.SetValue(data)
-			m.form.focusIndex = fieldSummary
-			m.form.projectInput.Blur()
-			m.form.summaryInput.Focus()
-		} else {
-			m.form.projectInput.Focus()
-		}
+		return m.form.setupForm(data)
 	}
 	return nil
 }

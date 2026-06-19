@@ -133,7 +133,9 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 
 ### 📝 Issue Creation / Clone Form
 * `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee).
-* `Ctrl+S` / `Enter` (on text inputs): Submit the form and create/clone the issue.
+* `←` / `→` (or `h` / `l`): Cycle options in dropdown fields (Project, Type, Priority).
+* `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
+* `Ctrl+S` (or `Enter` on text inputs): Submit the form and create/clone the issue.
 * `Esc`: Cancel and discard changes.
 
 ---

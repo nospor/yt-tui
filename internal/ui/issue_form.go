@@ -24,6 +24,9 @@ const (
 	numFields // total count
 )
 
+var typeOptions = []string{"Bug", "Feature", "Task", "Epic", "Improvement", "Support"}
+var priorityOptions = []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"}
+
 type formModel struct {
 	client     *ytcli.Client
 	loading    bool
@@ -35,13 +38,21 @@ type formModel struct {
 	height     int
 	focusIndex formField
 
-	// Fields
-	projectInput  textinput.Model
+	// Inputs
 	summaryInput  textinput.Model
 	descTextArea  textarea.Model
-	typeInput     textinput.Model
-	priorityInput textinput.Model
 	assigneeInput textinput.Model
+
+	// Dropdowns
+	projects            []ytcli.Project
+	projectIndex        int
+	initialProjectCode  string
+
+	typeIndex           int
+	customTypes         []string
+
+	priorityIndex       int
+	customPriorities    []string
 }
 
 func newFormModel(client *ytcli.Client) formModel {
@@ -49,23 +60,12 @@ func newFormModel(client *ytcli.Client) formModel {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
 
-	// Initialize inputs
-	p := textinput.New()
-	p.Placeholder = "Project Code (e.g. DEMO)"
-	p.Focus()
-
 	sum := textinput.New()
 	sum.Placeholder = "Summary of the issue"
 
 	desc := textarea.New()
 	desc.Placeholder = "Detailed description (Markdown supported)..."
-	desc.SetHeight(6)
-
-	t := textinput.New()
-	t.Placeholder = "Type (e.g. Bug, Feature, Task)"
-
-	pr := textinput.New()
-	pr.Placeholder = "Priority (e.g. Minor, Normal, Major, Critical)"
+	desc.SetHeight(10) // Bigger description field
 
 	a := textinput.New()
 	a.Placeholder = "Assignee username (or 'me')"
@@ -74,12 +74,11 @@ func newFormModel(client *ytcli.Client) formModel {
 		client:        client,
 		spinner:       s,
 		focusIndex:    fieldProject,
-		projectInput:  p,
 		summaryInput:  sum,
 		descTextArea:  desc,
-		typeInput:     t,
-		priorityInput: pr,
 		assigneeInput: a,
+		typeIndex:     2, // Default to "Task"
+		priorityIndex: 1, // Default to "Normal"
 	}
 }
 
@@ -93,6 +92,11 @@ type formSubmittedMsg struct {
 	err     error
 }
 
+type projectsLoadedMsg struct {
+	projects []ytcli.Project
+	err      error
+}
+
 func (m formModel) loadCloneDataCmd(key string) tea.Cmd {
 	return func() tea.Msg {
 		issue, err := m.client.GetIssue(key)
@@ -100,37 +104,116 @@ func (m formModel) loadCloneDataCmd(key string) tea.Cmd {
 	}
 }
 
+func (m formModel) loadProjectsCmd() tea.Cmd {
+	return func() tea.Msg {
+		projects, err := m.client.ListProjects()
+		return projectsLoadedMsg{projects: projects, err: err}
+	}
+}
+
+func (m *formModel) setProjectByCode(code string) {
+	for i, p := range m.projects {
+		if strings.EqualFold(p.ShortName, code) {
+			m.projectIndex = i
+			return
+		}
+	}
+}
+
+func (m *formModel) setTypeByValue(val string) {
+	if val == "" {
+		m.typeIndex = 2 // Task
+		return
+	}
+	for i, t := range typeOptions {
+		if strings.EqualFold(t, val) {
+			m.typeIndex = i
+			return
+		}
+	}
+	// Check if already in customTypes
+	for i, t := range m.customTypes {
+		if strings.EqualFold(t, val) {
+			m.typeIndex = len(typeOptions) + i
+			return
+		}
+	}
+	m.customTypes = append(m.customTypes, val)
+	m.typeIndex = len(typeOptions) + len(m.customTypes) - 1
+}
+
+func (m *formModel) setPriorityByValue(val string) {
+	if val == "" {
+		m.priorityIndex = 1 // Normal
+		return
+	}
+	for i, p := range priorityOptions {
+		if strings.EqualFold(p, val) {
+			m.priorityIndex = i
+			return
+		}
+	}
+	// Check if already in customPriorities
+	for i, p := range m.customPriorities {
+		if strings.EqualFold(p, val) {
+			m.priorityIndex = len(priorityOptions) + i
+			return
+		}
+	}
+	m.customPriorities = append(m.customPriorities, val)
+	m.priorityIndex = len(priorityOptions) + len(m.customPriorities) - 1
+}
+
+func (m formModel) getTypes() []string {
+	opts := make([]string, len(typeOptions))
+	copy(opts, typeOptions)
+	opts = append(opts, m.customTypes...)
+	return opts
+}
+
+func (m formModel) getPriorities() []string {
+	opts := make([]string, len(priorityOptions))
+	copy(opts, priorityOptions)
+	opts = append(opts, m.customPriorities...)
+	return opts
+}
+
 func (m *formModel) setupForm(data string) tea.Cmd {
 	m.isClone = false
 	m.cloneKey = ""
 	m.loading = false
 	m.err = nil
-	m.projectInput.SetValue("")
 	m.summaryInput.SetValue("")
 	m.descTextArea.SetValue("")
-	m.typeInput.SetValue("")
-	m.priorityInput.SetValue("")
 	m.assigneeInput.SetValue("")
-	m.focusIndex = fieldProject
+	m.projects = nil
+	m.projectIndex = 0
+	m.typeIndex = 2
+	m.priorityIndex = 1
+	m.customTypes = nil
+	m.customPriorities = nil
+
+	var cmds []tea.Cmd
+	cmds = append(cmds, m.loadProjectsCmd())
 
 	if strings.HasPrefix(data, "clone:") {
 		m.isClone = true
 		m.cloneKey = strings.TrimPrefix(data, "clone:")
 		m.loading = true
-		return m.loadCloneDataCmd(m.cloneKey)
-	}
-
-	// Pre-fill project if provided
-	if data != "" {
-		m.projectInput.SetValue(data)
+		cmds = append(cmds, m.loadCloneDataCmd(m.cloneKey))
+	} else if data != "" {
+		m.initialProjectCode = data
+		m.blurCurrent()
 		m.focusIndex = fieldSummary
-		m.projectInput.Blur()
-		m.summaryInput.Focus()
+		m.focusCurrent()
 	} else {
-		m.projectInput.Focus()
+		m.initialProjectCode = ""
+		m.blurCurrent()
+		m.focusIndex = fieldProject
+		m.focusCurrent()
 	}
 
-	return nil
+	return tea.Batch(cmds...)
 }
 
 func (m formModel) Init() tea.Cmd {
@@ -144,6 +227,17 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case projectsLoadedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.projects = msg.projects
+		if m.initialProjectCode != "" {
+			m.setProjectByCode(m.initialProjectCode)
+		}
+		return m, nil
+
 	case cloneDataLoadedMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -151,21 +245,23 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			return m, nil
 		}
 
-		// Pre-populate form with cloned issue's details
 		issue := msg.issue
-		if issue.Project != nil {
-			m.projectInput.SetValue(issue.Project.ShortName)
-		}
 		m.summaryInput.SetValue("Clone: " + issue.Summary)
 		m.descTextArea.SetValue(issue.Description)
-		m.typeInput.SetValue(issue.Type())
-		m.priorityInput.SetValue(issue.Priority())
+		m.setTypeByValue(issue.Type())
+		m.setPriorityByValue(issue.Priority())
 		m.assigneeInput.SetValue(issue.Assignee())
 
-		// Start with focus on the summary input
+		if issue.Project != nil {
+			m.initialProjectCode = issue.Project.ShortName
+			if len(m.projects) > 0 {
+				m.setProjectByCode(m.initialProjectCode)
+			}
+		}
+
+		m.blurCurrent()
 		m.focusIndex = fieldSummary
-		m.projectInput.Blur()
-		m.summaryInput.Focus()
+		m.focusCurrent()
 		return m, nil
 
 	case formSubmittedMsg:
@@ -174,7 +270,6 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
-		// Form submitted successfully, pop back to issue details/list
 		return m, func() tea.Msg {
 			return popStateMsg{}
 		}
@@ -189,13 +284,31 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			}
 		case "ctrl+s":
 			if !m.loading {
-				// Submit form
-				proj := m.projectInput.Value()
+				var proj string
+				if len(m.projects) > 0 {
+					proj = m.projects[m.projectIndex].ShortName
+				} else {
+					proj = m.initialProjectCode
+				}
+
 				sum := m.summaryInput.Value()
 				if proj == "" || sum == "" {
 					m.err = fmt.Errorf("Project and Summary fields are required")
 					return m, nil
 				}
+
+				var issueType string
+				types := m.getTypes()
+				if len(types) > 0 {
+					issueType = types[m.typeIndex]
+				}
+
+				var priority string
+				priorities := m.getPriorities()
+				if len(priorities) > 0 {
+					priority = priorities[m.priorityIndex]
+				}
+
 				m.loading = true
 				m.err = nil
 				return m, func() tea.Msg {
@@ -203,8 +316,8 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 						proj,
 						sum,
 						m.descTextArea.Value(),
-						m.priorityInput.Value(),
-						m.typeInput.Value(),
+						priority,
+						issueType,
 						m.assigneeInput.Value(),
 					)
 					return formSubmittedMsg{issueID: id, err: err}
@@ -213,8 +326,6 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 
 		case "tab", "down":
 			if m.focusIndex == fieldDescription {
-				// Let down scroll description instead of tabbing if it has text,
-				// but Tab always switches focus.
 				if msg.String() == "down" {
 					m.descTextArea, cmd = m.descTextArea.Update(msg)
 					return m, cmd
@@ -232,20 +343,90 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			}
 			m.prevField()
 			return m, nil
+
+		case "left", "h":
+			switch m.focusIndex {
+			case fieldProject:
+				if len(m.projects) > 0 {
+					m.projectIndex = (m.projectIndex - 1 + len(m.projects)) % len(m.projects)
+				}
+				return m, nil
+			case fieldType:
+				opts := m.getTypes()
+				if len(opts) > 0 {
+					m.typeIndex = (m.typeIndex - 1 + len(opts)) % len(opts)
+				}
+				return m, nil
+			case fieldPriority:
+				opts := m.getPriorities()
+				if len(opts) > 0 {
+					m.priorityIndex = (m.priorityIndex - 1 + len(opts)) % len(opts)
+				}
+				return m, nil
+			}
+
+		case "right", "l":
+			switch m.focusIndex {
+			case fieldProject:
+				if len(m.projects) > 0 {
+					m.projectIndex = (m.projectIndex + 1) % len(m.projects)
+				}
+				return m, nil
+			case fieldType:
+				opts := m.getTypes()
+				if len(opts) > 0 {
+					m.typeIndex = (m.typeIndex + 1) % len(opts)
+				}
+				return m, nil
+			case fieldPriority:
+				opts := m.getPriorities()
+				if len(opts) > 0 {
+					m.priorityIndex = (m.priorityIndex + 1) % len(opts)
+				}
+				return m, nil
+			}
+
+		default:
+			// Jump to option by starting letter for dropdowns
+			char := strings.ToLower(msg.String())
+			if len(char) == 1 && char[0] >= 'a' && char[0] <= 'z' {
+				switch m.focusIndex {
+				case fieldType:
+					opts := m.getTypes()
+					for i, opt := range opts {
+						if strings.HasPrefix(strings.ToLower(opt), char) {
+							m.typeIndex = i
+							break
+						}
+					}
+					return m, nil
+				case fieldPriority:
+					opts := m.getPriorities()
+					for i, opt := range opts {
+						if strings.HasPrefix(strings.ToLower(opt), char) {
+							m.priorityIndex = i
+							break
+						}
+					}
+					return m, nil
+				case fieldProject:
+					for i, p := range m.projects {
+						if strings.HasPrefix(strings.ToLower(p.ShortName), char) || strings.HasPrefix(strings.ToLower(p.Name), char) {
+							m.projectIndex = i
+							break
+						}
+					}
+					return m, nil
+				}
+			}
 		}
 
 		// Forward keys to the currently focused input
 		switch m.focusIndex {
-		case fieldProject:
-			m.projectInput, cmd = m.projectInput.Update(msg)
 		case fieldSummary:
 			m.summaryInput, cmd = m.summaryInput.Update(msg)
 		case fieldDescription:
 			m.descTextArea, cmd = m.descTextArea.Update(msg)
-		case fieldType:
-			m.typeInput, cmd = m.typeInput.Update(msg)
-		case fieldPriority:
-			m.priorityInput, cmd = m.priorityInput.Update(msg)
 		case fieldAssignee:
 			m.assigneeInput, cmd = m.assigneeInput.Update(msg)
 		}
@@ -268,16 +449,10 @@ func (m *formModel) prevField() {
 
 func (m *formModel) blurCurrent() {
 	switch m.focusIndex {
-	case fieldProject:
-		m.projectInput.Blur()
 	case fieldSummary:
 		m.summaryInput.Blur()
 	case fieldDescription:
 		m.descTextArea.Blur()
-	case fieldType:
-		m.typeInput.Blur()
-	case fieldPriority:
-		m.priorityInput.Blur()
 	case fieldAssignee:
 		m.assigneeInput.Blur()
 	}
@@ -285,16 +460,10 @@ func (m *formModel) blurCurrent() {
 
 func (m *formModel) focusCurrent() {
 	switch m.focusIndex {
-	case fieldProject:
-		m.projectInput.Focus()
 	case fieldSummary:
 		m.summaryInput.Focus()
 	case fieldDescription:
 		m.descTextArea.Focus()
-	case fieldType:
-		m.typeInput.Focus()
-	case fieldPriority:
-		m.priorityInput.Focus()
 	case fieldAssignee:
 		m.assigneeInput.Focus()
 	}
@@ -320,40 +489,148 @@ func (m formModel) View() string {
 	}
 	title := StyleTitle.Render(titleText)
 
-	// Build form layouts
-	formStyle := lipgloss.NewStyle().Padding(1, 2).Width(m.width - 4)
+	// Determine width
+	targetWidth := m.width - 8
+	if targetWidth < 40 {
+		targetWidth = 40
+	}
+	if targetWidth > 80 {
+		targetWidth = 80
+	}
 
+	// Update inputs' widths dynamically
+	m.summaryInput.Width = targetWidth - 2
+	m.descTextArea.SetWidth(targetWidth - 2)
+	m.assigneeInput.Width = targetWidth - 2
+
+	// Render Dropdowns values
+	var projectVal string
+	if len(m.projects) > 0 {
+		proj := m.projects[m.projectIndex]
+		projectVal = fmt.Sprintf("◀  %s  ▶   %s", proj.ShortName, proj.Name)
+	} else if m.initialProjectCode != "" {
+		projectVal = fmt.Sprintf("◀  %s  ▶   (Loading projects...)", m.initialProjectCode)
+	} else {
+		projectVal = "◀  None  ▶   (Loading projects...)"
+	}
+
+	var currentType string
+	types := m.getTypes()
+	if len(types) > 0 {
+		currentType = types[m.typeIndex]
+	} else {
+		currentType = "Task"
+	}
+	typeVal := fmt.Sprintf("◀  %s  ▶", currentType)
+
+	var currentPriority string
+	priorities := m.getPriorities()
+	if len(priorities) > 0 {
+		currentPriority = priorities[m.priorityIndex]
+	} else {
+		currentPriority = "Normal"
+	}
+	priorityVal := fmt.Sprintf("◀  %s  ▶", currentPriority)
+
+	// Horizontal options helper lists when dropdown is focused
+	var projectOptsList string
+	if m.focusIndex == fieldProject && len(m.projects) > 0 {
+		var shortNames []string
+		for _, p := range m.projects {
+			shortNames = append(shortNames, p.ShortName)
+		}
+		projectOptsList = renderDropdownOptions(shortNames, m.projectIndex)
+	}
+
+	var typeOptsList string
+	if m.focusIndex == fieldType && len(types) > 0 {
+		typeOptsList = renderDropdownOptions(types, m.typeIndex)
+	}
+
+	var priorityOptsList string
+	if m.focusIndex == fieldPriority && len(priorities) > 0 {
+		priorityOptsList = renderDropdownOptions(priorities, m.priorityIndex)
+	}
+
+	// Build form layout with all labels on top of fields
+	formStyle := lipgloss.NewStyle().Padding(1, 2).Width(m.width - 4)
 	var builder strings.Builder
 
-	// Project field
-	builder.WriteString(fmt.Sprintf("%-15s %s\n\n", "Project:", renderField(m.projectInput.View(), m.focusIndex == fieldProject)))
-	// Summary field
-	builder.WriteString(fmt.Sprintf("%-15s %s\n\n", "Summary:", renderField(m.summaryInput.View(), m.focusIndex == fieldSummary)))
-	// Description field
-	builder.WriteString(fmt.Sprintf("%-15s\n%s\n\n", "Description:", renderField(m.descTextArea.View(), m.focusIndex == fieldDescription)))
-	// Type field
-	builder.WriteString(fmt.Sprintf("%-15s %s\n\n", "Type:", renderField(m.typeInput.View(), m.focusIndex == fieldType)))
-	// Priority field
-	builder.WriteString(fmt.Sprintf("%-15s %s\n\n", "Priority:", renderField(m.priorityInput.View(), m.focusIndex == fieldPriority)))
-	// Assignee field
-	builder.WriteString(fmt.Sprintf("%-15s %s\n\n", "Assignee:", renderField(m.assigneeInput.View(), m.focusIndex == fieldAssignee)))
+	// Project
+	builder.WriteString("Project:\n")
+	builder.WriteString(renderField(projectVal, m.focusIndex == fieldProject, targetWidth))
+	builder.WriteString("\n")
+	if projectOptsList != "" {
+		builder.WriteString(projectOptsList + "\n")
+	}
+	builder.WriteString("\n")
+
+	// Summary
+	builder.WriteString("Summary:\n")
+	builder.WriteString(renderField(m.summaryInput.View(), m.focusIndex == fieldSummary, targetWidth))
+	builder.WriteString("\n\n")
+
+	// Description
+	builder.WriteString("Description:\n")
+	builder.WriteString(renderField(m.descTextArea.View(), m.focusIndex == fieldDescription, targetWidth))
+	builder.WriteString("\n\n")
+
+	// Type
+	builder.WriteString("Type:\n")
+	builder.WriteString(renderField(typeVal, m.focusIndex == fieldType, targetWidth))
+	builder.WriteString("\n")
+	if typeOptsList != "" {
+		builder.WriteString(typeOptsList + "\n")
+	}
+	builder.WriteString("\n")
+
+	// Priority
+	builder.WriteString("Priority:\n")
+	builder.WriteString(renderField(priorityVal, m.focusIndex == fieldPriority, targetWidth))
+	builder.WriteString("\n")
+	if priorityOptsList != "" {
+		builder.WriteString(priorityOptsList + "\n")
+	}
+	builder.WriteString("\n")
+
+	// Assignee
+	builder.WriteString("Assignee:\n")
+	builder.WriteString(renderField(m.assigneeInput.View(), m.focusIndex == fieldAssignee, targetWidth))
+	builder.WriteString("\n\n")
 
 	formContent := formStyle.Render(builder.String())
 
-	help := StyleHelp.Render(" [Tab/Shift-Tab] Navigate Fields  [Ctrl+S] Save & Submit  [Esc] Cancel/Back  [Ctrl+C] Quit ")
+	help := StyleHelp.Render(" [Tab/Shift-Tab] Navigate Fields  [<- / -> or h/l] Select Dropdown Option  [Ctrl+S] Save & Submit  [Esc] Cancel/Back ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, formContent, "", help)
 }
 
-func renderField(view string, focused bool) string {
-	if focused {
-		return lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(ColorViolet)).
-			Render(view)
-	}
-	return lipgloss.NewStyle().
+func renderField(view string, focused bool, width int) string {
+	s := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(ColorOverlay)).
-		Render(view)
+		Width(width)
+
+	if focused {
+		s = s.BorderForeground(lipgloss.Color(ColorViolet))
+	} else {
+		s = s.BorderForeground(lipgloss.Color(ColorOverlay))
+	}
+	return s.Render(view)
+}
+
+func renderDropdownOptions(options []string, activeIndex int) string {
+	var formatted []string
+	for i, opt := range options {
+		if i == activeIndex {
+			formatted = append(formatted, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorCyan)).
+				Bold(true).
+				Render("• "+opt+" •"))
+		} else {
+			formatted = append(formatted, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorSubtext)).
+				Render(opt))
+		}
+	}
+	return "  " + strings.Join(formatted, "   ")
 }
