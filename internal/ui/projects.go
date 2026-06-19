@@ -11,13 +11,13 @@ import (
 )
 
 type projectsModel struct {
-	client   *ytcli.Client
-	table    table.Model
-	loading  bool
-	err      error
-	spinner  spinner.Model
-	width    int
-	height   int
+	client  *ytcli.Client
+	table   table.Model
+	loading bool
+	err     error
+	spinner spinner.Model
+	width   int
+	height  int
 }
 
 func newProjectsModel(client *ytcli.Client) projectsModel {

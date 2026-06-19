@@ -4,16 +4,16 @@ import "github.com/charmbracelet/lipgloss"
 
 // Colors (Catppuccin Mocha palette)
 const (
-	ColorBg       = "#1E1E2E"
-	ColorText     = "#CDD6F4"
-	ColorSubtext  = "#A6ADC8"
-	ColorViolet   = "#CBA6F7" // Primary accent
-	ColorCyan     = "#89B4FA" // Secondary accent
-	ColorGreen    = "#A6E3A1" // Success
-	ColorYellow   = "#F9E2AF" // Warning
-	ColorRed      = "#F38BA8" // Error
-	ColorSurface  = "#313244" // Panel background
-	ColorOverlay  = "#45475A" // Highlight border
+	ColorBg      = "#1E1E2E"
+	ColorText    = "#CDD6F4"
+	ColorSubtext = "#A6ADC8"
+	ColorViolet  = "#CBA6F7" // Primary accent
+	ColorCyan    = "#89B4FA" // Secondary accent
+	ColorGreen   = "#A6E3A1" // Success
+	ColorYellow  = "#F9E2AF" // Warning
+	ColorRed     = "#F38BA8" // Error
+	ColorSurface = "#313244" // Panel background
+	ColorOverlay = "#45475A" // Highlight border
 )
 
 // Global Styles

@@ -34,9 +34,9 @@ type Project struct {
 
 // CustomField represents a YouTrack issue custom field.
 type CustomField struct {
-	ID   string      `json:"id"`
-	Name string      `json:"name"`
-	Type string      `json:"$type,omitempty"`
+	ID    string      `json:"id"`
+	Name  string      `json:"name"`
+	Type  string      `json:"$type,omitempty"`
 	Value interface{} `json:"value,omitempty"`
 }
 

@@ -30,7 +30,7 @@ func NewClient() *Client {
 		localBinPath := filepath.Join(home, ".local", "bin", "yt")
 		if _, err := os.Stat(localBinPath); err == nil {
 			return &Client{ytPath: localBinPath}
-	}
+		}
 	}
 
 	// 3. Default to just "yt" and let exec fail if not found
@@ -358,4 +358,3 @@ func (c *Client) SaveCredentials(baseURL, token string) error {
 
 	return nil
 }
-

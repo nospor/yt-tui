@@ -4,24 +4,24 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines the keybindings for the application.
 type KeyMap struct {
-	Up           key.Binding
-	Down         key.Binding
-	Left         key.Binding
-	Right        key.Binding
-	Enter        key.Binding
-	Back         key.Binding
-	Tab          key.Binding
-	ShiftTab     key.Binding
-	New          key.Binding
-	Search       key.Binding
-	Comment      key.Binding
-	State        key.Binding
-	Assign       key.Binding
-	Clone        key.Binding
-	Refresh      key.Binding
-	Help         key.Binding
-	Quit         key.Binding
-	SubmitForm   key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	Left       key.Binding
+	Right      key.Binding
+	Enter      key.Binding
+	Back       key.Binding
+	Tab        key.Binding
+	ShiftTab   key.Binding
+	New        key.Binding
+	Search     key.Binding
+	Comment    key.Binding
+	State      key.Binding
+	Assign     key.Binding
+	Clone      key.Binding
+	Refresh    key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	SubmitForm key.Binding
 }
 
 // Keys returns a default KeyMap.

@@ -36,12 +36,12 @@ type formModel struct {
 	focusIndex formField
 
 	// Fields
-	projectInput   textinput.Model
-	summaryInput   textinput.Model
-	descTextArea   textarea.Model
-	typeInput      textinput.Model
-	priorityInput  textinput.Model
-	assigneeInput  textinput.Model
+	projectInput  textinput.Model
+	summaryInput  textinput.Model
+	descTextArea  textarea.Model
+	typeInput     textinput.Model
+	priorityInput textinput.Model
+	assigneeInput textinput.Model
 }
 
 func newFormModel(client *ytcli.Client) formModel {

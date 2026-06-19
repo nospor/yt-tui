@@ -339,13 +339,13 @@ func (m *detailModel) updateViewportContents() {
 			if c.Author != nil {
 				authorName = c.Author.DisplayName()
 			}
-			
-			header := fmt.Sprintf("%s (%s):", 
+
+			header := fmt.Sprintf("%s (%s):",
 				lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
 				StyleSubtext.Render(c.CreatedTime()),
 			)
 			bodyWrapped := lipgloss.NewStyle().Width(m.commentsViewport.Width).Render(c.Text)
-			
+
 			commentsStr.WriteString(header + "\n" + bodyWrapped)
 		}
 	}
@@ -368,7 +368,7 @@ func (m detailModel) View() string {
 	metaStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(ColorOverlay)).
-		Width(m.width - 4).
+		Width(m.width-4).
 		Padding(0, 1)
 
 	projectStr := "N/A"
@@ -421,14 +421,14 @@ func (m detailModel) View() string {
 		actionView = "\n" + lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width - 4).
+			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", m.textInput.View()))
 	case modeAssignInput:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username or 'me', Esc to cancel) ")
 		actionView = "\n" + lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width - 4).
+			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", m.textInput.View()))
 	case modeStateSelect:
 		var optsStr strings.Builder
@@ -446,7 +446,7 @@ func (m detailModel) View() string {
 		actionView = "\n" + lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width - 4).
+			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", optsStr.String()))
 	}
 

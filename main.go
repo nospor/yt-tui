@@ -10,7 +10,17 @@ import (
 	"github.com/charmbracelet/bubbletea"
 )
 
+var version = "dev"
+
 func main() {
+	// 0. Handle version flag
+	for _, arg := range os.Args[1:] {
+		if arg == "-v" || arg == "--version" || arg == "version" {
+			fmt.Printf("yt-tui version %s\n", version)
+			os.Exit(0)
+		}
+	}
+
 	// 1. Verify YouTrack CLI presence
 	if !hasYouTrackCLI() {
 		fmt.Fprintln(os.Stderr, "❌ YouTrack CLI ('yt') not found!")

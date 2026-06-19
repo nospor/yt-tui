@@ -41,14 +41,14 @@ type popStateMsg struct{}
 
 // AppModel is the root Bubble Tea model.
 type AppModel struct {
-	client       *ytcli.Client
-	state        State
-	stateData    string
-	history      []navEntry
-	width        int
-	height       int
-	status       string
-	isStatusErr  bool
+	client      *ytcli.Client
+	state       State
+	stateData   string
+	history     []navEntry
+	width       int
+	height      int
+	status      string
+	isStatusErr bool
 
 	// Sub-models
 	welcome   welcomeModel

@@ -319,7 +319,7 @@ func (m issuesModel) View() string {
 		searchBar = "\n" + lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width - 4).
+			Width(m.width-4).
 			Render(m.searchInput.View())
 	}
 
