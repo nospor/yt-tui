@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -237,10 +239,142 @@ func (c *Client) AddComment(id string, text string) error {
 
 // UpdateIssueState moves an issue to a new state.
 func (c *Client) UpdateIssueState(id string, state string) error {
-	stdout, stderr, err := c.runCommand("issues", "move", id, "--state", state)
+	// 1. Get credentials (base URL and token)
+	baseURL, token, err := c.GetCredentials()
 	if err != nil {
-		return formatError("failed to update issue state", stdout, stderr, err)
+		// Fallback to CLI command if credentials are not found
+		stdout, stderr, cliErr := c.runCommand("issues", "move", id, "--state", state)
+		if cliErr != nil {
+			return formatError("failed to update issue state (fallback)", stdout, stderr, cliErr)
+		}
+		return nil
 	}
+
+	// Ensure base URL starts with http/https and ends with a slash
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	// 2. Fetch the issue details directly via YouTrack REST API to discover the correct state field name and bundle type.
+	// This avoids invoking SearchIssues which can fail if we search by internal database ID (e.g. 2-147555).
+	apiURL := baseURL + "api/issues/" + id + "?fields=customFields(id,name,value($type,name),$type)"
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create http GET request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to fetch issue details: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to fetch issue details, status %s: %s", resp.Status, string(respBody))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read issue details response: %w", err)
+	}
+
+	var issueData struct {
+		CustomFields []struct {
+			ID    string      `json:"id"`
+			Name  string      `json:"name"`
+			Type  string      `json:"$type"`
+			Value interface{} `json:"value"`
+		} `json:"customFields"`
+	}
+
+	if err := json.Unmarshal(respBody, &issueData); err != nil {
+		return fmt.Errorf("failed to parse issue details JSON: %w", err)
+	}
+
+	stateFieldName := "State"
+	bundleType := "StateBundleElement" // Default fallback
+
+	for _, cf := range issueData.CustomFields {
+		isStateField := cf.Type == "StateIssueCustomField"
+		if !isStateField {
+			nameLower := strings.ToLower(cf.Name)
+			if nameLower == "state" || nameLower == "status" || nameLower == "stage" || nameLower == "workflow state" {
+				isStateField = true
+			}
+		}
+
+		if isStateField {
+			stateFieldName = cf.Name
+			if cf.Type == "StateIssueCustomField" {
+				bundleType = "StateBundleElement"
+			} else {
+				bundleType = "EnumBundleElement"
+			}
+			// If value is a map, try to extract its type
+			if valMap, ok := cf.Value.(map[string]interface{}); ok {
+				if t, ok := valMap["$type"].(string); ok && t != "" {
+					bundleType = t
+				}
+			}
+			break
+		}
+	}
+
+	// 3. Build HTTP request for state update
+	postURL := baseURL + "api/issues/" + id + "?fields=id"
+
+	payload := map[string]interface{}{
+		"$type": "Issue",
+		"customFields": []map[string]interface{}{
+			{
+				"$type": "SingleEnumIssueCustomField",
+				"name":  stateFieldName,
+				"value": map[string]interface{}{
+					"$type": bundleType,
+					"name":  state,
+				},
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state update payload: %w", err)
+	}
+
+	postReq, err := http.NewRequest("POST", postURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create http POST request: %w", err)
+	}
+
+	postReq.Header.Set("Authorization", "Bearer "+token)
+	postReq.Header.Set("Content-Type", "application/json")
+	postReq.Header.Set("Accept", "application/json")
+
+	postResp, err := client.Do(postReq)
+	if err != nil {
+		return fmt.Errorf("failed to send http POST request: %w", err)
+	}
+	defer postResp.Body.Close()
+
+	// 4. Handle response
+	if postResp.StatusCode != http.StatusOK && postResp.StatusCode != http.StatusNoContent {
+		respBody, _ = io.ReadAll(postResp.Body)
+		var apiErr struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.ErrorDescription != "" {
+			return fmt.Errorf("API error: %s (%s)", apiErr.ErrorDescription, apiErr.Error)
+		}
+		return fmt.Errorf("API returned status %s: %s", postResp.Status, string(respBody))
+	}
+
 	return nil
 }
 
@@ -327,6 +461,47 @@ func (c *Client) GetConfiguredBaseURL() string {
 		}
 	}
 	return ""
+}
+
+// GetCredentials retrieves the configured YouTrack base URL and token.
+func (c *Client) GetCredentials() (string, string, error) {
+	baseURL := os.Getenv("YOUTRACK_BASE_URL")
+	token := os.Getenv("YOUTRACK_TOKEN")
+
+	if baseURL != "" && token != "" {
+		return baseURL, token, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	configPath := filepath.Join(home, ".config", "youtrack-cli", ".env")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if baseURL != "" {
+			return baseURL, "", nil
+		}
+		return "", "", fmt.Errorf("failed to read .env file: %w", err)
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "YOUTRACK_BASE_URL=") {
+			val := strings.TrimPrefix(line, "YOUTRACK_BASE_URL=")
+			baseURL = strings.Trim(val, "'\"")
+		} else if strings.HasPrefix(line, "YOUTRACK_TOKEN=") {
+			val := strings.TrimPrefix(line, "YOUTRACK_TOKEN=")
+			token = strings.Trim(val, "'\"")
+		}
+	}
+
+	if baseURL == "" || token == "" {
+		return "", "", errors.New("missing YOUTRACK_BASE_URL or YOUTRACK_TOKEN in config")
+	}
+
+	return baseURL, token, nil
 }
 
 // SaveCredentials clears any existing keyring credentials and writes the plaintext config.

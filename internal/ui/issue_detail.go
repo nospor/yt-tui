@@ -42,7 +42,7 @@ type detailModel struct {
 	stateCursor  int
 }
 
-func newDetailModel(client *ytcli.Client) detailModel {
+func newDetailModel(client *ytcli.Client, states []string) detailModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
@@ -56,7 +56,7 @@ func newDetailModel(client *ytcli.Client) detailModel {
 		loading:          true,
 		mode:             modeNormal,
 		textInput:        ti,
-		stateOptions:     []string{"Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"},
+		stateOptions:     states,
 		descViewport:     viewport.New(0, 0),
 		commentsViewport: viewport.New(0, 0),
 	}

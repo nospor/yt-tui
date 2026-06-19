@@ -71,7 +71,7 @@ func NewAppModel() AppModel {
 		dashboard: newDashboardModel(client),
 		projects:  newProjectsModel(client),
 		issues:    newIssuesModel(client, cfg.PageSize, cfg.MaxIssues, cfg.Fields),
-		detail:    newDetailModel(client),
+		detail:    newDetailModel(client, cfg.CustomStates),
 		form:      newFormModel(client, cfg),
 	}
 }

@@ -13,6 +13,7 @@ type Config struct {
 	Fields           []string `json:"fields"`
 	CustomTypes      []string `json:"custom_types"`
 	CustomPriorities []string `json:"custom_priorities"`
+	CustomStates     []string `json:"custom_states"`
 }
 
 const (
@@ -24,6 +25,7 @@ var (
 	DefaultFields     = []string{"ID", "Summary", "State", "Priority", "Assignee"}
 	DefaultTypes      = []string{"Bug", "Feature", "Task", "Epic", "Improvement", "Support"}
 	DefaultPriorities = []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"}
+	DefaultStates     = []string{"Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"}
 )
 
 // LoadConfig loads config from ~/.config/yt-tui/config.json.
@@ -37,6 +39,7 @@ func LoadConfig() (*Config, error) {
 			Fields:           DefaultFields,
 			CustomTypes:      DefaultTypes,
 			CustomPriorities: DefaultPriorities,
+			CustomStates:     DefaultStates,
 		}, err
 	}
 
@@ -51,6 +54,7 @@ func LoadConfig() (*Config, error) {
 			Fields:           DefaultFields,
 			CustomTypes:      DefaultTypes,
 			CustomPriorities: DefaultPriorities,
+			CustomStates:     DefaultStates,
 		}, err
 	}
 
@@ -61,6 +65,7 @@ func LoadConfig() (*Config, error) {
 		Fields:           DefaultFields,
 		CustomTypes:      DefaultTypes,
 		CustomPriorities: DefaultPriorities,
+		CustomStates:     DefaultStates,
 	}
 
 	// Check if file exists
@@ -88,7 +93,7 @@ func LoadConfig() (*Config, error) {
 		return cfg, err
 	}
 
-	// If page_size, max_issues, fields, custom_types, or custom_priorities is not set or invalid, set to default and write back
+	// If page_size, max_issues, fields, custom_types, custom_priorities, or custom_states is not set or invalid, set to default and write back
 	needsWrite := false
 	if fileCfg.PageSize <= 0 {
 		fileCfg.PageSize = DefaultPageSize
@@ -108,6 +113,10 @@ func LoadConfig() (*Config, error) {
 	}
 	if len(fileCfg.CustomPriorities) == 0 {
 		fileCfg.CustomPriorities = DefaultPriorities
+		needsWrite = true
+	}
+	if len(fileCfg.CustomStates) == 0 {
+		fileCfg.CustomStates = DefaultStates
 		needsWrite = true
 	}
 

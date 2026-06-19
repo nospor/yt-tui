@@ -73,7 +73,8 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
   "max_issues": 500,
   "fields": ["ID", "Summary", "State", "Priority", "Assignee"],
   "custom_types": ["Bug", "Task", "Ops", "Initiative", "Epic"],
-  "custom_priorities": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"]
+  "custom_priorities": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"],
+  "custom_states": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"]
 }
 ```
 
@@ -86,6 +87,7 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 | `fields` | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names. |
 | `custom_types` | Array of Strings | `[]` (empty) | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.). |
 | `custom_priorities` | Array of Strings | `[]` (empty) | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.). |
+| `custom_states` | Array of Strings | `[]` (empty) | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.). |
 
 ---
 
