@@ -9,7 +9,7 @@ import (
 
 func TestIssuesModel_MaxIssuesLimit(t *testing.T) {
 	// Initialize with pageSize = 2 and maxIssues = 4
-	m := newIssuesModel(nil, 2, 4)
+	m := newIssuesModel(nil, 2, 4, nil)
 	m.projectCode = "TEST"
 	m.loading = true
 

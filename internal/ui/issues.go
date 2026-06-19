@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -18,38 +19,94 @@ type projectCache struct {
 	loadedAll bool
 }
 
-type issuesModel struct {
-	client      *ytcli.Client
-	projectCode string // empty if general search
-	issues      []ytcli.Issue
-	table       table.Model
-	searchInput textinput.Model
-	searchMode  bool
-	loading     bool
-	err         error
-	spinner     spinner.Model
-	width       int
-	height      int
-	skip        int
-	pageSize    int
-	maxIssues   int
-	loadedAll   bool
-	cache       map[string]projectCache
+type issueField struct {
+	title string
+	width int
+	value func(ytcli.Issue) string
 }
 
-func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int) issuesModel {
+type issuesModel struct {
+	client          *ytcli.Client
+	projectCode     string // empty if general search
+	issues          []ytcli.Issue
+	table           table.Model
+	searchInput     textinput.Model
+	searchMode      bool
+	loading         bool
+	err             error
+	spinner         spinner.Model
+	width           int
+	height          int
+	skip            int
+	pageSize        int
+	maxIssues       int
+	loadedAll       bool
+	cache           map[string]projectCache
+	fields          []issueField
+	visibleIssueIDs []string
+}
+
+func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int, fieldNames []string) issuesModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
 
+	if len(fieldNames) == 0 {
+		fieldNames = config.DefaultFields
+	}
+
+	var fields []issueField
+	var columns []table.Column
+
+	for _, name := range fieldNames {
+		title := name
+		width := 15
+		var valueFn func(ytcli.Issue) string
+
+		switch strings.ToLower(name) {
+		case "id":
+			title = "ID"
+			width = 12
+			valueFn = func(i ytcli.Issue) string { return i.IDReadable }
+		case "summary":
+			title = "Summary"
+			width = 55
+			valueFn = func(i ytcli.Issue) string { return i.Summary }
+		case "state":
+			title = "State"
+			width = 15
+			valueFn = func(i ytcli.Issue) string { return i.State() }
+		case "priority":
+			title = "Priority"
+			width = 12
+			valueFn = func(i ytcli.Issue) string { return i.Priority() }
+		case "assignee":
+			title = "Assignee"
+			width = 20
+			valueFn = func(i ytcli.Issue) string { return i.Assignee() }
+		case "type":
+			title = "Type"
+			width = 12
+			valueFn = func(i ytcli.Issue) string { return i.Type() }
+		default:
+			// Custom field
+			valueFn = func(i ytcli.Issue) string { return i.ExtractStringField(name) }
+		}
+
+		fields = append(fields, issueField{
+			title: title,
+			width: width,
+			value: valueFn,
+		})
+
+		columns = append(columns, table.Column{
+			Title: title,
+			Width: width,
+		})
+	}
+
 	t := table.New(
-		table.WithColumns([]table.Column{
-			{Title: "ID", Width: 12},
-			{Title: "Summary", Width: 55},
-			{Title: "State", Width: 15},
-			{Title: "Priority", Width: 12},
-			{Title: "Assignee", Width: 20},
-		}),
+		table.WithColumns(columns),
 		table.WithFocused(true),
 	)
 
@@ -80,6 +137,7 @@ func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int) issuesMod
 		maxIssues:   maxIssues,
 		skip:        0,
 		cache:       make(map[string]projectCache),
+		fields:      fields,
 	}
 }
 
@@ -111,19 +169,20 @@ func (m issuesModel) loadIssuesCmd() tea.Cmd {
 
 func (m *issuesModel) updateTableRows() {
 	rows := []table.Row{}
+	m.visibleIssueIDs = []string{}
 	filterPhrase := strings.ToLower(m.searchInput.Value())
 
 	for _, issue := range m.issues {
 		if filterPhrase == "" ||
 			strings.Contains(strings.ToLower(issue.Summary), filterPhrase) ||
 			strings.Contains(strings.ToLower(issue.IDReadable), filterPhrase) {
-			rows = append(rows, table.Row{
-				issue.IDReadable,
-				issue.Summary,
-				issue.State(),
-				issue.Priority(),
-				issue.Assignee(),
-			})
+			
+			row := table.Row{}
+			for _, f := range m.fields {
+				row = append(row, f.value(issue))
+			}
+			rows = append(rows, row)
+			m.visibleIssueIDs = append(m.visibleIssueIDs, issue.IDReadable)
 		}
 	}
 	m.table.SetRows(rows)
@@ -252,10 +311,12 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			return m, nil
 		case "enter":
 			if len(m.table.Rows()) > 0 {
-				selected := m.table.SelectedRow()
-				issueKey := selected[0]
-				return m, func() tea.Msg {
-					return pushStateMsg{state: stateDetail, data: issueKey}
+				cursor := m.table.Cursor()
+				if cursor >= 0 && cursor < len(m.visibleIssueIDs) {
+					issueKey := m.visibleIssueIDs[cursor]
+					return m, func() tea.Msg {
+						return pushStateMsg{state: stateDetail, data: issueKey}
+					}
 				}
 			}
 		case "n":
