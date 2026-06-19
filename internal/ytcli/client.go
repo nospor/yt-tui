@@ -228,27 +228,27 @@ func (c *Client) AddComment(id string, text string) error {
 	if text == "" {
 		return errors.New("comment text cannot be empty")
 	}
-	_, stderr, err := c.runCommand("issues", "comments", "add", id, text)
+	stdout, stderr, err := c.runCommand("issues", "comments", "add", id, text)
 	if err != nil {
-		return fmt.Errorf("failed to add comment: %s (%v)", string(stderr), err)
+		return formatError("failed to add comment", stdout, stderr, err)
 	}
 	return nil
 }
 
 // UpdateIssueState moves an issue to a new state.
 func (c *Client) UpdateIssueState(id string, state string) error {
-	_, stderr, err := c.runCommand("issues", "move", id, "--state", state)
+	stdout, stderr, err := c.runCommand("issues", "move", id, "--state", state)
 	if err != nil {
-		return fmt.Errorf("failed to update issue state: %s (%v)", string(stderr), err)
+		return formatError("failed to update issue state", stdout, stderr, err)
 	}
 	return nil
 }
 
 // AssignIssue assigns an issue to a user.
 func (c *Client) AssignIssue(id string, assignee string) error {
-	_, stderr, err := c.runCommand("issues", "assign", id, assignee)
+	stdout, stderr, err := c.runCommand("issues", "assign", id, assignee)
 	if err != nil {
-		return fmt.Errorf("failed to assign issue: %s (%v)", string(stderr), err)
+		return formatError("failed to assign issue", stdout, stderr, err)
 	}
 	return nil
 }
@@ -260,10 +260,10 @@ func (c *Client) CreateIssue(projectID, summary, description, priority, issueTyp
 		args = append(args, "--description", description)
 	}
 	if priority != "" {
-		args = append(args, "--priority", priority)
+		args = append(args, "--custom-field", fmt.Sprintf("Priority=%s", priority))
 	}
 	if issueType != "" {
-		args = append(args, "--type", issueType)
+		args = append(args, "--custom-field", fmt.Sprintf("Type=%s", issueType))
 	}
 	if assignee != "" {
 		args = append(args, "--assignee", assignee)
@@ -271,7 +271,7 @@ func (c *Client) CreateIssue(projectID, summary, description, priority, issueTyp
 
 	stdout, stderr, err := c.runCommand(args...)
 	if err != nil {
-		return "", fmt.Errorf("failed to create issue: %s (%v)", string(stderr), err)
+		return "", formatError("failed to create issue", stdout, stderr, err)
 	}
 
 	// Output is typically something like "Created issue ID-123"
@@ -283,7 +283,7 @@ func (c *Client) CreateIssue(projectID, summary, description, priority, issueTyp
 func (c *Client) ListComments(id string) ([]Comment, error) {
 	stdout, stderr, err := c.runCommand("issues", "comments", "list", id, "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to list comments: %s (%v)", string(stderr), err)
+		return nil, formatError("failed to list comments", stdout, stderr, err)
 	}
 
 	var comments []Comment
@@ -297,7 +297,7 @@ func (c *Client) ListComments(id string) ([]Comment, error) {
 func (c *Client) ListUsers() ([]User, error) {
 	stdout, stderr, err := c.runCommand("users", "list", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to list users: %s (%v)", string(stderr), err)
+		return nil, formatError("failed to list users", stdout, stderr, err)
 	}
 
 	var users []User

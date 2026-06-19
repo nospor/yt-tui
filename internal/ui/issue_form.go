@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -24,11 +25,9 @@ const (
 	numFields // total count
 )
 
-var typeOptions = []string{"Bug", "Feature", "Task", "Epic", "Improvement", "Support"}
-var priorityOptions = []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"}
-
 type formModel struct {
 	client     *ytcli.Client
+	cfg        *config.Config
 	loading    bool
 	isClone    bool
 	cloneKey   string
@@ -55,7 +54,7 @@ type formModel struct {
 	customPriorities    []string
 }
 
-func newFormModel(client *ytcli.Client) formModel {
+func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
@@ -72,13 +71,14 @@ func newFormModel(client *ytcli.Client) formModel {
 
 	return formModel{
 		client:        client,
+		cfg:           cfg,
 		spinner:       s,
 		focusIndex:    fieldProject,
 		summaryInput:  sum,
 		descTextArea:  desc,
 		assigneeInput: a,
-		typeIndex:     2, // Default to "Task"
-		priorityIndex: 1, // Default to "Normal"
+		typeIndex:     0, // Default to "(Default)"
+		priorityIndex: 0, // Default to "(Default)"
 	}
 }
 
@@ -122,58 +122,56 @@ func (m *formModel) setProjectByCode(code string) {
 
 func (m *formModel) setTypeByValue(val string) {
 	if val == "" {
-		m.typeIndex = 2 // Task
+		m.typeIndex = 0 // (Default)
 		return
 	}
-	for i, t := range typeOptions {
+	opts := m.getTypes()
+	for i, t := range opts {
 		if strings.EqualFold(t, val) {
 			m.typeIndex = i
 			return
 		}
 	}
-	// Check if already in customTypes
-	for i, t := range m.customTypes {
-		if strings.EqualFold(t, val) {
-			m.typeIndex = len(typeOptions) + i
-			return
-		}
-	}
 	m.customTypes = append(m.customTypes, val)
-	m.typeIndex = len(typeOptions) + len(m.customTypes) - 1
+	m.typeIndex = len(opts)
 }
 
 func (m *formModel) setPriorityByValue(val string) {
 	if val == "" {
-		m.priorityIndex = 1 // Normal
+		m.priorityIndex = 0 // (Default)
 		return
 	}
-	for i, p := range priorityOptions {
+	opts := m.getPriorities()
+	for i, p := range opts {
 		if strings.EqualFold(p, val) {
 			m.priorityIndex = i
 			return
 		}
 	}
-	// Check if already in customPriorities
-	for i, p := range m.customPriorities {
-		if strings.EqualFold(p, val) {
-			m.priorityIndex = len(priorityOptions) + i
-			return
-		}
-	}
 	m.customPriorities = append(m.customPriorities, val)
-	m.priorityIndex = len(priorityOptions) + len(m.customPriorities) - 1
+	m.priorityIndex = len(opts)
 }
 
 func (m formModel) getTypes() []string {
-	opts := make([]string, len(typeOptions))
-	copy(opts, typeOptions)
+	var opts []string
+	opts = append(opts, "(Default)")
+	if m.cfg != nil && len(m.cfg.CustomTypes) > 0 {
+		opts = append(opts, m.cfg.CustomTypes...)
+	} else {
+		opts = append(opts, "Bug", "Feature", "Task", "Epic", "Improvement", "Support")
+	}
 	opts = append(opts, m.customTypes...)
 	return opts
 }
 
 func (m formModel) getPriorities() []string {
-	opts := make([]string, len(priorityOptions))
-	copy(opts, priorityOptions)
+	var opts []string
+	opts = append(opts, "(Default)")
+	if m.cfg != nil && len(m.cfg.CustomPriorities) > 0 {
+		opts = append(opts, m.cfg.CustomPriorities...)
+	} else {
+		opts = append(opts, "Minor", "Normal", "Major", "Critical", "Show-stopper")
+	}
 	opts = append(opts, m.customPriorities...)
 	return opts
 }
@@ -188,8 +186,8 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 	m.assigneeInput.SetValue("")
 	m.projects = nil
 	m.projectIndex = 0
-	m.typeIndex = 2
-	m.priorityIndex = 1
+	m.typeIndex = 0
+	m.priorityIndex = 0
 	m.customTypes = nil
 	m.customPriorities = nil
 
@@ -301,12 +299,18 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				types := m.getTypes()
 				if len(types) > 0 {
 					issueType = types[m.typeIndex]
+					if issueType == "(Default)" {
+						issueType = ""
+					}
 				}
 
 				var priority string
 				priorities := m.getPriorities()
 				if len(priorities) > 0 {
 					priority = priorities[m.priorityIndex]
+					if priority == "(Default)" {
+						priority = ""
+					}
 				}
 
 				m.loading = true
@@ -419,18 +423,18 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 					return m, nil
 				}
 			}
-		}
 
-		// Forward keys to the currently focused input
-		switch m.focusIndex {
-		case fieldSummary:
-			m.summaryInput, cmd = m.summaryInput.Update(msg)
-		case fieldDescription:
-			m.descTextArea, cmd = m.descTextArea.Update(msg)
-		case fieldAssignee:
-			m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+			// Forward keys to the currently focused input
+			switch m.focusIndex {
+			case fieldSummary:
+				m.summaryInput, cmd = m.summaryInput.Update(msg)
+			case fieldDescription:
+				m.descTextArea, cmd = m.descTextArea.Update(msg)
+			case fieldAssignee:
+				m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+			}
+			return m, cmd
 		}
-		return m, cmd
 	}
 	return m, nil
 }
@@ -514,23 +518,21 @@ func (m formModel) View() string {
 		projectVal = "◀  None  ▶   (Loading projects...)"
 	}
 
-	var currentType string
+	var typeVal string
 	types := m.getTypes()
 	if len(types) > 0 {
-		currentType = types[m.typeIndex]
+		typeVal = fmt.Sprintf("◀  %s  ▶", types[m.typeIndex])
 	} else {
-		currentType = "Task"
+		typeVal = "◀  None  ▶"
 	}
-	typeVal := fmt.Sprintf("◀  %s  ▶", currentType)
 
-	var currentPriority string
+	var priorityVal string
 	priorities := m.getPriorities()
 	if len(priorities) > 0 {
-		currentPriority = priorities[m.priorityIndex]
+		priorityVal = fmt.Sprintf("◀  %s  ▶", priorities[m.priorityIndex])
 	} else {
-		currentPriority = "Normal"
+		priorityVal = "◀  None  ▶"
 	}
-	priorityVal := fmt.Sprintf("◀  %s  ▶", currentPriority)
 
 	// Horizontal options helper lists when dropdown is focused
 	var projectOptsList string

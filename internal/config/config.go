@@ -8,9 +8,11 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	PageSize  int      `json:"page_size"`
-	MaxIssues int      `json:"max_issues"`
-	Fields    []string `json:"fields"`
+	PageSize         int      `json:"page_size"`
+	MaxIssues        int      `json:"max_issues"`
+	Fields           []string `json:"fields"`
+	CustomTypes      []string `json:"custom_types"`
+	CustomPriorities []string `json:"custom_priorities"`
 }
 
 const (
@@ -18,14 +20,24 @@ const (
 	DefaultMaxIssues = 500
 )
 
-var DefaultFields = []string{"ID", "Summary", "State", "Priority", "Assignee"}
+var (
+	DefaultFields     = []string{"ID", "Summary", "State", "Priority", "Assignee"}
+	DefaultTypes      = []string{"Bug", "Feature", "Task", "Epic", "Improvement", "Support"}
+	DefaultPriorities = []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"}
+)
 
 // LoadConfig loads config from ~/.config/yt-tui/config.json.
 // If the file or parent directory doesn't exist, it creates them with default values.
 func LoadConfig() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return &Config{PageSize: DefaultPageSize, MaxIssues: DefaultMaxIssues, Fields: DefaultFields}, err
+		return &Config{
+			PageSize:         DefaultPageSize,
+			MaxIssues:        DefaultMaxIssues,
+			Fields:           DefaultFields,
+			CustomTypes:      DefaultTypes,
+			CustomPriorities: DefaultPriorities,
+		}, err
 	}
 
 	configDir := filepath.Join(home, ".config", "yt-tui")
@@ -33,14 +45,22 @@ func LoadConfig() (*Config, error) {
 
 	// Ensure the directory exists
 	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return &Config{PageSize: DefaultPageSize, MaxIssues: DefaultMaxIssues, Fields: DefaultFields}, err
+		return &Config{
+			PageSize:         DefaultPageSize,
+			MaxIssues:        DefaultMaxIssues,
+			Fields:           DefaultFields,
+			CustomTypes:      DefaultTypes,
+			CustomPriorities: DefaultPriorities,
+		}, err
 	}
 
 	// Default config
 	cfg := &Config{
-		PageSize:  DefaultPageSize,
-		MaxIssues: DefaultMaxIssues,
-		Fields:    DefaultFields,
+		PageSize:         DefaultPageSize,
+		MaxIssues:        DefaultMaxIssues,
+		Fields:           DefaultFields,
+		CustomTypes:      DefaultTypes,
+		CustomPriorities: DefaultPriorities,
 	}
 
 	// Check if file exists
@@ -68,7 +88,7 @@ func LoadConfig() (*Config, error) {
 		return cfg, err
 	}
 
-	// If page_size, max_issues, or fields is not set or invalid, set it to default and write it back
+	// If page_size, max_issues, fields, custom_types, or custom_priorities is not set or invalid, set to default and write back
 	needsWrite := false
 	if fileCfg.PageSize <= 0 {
 		fileCfg.PageSize = DefaultPageSize
@@ -80,6 +100,14 @@ func LoadConfig() (*Config, error) {
 	}
 	if len(fileCfg.Fields) == 0 {
 		fileCfg.Fields = DefaultFields
+		needsWrite = true
+	}
+	if len(fileCfg.CustomTypes) == 0 {
+		fileCfg.CustomTypes = DefaultTypes
+		needsWrite = true
+	}
+	if len(fileCfg.CustomPriorities) == 0 {
+		fileCfg.CustomPriorities = DefaultPriorities
 		needsWrite = true
 	}
 

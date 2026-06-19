@@ -71,7 +71,9 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 {
   "page_size": 20,
   "max_issues": 500,
-  "fields": ["ID", "Summary", "State", "Priority", "Assignee"]
+  "fields": ["ID", "Summary", "State", "Priority", "Assignee"],
+  "custom_types": ["Bug", "Task", "Ops", "Initiative", "Epic"],
+  "custom_priorities": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"]
 }
 ```
 
@@ -82,6 +84,8 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 | `page_size` | Integer | `20` | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments. |
 | `max_issues` | Integer | `500` | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
 | `fields` | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names. |
+| `custom_types` | Array of Strings | `[]` (empty) | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.). |
+| `custom_priorities` | Array of Strings | `[]` (empty) | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.). |
 
 ---
 

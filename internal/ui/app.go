@@ -72,7 +72,7 @@ func NewAppModel() AppModel {
 		projects:  newProjectsModel(client),
 		issues:    newIssuesModel(client, cfg.PageSize, cfg.MaxIssues, cfg.Fields),
 		detail:    newDetailModel(client),
-		form:      newFormModel(client),
+		form:      newFormModel(client, cfg),
 	}
 }
 
