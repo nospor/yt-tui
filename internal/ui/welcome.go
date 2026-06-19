@@ -1,42 +1,65 @@
 package ui
 
 import (
-	"os/exec"
+	"fmt"
+	"strings"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type welcomeModel struct {
-	client    *ytcli.Client
-	spinner   spinner.Model
-	checking  bool
-	loggedIn  bool
-	err       error
-	width     int
-	height    int
+	client     *ytcli.Client
+	spinner    spinner.Model
+	checking   bool
+	loggedIn   bool
+	err        error
+	width      int
+	height     int
+	urlInput   textinput.Model
+	tokenInput textinput.Model
+	focusIndex int
 }
 
 func newWelcomeModel(client *ytcli.Client) welcomeModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
+
+	url := textinput.New()
+	url.Placeholder = "YouTrack Base URL (e.g., https://company.youtrack.cloud)"
+	url.Width = 45
+
+	prevURL := client.GetConfiguredBaseURL()
+	if prevURL != "" {
+		url.SetValue(prevURL)
+	} else {
+		url.SetValue("https://youtrack.adwanted.com/")
+	}
+	url.Focus()
+
+	token := textinput.New()
+	token.Placeholder = "Permanent API Token (hidden)"
+	token.Width = 45
+	token.EchoMode = textinput.EchoPassword
+	token.EchoCharacter = '•'
+
 	return welcomeModel{
-		client:   client,
-		spinner:  s,
-		checking: true,
+		client:     client,
+		spinner:    s,
+		checking:   true,
+		urlInput:   url,
+		tokenInput: token,
+		focusIndex: 0,
 	}
 }
 
 type authCheckMsg struct {
 	authenticated bool
 	err           error
-}
-
-type loginFinishedMsg struct {
-	err error
 }
 
 func (m welcomeModel) checkAuthCmd() tea.Cmd {
@@ -65,33 +88,75 @@ func (m welcomeModel) Update(msg tea.Msg) (welcomeModel, tea.Cmd) {
 		}
 		m.loggedIn = msg.authenticated
 		if m.loggedIn {
-			// If logged in, automatically proceed to dashboard
 			return m, func() tea.Msg {
 				return switchStateMsg{state: stateDashboard}
 			}
 		}
 		return m, nil
 
-	case loginFinishedMsg:
-		m.checking = true
-		m.err = nil
-		// Recheck auth after login finished
-		return m, m.checkAuthCmd()
-
 	case tea.KeyMsg:
+		if m.err != nil {
+			if msg.String() == "q" || msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			m.err = nil
+			return m, nil
+		}
+
 		if !m.checking && !m.loggedIn {
 			switch msg.String() {
+			case "tab", "down":
+				m.focusIndex = (m.focusIndex + 1) % 2
+				if m.focusIndex == 0 {
+					m.tokenInput.Blur()
+					m.urlInput.Focus()
+				} else {
+					m.urlInput.Blur()
+					m.tokenInput.Focus()
+				}
+				return m, nil
+
+			case "shift+tab", "up":
+				m.focusIndex = (m.focusIndex - 1 + 2) % 2
+				if m.focusIndex == 0 {
+					m.tokenInput.Blur()
+					m.urlInput.Focus()
+				} else {
+					m.urlInput.Blur()
+					m.tokenInput.Focus()
+				}
+				return m, nil
+
 			case "enter":
-				// Suspend TUI and run yt auth login
-				// Find binary path from client
-				binPath := m.client.GetBinaryPath()
-				c := exec.Command(binPath, "auth", "login")
-				return m, tea.ExecProcess(c, func(err error) tea.Msg {
-					return loginFinishedMsg{err: err}
-				})
+				baseURL := strings.TrimSpace(m.urlInput.Value())
+				token := strings.TrimSpace(m.tokenInput.Value())
+				if baseURL == "" || token == "" {
+					m.err = fmt.Errorf("both Base URL and Token are required")
+					return m, nil
+				}
+
+				m.checking = true
+				m.err = nil
+				return m, func() tea.Msg {
+					err := m.client.SaveCredentials(baseURL, token)
+					if err != nil {
+						return authCheckMsg{authenticated: false, err: err}
+					}
+					auth, err := m.client.CheckAuth()
+					return authCheckMsg{authenticated: auth, err: err}
+				}
+
 			case "q", "ctrl+c":
 				return m, tea.Quit
 			}
+
+			// Forward keys to active input
+			if m.focusIndex == 0 {
+				m.urlInput, cmd = m.urlInput.Update(msg)
+			} else {
+				m.tokenInput, cmd = m.tokenInput.Update(msg)
+			}
+			return m, cmd
 		}
 	}
 	return m, nil
@@ -103,38 +168,70 @@ func (m welcomeModel) View() string {
 	if m.checking {
 		body = lipgloss.JoinHorizontal(lipgloss.Center,
 			m.spinner.View(),
-			" Checking YouTrack authentication status...",
+			" Checking YouTrack credentials...",
 		)
 	} else if m.err != nil {
 		body = lipgloss.JoinVertical(lipgloss.Left,
 			StyleErrorMessage.Render("Error checking connection:"),
 			m.err.Error(),
 			"",
-			StyleSubtext.Render("Press Enter to retry or q to quit."),
+			StyleSubtext.Render("Press any key to retry or q to quit."),
 		)
 	} else if !m.loggedIn {
-		body = lipgloss.JoinVertical(lipgloss.Center,
-			StyleTitle.Render("Welcome to YouTrack TUI"),
-			"",
-			"No authentication credentials found.",
-			"You must log in to your YouTrack instance.",
-			"",
-			StyleSelected.Render("  Press [Enter] to login with YouTrack CLI  "),
-			"",
-			StyleHelp.Render("This will guide you through entering your YouTrack URL and token."),
-			StyleHelp.Render("Press q to exit."),
-		)
+		var builder strings.Builder
+		builder.WriteString(StyleTitle.Render(" Welcome to YouTrack TUI ") + "\n\n")
+		builder.WriteString("Please configure your YouTrack API connection:\n\n")
+
+		// URL input
+		urlLabel := fmt.Sprintf("%-12s", "Base URL:")
+		urlView := m.urlInput.View()
+		if m.focusIndex == 0 {
+			urlView = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color(ColorViolet)).
+				Render(urlView)
+		} else {
+			urlView = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color(ColorOverlay)).
+				Render(urlView)
+		}
+		builder.WriteString(fmt.Sprintf("%s %s\n\n", urlLabel, urlView))
+
+		// Token input
+		tokenLabel := fmt.Sprintf("%-12s", "API Token:")
+		tokenView := m.tokenInput.View()
+		if m.focusIndex == 1 {
+			tokenView = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color(ColorViolet)).
+				Render(tokenView)
+		} else {
+			tokenView = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color(ColorOverlay)).
+				Render(tokenView)
+		}
+		builder.WriteString(fmt.Sprintf("%s %s\n\n", tokenLabel, tokenView))
+
+		builder.WriteString(StyleHelp.Render(" [Tab] Switch Fields  [Enter] Save & Login  [q] Quit "))
+		body = builder.String()
 	} else {
 		body = "Authenticated! Loading dashboard..."
 	}
 
 	// Center the welcome box in the screen
+	boxHeight := 14
+	if !m.checking && !m.loggedIn {
+		boxHeight = 16
+	}
+
 	box := lipgloss.NewStyle().
 		Border(lipgloss.DoubleBorder()).
 		BorderForeground(lipgloss.Color(ColorViolet)).
 		Padding(2, 4).
-		Width(60).
-		Height(12).
+		Width(70).
+		Height(boxHeight).
 		Align(lipgloss.Center, lipgloss.Center).
 		Render(body)
 

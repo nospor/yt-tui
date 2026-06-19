@@ -44,8 +44,7 @@ func (c *Client) GetBinaryPath() string {
 
 // runCommand runs a yt subcommand and returns stdout, stderr, and error.
 func (c *Client) runCommand(args ...string) ([]byte, []byte, error) {
-	fullArgs := append([]string{"-q"}, args...)
-	cmd := exec.Command(c.ytPath, fullArgs...)
+	cmd := exec.Command(c.ytPath, args...)
 	cmd.Env = append(os.Environ(), "COLUMNS=999999")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -56,22 +55,51 @@ func (c *Client) runCommand(args ...string) ([]byte, []byte, error) {
 
 // CheckAuth check YouTrack CLI auth status.
 func (c *Client) CheckAuth() (bool, error) {
-	_, stderr, err := c.runCommand("auth", "status")
+	stdout, stderr, err := c.runCommand("auth", "status")
 	if err != nil {
 		return false, nil
 	}
+	outStr := string(stdout)
+	errStr := string(stderr)
+
+	// If keyring decryption failed, or if we have encrypted values leaked in output
+	if strings.Contains(errStr, "Failed to decrypt") || strings.Contains(outStr, "Failed to decrypt") {
+		return false, nil
+	}
+	if strings.Contains(outStr, "gAAAAA") {
+		return false, nil
+	}
+
 	// If "No authentication credentials found" is printed, we are not logged in.
-	if strings.Contains(string(stderr), "No authentication") || strings.Contains(string(stderr), "Not authenticated") {
+	if strings.Contains(errStr, "No authentication") || strings.Contains(errStr, "Not authenticated") ||
+		strings.Contains(outStr, "No authentication") || strings.Contains(outStr, "Not authenticated") {
 		return false, nil
 	}
 	return true, nil
+}
+
+// formatError merges stdout and stderr messages for detailed error reporting.
+func formatError(prefix string, stdout, stderr []byte, err error) error {
+	outStr := strings.TrimSpace(string(stdout))
+	errStr := strings.TrimSpace(string(stderr))
+	var details []string
+	if outStr != "" {
+		details = append(details, outStr)
+	}
+	if errStr != "" {
+		details = append(details, errStr)
+	}
+	if len(details) == 0 {
+		return fmt.Errorf("%s: %w", prefix, err)
+	}
+	return fmt.Errorf("%s: %s (%w)", prefix, strings.Join(details, " | "), err)
 }
 
 // ListProjects lists YouTrack projects.
 func (c *Client) ListProjects() ([]Project, error) {
 	stdout, stderr, err := c.runCommand("projects", "list", "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to list projects: %s (%v)", string(stderr), err)
+		return nil, formatError("failed to list projects", stdout, stderr, err)
 	}
 
 	var projects []Project
@@ -83,17 +111,17 @@ func (c *Client) ListProjects() ([]Project, error) {
 
 // ListIssues gets issues for a specific project.
 func (c *Client) ListIssues(projectID string, query string) ([]Issue, error) {
-	args := []string{"issues", "list", "--format", "json", "--profile", "full"}
+	args := []string{"issues", "list", "--format", "json"}
 	if projectID != "" {
-		args = append(args, "-p", projectID)
+		args = append(args, "--project-id", projectID)
 	}
 	if query != "" {
-		args = append(args, "-q", query)
+		args = append(args, "--query", query)
 	}
 
 	stdout, stderr, err := c.runCommand(args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list issues: %s (%v)", string(stderr), err)
+		return nil, formatError("failed to list issues", stdout, stderr, err)
 	}
 
 	var issues []Issue
@@ -108,9 +136,9 @@ func (c *Client) SearchIssues(query string) ([]Issue, error) {
 	if query == "" {
 		return nil, errors.New("search query cannot be empty")
 	}
-	stdout, stderr, err := c.runCommand("issues", "search", query, "--format", "json", "--profile", "full")
+	stdout, stderr, err := c.runCommand("issues", "search", query, "--format", "json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to search issues: %s (%v)", string(stderr), err)
+		return nil, formatError("failed to search issues", stdout, stderr, err)
 	}
 
 	var issues []Issue
@@ -216,3 +244,56 @@ func (c *Client) ListUsers() ([]User, error) {
 	}
 	return users, nil
 }
+
+// GetConfiguredBaseURL reads the current base URL from config if it exists.
+func (c *Client) GetConfiguredBaseURL() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	configPath := filepath.Join(home, ".config", "youtrack-cli", ".env")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "YOUTRACK_BASE_URL=") {
+			val := strings.TrimPrefix(line, "YOUTRACK_BASE_URL=")
+			val = strings.Trim(val, "'\"")
+			return val
+		}
+	}
+	return ""
+}
+
+// SaveCredentials clears any existing keyring credentials and writes the plaintext config.
+func (c *Client) SaveCredentials(baseURL, token string) error {
+	// 1. Run yt auth logout first to clear keyring entries
+	// We run it with a 'y' stdin to confirm confirmation prompt
+	cmd := exec.Command(c.ytPath, "auth", "logout")
+	var stdin bytes.Buffer
+	stdin.WriteString("y\n")
+	cmd.Stdin = &stdin
+	_ = cmd.Run() // ignore error, as it might fail if not logged in
+
+	// 2. Resolve the config file path (~/.config/youtrack-cli/.env)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	configDir := filepath.Join(home, ".config", "youtrack-cli")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	configPath := filepath.Join(configDir, ".env")
+	content := fmt.Sprintf("YOUTRACK_BASE_URL='%s'\nYOUTRACK_TOKEN='%s'\nYOUTRACK_VERIFY_SSL='true'\n", baseURL, token)
+	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
