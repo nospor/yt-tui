@@ -1,4 +1,38 @@
 
+## [0.3.0] - 2026-06-20
+
+### Features
+
+- *(ui)* Support updating task details from detail view ([9f9cb9d](https://github.com/nospor/yt-tui/commit/9f9cb9d46a3d4968ab2f2dee0b03d28158b18f6f))
+- *(ui)* Add agile boards view with expandable sprints subtree and direct issue querying ([d50b2d3](https://github.com/nospor/yt-tui/commit/d50b2d3852df3c7f6be0a7d2b0ddfd24b7974e80))
+
+            - Implement full-screen Agile Boards view (navigated via 'b' from
+            dashboard)
+            - Add expandable subtree to load and display sprints under each agile
+            board
+            - Filter board sprints to show up to 5 previous and 5 next sprints
+            relative to the current week
+            - Fetch sprint issues directly using the YouTrack sprint API resource
+            (bypassing search text parsers for robust compatibility)
+- *(ui)* Add state and priority filtering to issues list view ([40d11fd](https://github.com/nospor/yt-tui/commit/40d11fd281e03e74166fca603548eecb33888101))
+
+            - Implement local issue filtering by State and Priority
+            - Add interactive checklist popup triggered by pressing 'f'
+            - Save filter selections in configuration file config.json for
+            persistence
+- *(ui)* Support column sorting on issues list with config persistence ([091dda7](https://github.com/nospor/yt-tui/commit/091dda72eb4af7e8401c8ed7badbd332ede5ef5a))
+
+            - Bind 's' key to open an interactive Sort popup modal
+            - Support sorting by ID (natural sort), Priority/State (severity order),
+            and other fields (alphabetic)
+            - Add sort_column and sort_direction configuration options to persist
+            preferences
+            - Display ▲/▼ direction indicator arrow next to the sorted column header
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.2.0 [skip ci] ([7ce7336](https://github.com/nospor/yt-tui/commit/7ce7336c39b006e0307077fb20b97781abab2a16))
+
 ## [0.2.0] - 2026-06-19
 
 ### Features
