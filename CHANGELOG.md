@@ -1,4 +1,14 @@
 
+## [0.3.1] - 2026-06-20
+
+### Documentation
+
+- *(readme)* Add installation instructions for pre-built release binaries ([8366968](https://github.com/nospor/yt-tui/commit/83669682238d12b172576b52b274e0259b94ed8b))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.3.0 [skip ci] ([546b7ef](https://github.com/nospor/yt-tui/commit/546b7ef52b70d8056fab927b9fcdd0fdf8f08e3c))
+
 ## [0.3.0] - 2026-06-20
 
 ### Features
