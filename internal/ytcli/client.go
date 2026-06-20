@@ -170,6 +170,109 @@ func (c *Client) ListProjects() ([]Project, error) {
 	return projects, nil
 }
 
+// ListAgiles lists YouTrack agile boards.
+func (c *Client) ListAgiles() ([]Agile, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/agiles?fields=id,name"
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var agiles []Agile
+	if err := json.Unmarshal(body, &agiles); err != nil {
+		return nil, err
+	}
+	return agiles, nil
+}
+
+// ListSprints lists sprints for a specific agile board.
+func (c *Client) ListSprints(agileID string) ([]Sprint, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + fmt.Sprintf("api/agiles/%s/sprints?fields=id,name,start,finish,archived", agileID)
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var sprints []Sprint
+	if err := json.Unmarshal(body, &sprints); err != nil {
+		return nil, err
+	}
+	return sprints, nil
+}
+
+// ListSprintIssues gets issues for a specific agile board and sprint.
+func (c *Client) ListSprintIssues(agileID string, sprintID string) ([]Issue, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	fields := "issues(id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)))"
+	apiURL := baseURL + fmt.Sprintf("api/agiles/%s/sprints/%s?fields=%s", agileID, sprintID, fields)
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var res struct {
+		Issues []Issue `json:"issues"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		return nil, err
+	}
+	return res.Issues, nil
+}
+
 // ListIssues gets issues with optional query, limit and skip pagination.
 func (c *Client) ListIssues(projectID string, query string, limit int, skip int) ([]Issue, error) {
 	if c.baseURL == "" || c.token == "" {

@@ -106,6 +106,7 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
   - Selecting a project opens the **Issues List** filtered to that project.
 * `n`: Create a new issue (pre-selects the highlighted project if focused).
 * `p`: View the full **Projects List** screen.
+* `b`: View the full **Agile Boards** screen.
 * `r`: Reload and refresh all dashboard data.
 * `q`: Exit application.
 
@@ -114,6 +115,12 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 * `Enter`: View issues inside the selected project.
 * `n`: Create a new issue in the selected project.
 * `r`: Refresh projects list.
+* `Esc` / `Backspace`: Go back to the dashboard.
+
+### 🎛️ Agile Boards View
+* `↑` / `↓` (or `k` / `j`): Navigate agile boards table.
+* `Enter`: View issues belonging to the selected board.
+* `r`: Refresh agile boards list.
 * `Esc` / `Backspace`: Go back to the dashboard.
 
 ### 📋 Issues List View

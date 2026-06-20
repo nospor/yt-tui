@@ -186,6 +186,11 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 			return m, func() tea.Msg {
 				return pushStateMsg{state: stateProjects}
 			}
+		case "b":
+			// Switch to agile boards full screen
+			return m, func() tea.Msg {
+				return pushStateMsg{state: stateBoards}
+			}
 		}
 	}
 	return m, nil
@@ -290,7 +295,7 @@ func (m dashboardModel) View() string {
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, issuesPanel, "  ", projectsPanel)
 
 	title := StyleTitle.Render(" YouTrack Dashboard ")
-	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Enter] Select  [n] New Issue  [p] Projects List  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Enter] Select  [n] New Issue  [p] Projects  [b] Agile Boards  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, panels, "", help)
 }

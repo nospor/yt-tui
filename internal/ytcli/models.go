@@ -32,6 +32,21 @@ type Project struct {
 	Description string `json:"description,omitempty"`
 }
 
+// Agile represents a YouTrack agile board.
+type Agile struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// Sprint represents a YouTrack sprint.
+type Sprint struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Start    int64  `json:"start,omitempty"`
+	Finish   int64  `json:"finish,omitempty"`
+	Archived bool   `json:"archived,omitempty"`
+}
+
 // CustomField represents a YouTrack issue custom field.
 type CustomField struct {
 	ID    string      `json:"id"`

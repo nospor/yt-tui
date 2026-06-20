@@ -28,6 +28,11 @@ type issueField struct {
 type issuesModel struct {
 	client              *ytcli.Client
 	projectCode         string // empty if general search
+	query               string
+	agileID             string
+	sprintID            string
+	boardName           string
+	sprintName          string
 	issues              []ytcli.Issue
 	table               table.Model
 	searchInput         textinput.Model
@@ -150,9 +155,38 @@ type issuesDataMsg struct {
 	err         error
 }
 
+func (m *issuesModel) cacheKey() string {
+	if m.projectCode != "" {
+		return m.projectCode
+	}
+	if m.sprintID != "" {
+		return "sprint:" + m.sprintID
+	}
+	if m.query != "" {
+		return "query:" + m.query
+	}
+	return "all"
+}
+
 func (m issuesModel) loadIssuesCmd() tea.Cmd {
+	if m.sprintID != "" && m.agileID != "" {
+		agileID := m.agileID
+		sprintID := m.sprintID
+		query := m.query
+		return func() tea.Msg {
+			issues, err := m.client.ListSprintIssues(agileID, sprintID)
+			return issuesDataMsg{
+				projectCode: "",
+				query:       query,
+				skip:        0,
+				issues:      issues,
+				err:         err,
+			}
+		}
+	}
+
 	projectCode := m.projectCode
-	query := "" // Fetch all issues, search is done locally in the UI
+	query := m.query
 	skip := m.skip
 	pageSize := m.pageSize
 
@@ -208,14 +242,35 @@ func (m *issuesModel) restoreCursor() {
 }
 
 func (m *issuesModel) initProject(projectCode string, isBack bool) tea.Cmd {
+	return m.initContext(projectCode, "", isBack)
+}
+
+func (m *issuesModel) initContext(projectCode string, query string, isBack bool) tea.Cmd {
 	m.projectCode = projectCode
+	m.query = query
+	m.agileID = ""
+	m.sprintID = ""
+	m.boardName = ""
+	m.sprintName = ""
+
+	if strings.HasPrefix(query, "sprint:") {
+		parts := strings.SplitN(query, ":", 5)
+		if len(parts) >= 5 {
+			m.agileID = parts[1]
+			m.sprintID = parts[2]
+			m.boardName = parts[3]
+			m.sprintName = parts[4]
+		}
+	}
+
 	if !isBack {
 		m.searchInput.SetValue("")
 		m.searchMode = false
 		m.lastSelectedIssueID = ""
 	}
 
-	if cache, exists := m.cache[projectCode]; exists {
+	key := m.cacheKey()
+	if cache, exists := m.cache[key]; exists {
 		m.issues = cache.issues
 		m.skip = cache.skip
 		m.loadedAll = cache.loadedAll
@@ -262,7 +317,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 
 	case issuesDataMsg:
 		// Discard stale message from previous project.
-		if msg.projectCode != m.projectCode {
+		if msg.projectCode != m.projectCode || msg.query != m.query {
 			return m, nil
 		}
 
@@ -282,8 +337,8 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 
 		limitReached := m.maxIssues > 0 && len(m.issues) >= m.maxIssues
 
-		// Update cache for this project
-		m.cache[m.projectCode] = projectCache{
+		// Update cache for this context
+		m.cache[m.cacheKey()] = projectCache{
 			issues:    m.issues,
 			skip:      msg.skip,
 			loadedAll: len(msg.issues) < m.pageSize || limitReached,
@@ -356,7 +411,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.skip = 0
 			m.loadedAll = false
 			m.issues = nil
-			delete(m.cache, m.projectCode)
+			delete(m.cache, m.cacheKey())
 			return m, m.loadIssuesCmd()
 		}
 
@@ -398,6 +453,37 @@ func (m issuesModel) View() string {
 	var titleText string
 	if m.projectCode != "" {
 		titleText = fmt.Sprintf(" Issues in Project: %s%s ", m.projectCode, statusSuffix)
+	} else if m.sprintID != "" {
+		titleText = fmt.Sprintf(" Issues on Board: %s (Sprint: %s)%s ", m.boardName, m.sprintName, statusSuffix)
+	} else if m.query != "" {
+		displayQuery := m.query
+		if strings.HasPrefix(displayQuery, "Board ") || strings.HasPrefix(displayQuery, "Board:") {
+			queryBody := displayQuery
+			if strings.HasPrefix(queryBody, "Board ") {
+				queryBody = strings.TrimPrefix(queryBody, "Board ")
+			} else {
+				queryBody = strings.TrimPrefix(queryBody, "Board:")
+			}
+			queryBody = strings.TrimSpace(queryBody)
+
+			parts := strings.SplitN(queryBody, ":", 2)
+			boardName := strings.TrimSpace(parts[0])
+			if strings.HasPrefix(boardName, "{") && strings.HasSuffix(boardName, "}") {
+				boardName = boardName[1 : len(boardName)-1]
+			}
+
+			if len(parts) > 1 {
+				sprintName := strings.TrimSpace(parts[1])
+				if strings.HasPrefix(sprintName, "{") && strings.HasSuffix(sprintName, "}") {
+					sprintName = sprintName[1 : len(sprintName)-1]
+				}
+				titleText = fmt.Sprintf(" Issues on Board: %s (Sprint: %s)%s ", boardName, sprintName, statusSuffix)
+			} else {
+				titleText = fmt.Sprintf(" Issues on Board: %s%s ", boardName, statusSuffix)
+			}
+		} else {
+			titleText = fmt.Sprintf(" Issues matching: %s%s ", displayQuery, statusSuffix)
+		}
 	} else {
 		titleText = fmt.Sprintf(" Issues%s ", statusSuffix)
 	}

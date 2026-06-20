@@ -16,6 +16,7 @@ const (
 	stateWelcome   State = "welcome"
 	stateDashboard State = "dashboard"
 	stateProjects  State = "projects"
+	stateBoards    State = "boards"
 	stateIssues    State = "issues"
 	stateDetail    State = "detail"
 	stateForm      State = "form"
@@ -57,6 +58,7 @@ type AppModel struct {
 	welcome   welcomeModel
 	dashboard dashboardModel
 	projects  projectsModel
+	boards    boardsModel
 	issues    issuesModel
 	detail    detailModel
 	form      formModel
@@ -72,6 +74,7 @@ func NewAppModel() AppModel {
 		welcome:   newWelcomeModel(client),
 		dashboard: newDashboardModel(client),
 		projects:  newProjectsModel(client),
+		boards:    newBoardsModel(client),
 		issues:    newIssuesModel(client, cfg.PageSize, cfg.MaxIssues, cfg.Fields),
 		detail:    newDetailModel(client, cfg.CustomStates),
 		form:      newFormModel(client, cfg),
@@ -99,6 +102,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				canQuit = true
 			case stateProjects:
 				canQuit = true
+			case stateBoards:
+				canQuit = true
 			case stateIssues:
 				canQuit = !m.issues.searchMode
 			case stateDetail:
@@ -124,6 +129,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.projects.width = childWidth
 		m.projects.height = childHeight
+
+		m.boards.width = childWidth
+		m.boards.height = childHeight
 
 		m.issues.width = childWidth
 		m.issues.height = childHeight
@@ -181,6 +189,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects, cmd = m.projects.Update(msg)
 		cmds = append(cmds, cmd)
 
+	case stateBoards:
+		m.boards, cmd = m.boards.Update(msg)
+		cmds = append(cmds, cmd)
+
 	case stateIssues:
 		m.issues, cmd = m.issues.Update(msg)
 		cmds = append(cmds, cmd)
@@ -213,7 +225,16 @@ func (m *AppModel) switchState(state State, data string, isBack bool) tea.Cmd {
 		return m.dashboard.loadDataCmd()
 	case stateProjects:
 		return m.projects.loadProjectsCmd()
+	case stateBoards:
+		return m.boards.loadBoardsCmd()
 	case stateIssues:
+		if strings.HasPrefix(data, "query:") {
+			queryStr := strings.TrimPrefix(data, "query:")
+			return m.issues.initContext("", queryStr, isBack)
+		}
+		if strings.HasPrefix(data, "sprint:") {
+			return m.issues.initContext("", data, isBack)
+		}
 		return m.issues.initProject(data, isBack)
 	case stateDetail:
 		m.detail.issueKey = data
@@ -240,6 +261,8 @@ func (m AppModel) View() string {
 		childView = m.dashboard.View()
 	case stateProjects:
 		childView = m.projects.View()
+	case stateBoards:
+		childView = m.boards.View()
 	case stateIssues:
 		childView = m.issues.View()
 	case stateDetail:
