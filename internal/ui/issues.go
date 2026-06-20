@@ -27,6 +27,7 @@ type issueField struct {
 
 type issuesModel struct {
 	client              *ytcli.Client
+	cfg                 *config.Config
 	projectCode         string // empty if general search
 	query               string
 	agileID             string
@@ -37,6 +38,10 @@ type issuesModel struct {
 	table               table.Model
 	searchInput         textinput.Model
 	searchMode          bool
+	filterMode          bool
+	tempStates          map[string]bool
+	tempPriorities      map[string]bool
+	filterCursor        int
 	loading             bool
 	err                 error
 	spinner             spinner.Model
@@ -52,10 +57,20 @@ type issuesModel struct {
 	lastSelectedIssueID string
 }
 
-func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int, fieldNames []string) issuesModel {
+func newIssuesModel(client *ytcli.Client, cfg *config.Config) issuesModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
+
+	pageSize := config.DefaultPageSize
+	maxIssues := config.DefaultMaxIssues
+	var fieldNames []string
+
+	if cfg != nil {
+		pageSize = cfg.PageSize
+		maxIssues = cfg.MaxIssues
+		fieldNames = cfg.Fields
+	}
 
 	if len(fieldNames) == 0 {
 		fieldNames = config.DefaultFields
@@ -135,6 +150,7 @@ func newIssuesModel(client *ytcli.Client, pageSize int, maxIssues int, fieldName
 
 	return issuesModel{
 		client:      client,
+		cfg:         cfg,
 		table:       t,
 		searchInput: ti,
 		loading:     true,
@@ -202,22 +218,77 @@ func (m issuesModel) loadIssuesCmd() tea.Cmd {
 	}
 }
 
+func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
+	if m.cfg == nil {
+		return true
+	}
+	state := issue.State()
+	// Check if state is in CustomStates
+	inCustomStates := false
+	for _, cs := range m.cfg.CustomStates {
+		if strings.EqualFold(cs, state) {
+			inCustomStates = true
+			break
+		}
+	}
+	if inCustomStates {
+		// Must be in FilteredStates
+		found := false
+		for _, fs := range m.cfg.FilteredStates {
+			if strings.EqualFold(fs, state) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	priority := issue.Priority()
+	// Check if priority is in CustomPriorities
+	inCustomPriorities := false
+	for _, cp := range m.cfg.CustomPriorities {
+		if strings.EqualFold(cp, priority) {
+			inCustomPriorities = true
+			break
+		}
+	}
+	if inCustomPriorities {
+		// Must be in FilteredPriorities
+		found := false
+		for _, fp := range m.cfg.FilteredPriorities {
+			if strings.EqualFold(fp, priority) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (m *issuesModel) updateTableRows() {
 	rows := []table.Row{}
 	m.visibleIssueIDs = []string{}
 	filterPhrase := strings.ToLower(m.searchInput.Value())
 
 	for _, issue := range m.issues {
-		if filterPhrase == "" ||
-			strings.Contains(strings.ToLower(issue.Summary), filterPhrase) ||
-			strings.Contains(strings.ToLower(issue.IDReadable), filterPhrase) {
+		if m.isVisible(issue) {
+			if filterPhrase == "" ||
+				strings.Contains(strings.ToLower(issue.Summary), filterPhrase) ||
+				strings.Contains(strings.ToLower(issue.IDReadable), filterPhrase) {
 
-			row := table.Row{}
-			for _, f := range m.fields {
-				row = append(row, f.value(issue))
+				row := table.Row{}
+				for _, f := range m.fields {
+					row = append(row, f.value(issue))
+				}
+				rows = append(rows, row)
+				m.visibleIssueIDs = append(m.visibleIssueIDs, issue.IDReadable)
 			}
-			rows = append(rows, row)
-			m.visibleIssueIDs = append(m.visibleIssueIDs, issue.IDReadable)
 		}
 	}
 	m.table.SetRows(rows)
@@ -359,6 +430,105 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.filterMode {
+			numStates := 0
+			numPriorities := 0
+			if m.cfg != nil {
+				numStates = len(m.cfg.CustomStates)
+				numPriorities = len(m.cfg.CustomPriorities)
+			}
+			totalOptions := numStates + numPriorities
+
+			switch msg.String() {
+			case "esc":
+				m.filterMode = false
+				return m, nil
+			case "q":
+				return m, tea.Quit
+			case "up", "k":
+				if m.filterCursor < numStates {
+					m.filterCursor--
+					if m.filterCursor < 0 {
+						m.filterCursor = numStates - 1
+					}
+				} else {
+					m.filterCursor--
+					if m.filterCursor < numStates {
+						m.filterCursor = totalOptions - 1
+					}
+				}
+				return m, nil
+			case "down", "j":
+				if m.filterCursor < numStates {
+					m.filterCursor++
+					if m.filterCursor >= numStates {
+						m.filterCursor = 0
+					}
+				} else {
+					m.filterCursor++
+					if m.filterCursor >= totalOptions {
+						m.filterCursor = numStates
+					}
+				}
+				return m, nil
+			case "left", "h":
+				if m.filterCursor >= numStates {
+					// Move from priorities to states
+					row := m.filterCursor - numStates
+					if row < numStates {
+						m.filterCursor = row
+					} else {
+						m.filterCursor = numStates - 1
+					}
+				}
+				return m, nil
+			case "right", "l":
+				if m.filterCursor < numStates {
+					// Move from states to priorities
+					row := m.filterCursor
+					if row < numPriorities {
+						m.filterCursor = numStates + row
+					} else {
+						m.filterCursor = totalOptions - 1
+					}
+				}
+				return m, nil
+			case " ":
+				if m.cfg != nil {
+					if m.filterCursor < numStates {
+						stateName := m.cfg.CustomStates[m.filterCursor]
+						m.tempStates[stateName] = !m.tempStates[stateName]
+					} else {
+						priorityName := m.cfg.CustomPriorities[m.filterCursor-numStates]
+						m.tempPriorities[priorityName] = !m.tempPriorities[priorityName]
+					}
+				}
+				return m, nil
+			case "enter":
+				if m.cfg != nil {
+					newStates := []string{}
+					for _, s := range m.cfg.CustomStates {
+						if m.tempStates[s] {
+							newStates = append(newStates, s)
+						}
+					}
+					newPriorities := []string{}
+					for _, p := range m.cfg.CustomPriorities {
+						if m.tempPriorities[p] {
+							newPriorities = append(newPriorities, p)
+						}
+					}
+					m.cfg.FilteredStates = newStates
+					m.cfg.FilteredPriorities = newPriorities
+					_ = config.SaveConfig(m.cfg)
+					m.updateTableRows()
+				}
+				m.filterMode = false
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.searchMode {
 			switch msg.String() {
 			case "enter", "esc":
@@ -389,6 +559,20 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.searchInput.Focus()
 			m.searchInput.SetValue("")
 			m.updateTableRows()
+			return m, nil
+		case "f":
+			if m.cfg != nil {
+				m.filterMode = true
+				m.filterCursor = 0
+				m.tempStates = make(map[string]bool)
+				m.tempPriorities = make(map[string]bool)
+				for _, s := range m.cfg.FilteredStates {
+					m.tempStates[s] = true
+				}
+				for _, p := range m.cfg.FilteredPriorities {
+					m.tempPriorities[p] = true
+				}
+			}
 			return m, nil
 		case "enter":
 			if len(m.table.Rows()) > 0 {
@@ -430,6 +614,72 @@ func (m issuesModel) View() string {
 	if m.loading {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading issues..."))
+	}
+
+	if m.filterMode && m.cfg != nil {
+		// Build states column
+		var statesCol strings.Builder
+		statesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" STATES") + "\n\n")
+		for i, s := range m.cfg.CustomStates {
+			checked := "[ ]"
+			if m.tempStates[s] {
+				checked = "[x]"
+			}
+			item := fmt.Sprintf(" %s %s ", checked, s)
+			if i == m.filterCursor {
+				statesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorBg)).Background(lipgloss.Color(ColorCyan)).Bold(true).Render(item) + "\n")
+			} else {
+				statesCol.WriteString(item + "\n")
+			}
+		}
+
+		// Build priorities column
+		var prioritiesCol strings.Builder
+		prioritiesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" PRIORITIES") + "\n\n")
+		numStates := len(m.cfg.CustomStates)
+		for i, p := range m.cfg.CustomPriorities {
+			checked := "[ ]"
+			if m.tempPriorities[p] {
+				checked = "[x]"
+			}
+			item := fmt.Sprintf(" %s %s ", checked, p)
+			globalIdx := numStates + i
+			if globalIdx == m.filterCursor {
+				prioritiesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorBg)).Background(lipgloss.Color(ColorCyan)).Bold(true).Render(item) + "\n")
+			} else {
+				prioritiesCol.WriteString(item + "\n")
+			}
+		}
+
+		// Calculate column width (leave some margin)
+		colWidth := (m.width - 8) / 2
+		if colWidth < 20 {
+			colWidth = 20
+		}
+
+		columns := lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(colWidth).Render(statesCol.String()),
+			lipgloss.NewStyle().Width(colWidth).Render(prioritiesCol.String()),
+		)
+
+		boxTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Filter by State & Priority ")
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Padding(1, 2).
+			Width(m.width - 4).
+			Render(lipgloss.JoinVertical(lipgloss.Left,
+				boxTitle,
+				"",
+				columns,
+			))
+
+		titleText := " Issues Filter "
+		title := StyleTitle.Render(titleText)
+
+		help := StyleHelp.Render(" [↑↓←→] Navigate  [Space] Toggle  [Enter] Save  [Esc] Cancel  [q] Quit ")
+
+		return lipgloss.JoinVertical(lipgloss.Left, title, box, "", help)
 	}
 
 	var statusSuffix string
@@ -506,7 +756,7 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [n] New  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [f] Filter  [n] New  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 }

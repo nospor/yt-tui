@@ -85,6 +85,8 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 | `custom_types` | Array of Strings | `[]` (empty) | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.). |
 | `custom_priorities` | Array of Strings | `[]` (empty) | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.). |
 | `custom_states` | Array of Strings | `[]` (empty) | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.). |
+| `filtered_states` | Array of Strings | `[]` (empty) | List of selected issue states to display on the tasks list. States not in this list will be filtered out. |
+| `filtered_priorities` | Array of Strings | `[]` (empty) | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out. |
 
 ---
 
@@ -127,6 +129,7 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 * `↑` / `↓` (or `k` / `j`): Scroll issues table.
 * `Enter`: View details of the selected issue.
 * `/`: Activate search/filter mode. Type keywords to filter issues by summary/ID. Press `Esc` or `Enter` to close search mode.
+* `f`: Open the State & Priority filter panel. Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
 * `n`: Create a new issue in the current project context.
 * `r`: Clear cache and force reload issues list.
 * `Esc` / `Backspace`: Go back to the dashboard/previous screen.

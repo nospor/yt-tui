@@ -2,14 +2,19 @@ package ui
 
 import (
 	"testing"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbletea"
 )
 
 func TestIssuesModel_MaxIssuesLimit(t *testing.T) {
+	cfg := &config.Config{
+		PageSize:  2,
+		MaxIssues: 4,
+	}
 	// Initialize with pageSize = 2 and maxIssues = 4
-	m := newIssuesModel(nil, 2, 4, nil)
+	m := newIssuesModel(nil, cfg)
 	m.projectCode = "TEST"
 	m.loading = true
 

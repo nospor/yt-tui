@@ -8,14 +8,16 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	URL              string   `json:"url"`
-	Token            string   `json:"token"`
-	PageSize         int      `json:"page_size"`
-	MaxIssues        int      `json:"max_issues"`
-	Fields           []string `json:"fields"`
-	CustomTypes      []string `json:"custom_types"`
-	CustomPriorities []string `json:"custom_priorities"`
-	CustomStates     []string `json:"custom_states"`
+	URL                string   `json:"url"`
+	Token              string   `json:"token"`
+	PageSize           int      `json:"page_size"`
+	MaxIssues          int      `json:"max_issues"`
+	Fields             []string `json:"fields"`
+	CustomTypes        []string `json:"custom_types"`
+	CustomPriorities   []string `json:"custom_priorities"`
+	CustomStates       []string `json:"custom_states"`
+	FilteredStates     []string `json:"filtered_states"`
+	FilteredPriorities []string `json:"filtered_priorities"`
 }
 
 const (
@@ -36,12 +38,14 @@ func LoadConfig() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return &Config{
-			PageSize:         DefaultPageSize,
-			MaxIssues:        DefaultMaxIssues,
-			Fields:           DefaultFields,
-			CustomTypes:      DefaultTypes,
-			CustomPriorities: DefaultPriorities,
-			CustomStates:     DefaultStates,
+			PageSize:           DefaultPageSize,
+			MaxIssues:          DefaultMaxIssues,
+			Fields:             DefaultFields,
+			CustomTypes:        DefaultTypes,
+			CustomPriorities:   DefaultPriorities,
+			CustomStates:       DefaultStates,
+			FilteredStates:     append([]string{}, DefaultStates...),
+			FilteredPriorities: append([]string{}, DefaultPriorities...),
 		}, err
 	}
 
@@ -51,23 +55,27 @@ func LoadConfig() (*Config, error) {
 	// Ensure the directory exists
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return &Config{
-			PageSize:         DefaultPageSize,
-			MaxIssues:        DefaultMaxIssues,
-			Fields:           DefaultFields,
-			CustomTypes:      DefaultTypes,
-			CustomPriorities: DefaultPriorities,
-			CustomStates:     DefaultStates,
+			PageSize:           DefaultPageSize,
+			MaxIssues:          DefaultMaxIssues,
+			Fields:             DefaultFields,
+			CustomTypes:        DefaultTypes,
+			CustomPriorities:   DefaultPriorities,
+			CustomStates:       DefaultStates,
+			FilteredStates:     append([]string{}, DefaultStates...),
+			FilteredPriorities: append([]string{}, DefaultPriorities...),
 		}, err
 	}
 
 	// Default config
 	cfg := &Config{
-		PageSize:         DefaultPageSize,
-		MaxIssues:        DefaultMaxIssues,
-		Fields:           DefaultFields,
-		CustomTypes:      DefaultTypes,
-		CustomPriorities: DefaultPriorities,
-		CustomStates:     DefaultStates,
+		PageSize:           DefaultPageSize,
+		MaxIssues:          DefaultMaxIssues,
+		Fields:             DefaultFields,
+		CustomTypes:        DefaultTypes,
+		CustomPriorities:   DefaultPriorities,
+		CustomStates:       DefaultStates,
+		FilteredStates:     append([]string{}, DefaultStates...),
+		FilteredPriorities: append([]string{}, DefaultPriorities...),
 	}
 
 	// Check if file exists
@@ -119,6 +127,14 @@ func LoadConfig() (*Config, error) {
 	}
 	if len(fileCfg.CustomStates) == 0 {
 		fileCfg.CustomStates = DefaultStates
+		needsWrite = true
+	}
+	if fileCfg.FilteredStates == nil {
+		fileCfg.FilteredStates = append([]string{}, fileCfg.CustomStates...)
+		needsWrite = true
+	}
+	if fileCfg.FilteredPriorities == nil {
+		fileCfg.FilteredPriorities = append([]string{}, fileCfg.CustomPriorities...)
 		needsWrite = true
 	}
 
