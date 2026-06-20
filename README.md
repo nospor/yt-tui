@@ -24,31 +24,41 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 
 ## 🚀 Prerequisites
 
+If you choose to build the project from source, you will need:
 1. **Go Compiler**: Go 1.18+ installed on your system.
 
 ---
 
 ## 🛠️ Installation & Building
 
-1. **Clone/Navigate** to the project directory:
-   ```bash
-   cd /home/robertn/projects/vag1/html/yt-tui
-   ```
+### 📦 Option 1: Download Pre-built Binaries (Recommended)
 
-2. **Build** the executable:
-   ```bash
-   go build -o yt-tui
-   ```
+You can download the latest pre-compiled binary for your platform directly from the [GitHub Releases](https://github.com/nospor/yt-tui/releases) page.
 
-3. **Run** the dashboard:
-   ```bash
-   ./yt-tui
-   ```
+1. Go to [Releases](https://github.com/nospor/yt-tui/releases) and download the archive matching your operating system and architecture (Linux, macOS, Windows; AMD64/ARM64).
+2. Extract the downloaded archive.
+3. (Optional) Copy the `yt-tui` binary to a directory in your `PATH` (e.g., `/usr/local/bin/` on Linux/macOS) to run it from anywhere.
 
-4. **Verify Version**:
-   ```bash
-   ./yt-tui -v
-   ```
+### 🛠️ Option 2: Build from Source
+
+If you have Go installed, you can build the application manually:
+
+```bash
+git clone https://github.com/nospor/yt-tui.git
+cd yt-tui
+
+# to quickly build
+go build -o yt-tui .
+
+# or (builds slower, but binary is smaller)
+go build -trimpath -ldflags="-s -w" -o yt-tui .
+
+# then run
+./yt-tui
+
+# you may also want to copy the binary to your PATH (and run it from any place), e.g.:
+sudo cp yt-tui /usr/local/bin/
+```
 
 ---
 
@@ -77,20 +87,20 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `url` | String | `""` | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`). |
-| `token` | String | `""` | Your permanent YouTrack API token. |
-| `page_size` | Integer | `20` | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments. |
-| `max_issues` | Integer | `500` | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
-| `fields` | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names. |
-| `custom_types` | Array of Strings | `[]` (empty) | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.). |
-| `custom_priorities` | Array of Strings | `[]` (empty) | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.). |
-| `custom_states` | Array of Strings | `[]` (empty) | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.). |
-| `filtered_states` | Array of Strings | `[]` (empty) | List of selected issue states to display on the tasks list. States not in this list will be filtered out. |
-| `filtered_priorities` | Array of Strings | `[]` (empty) | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out. |
-| `sort_column` | String | `""` | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.). |
-| `sort_direction` | String | `""` | The sorting direction (`asc` or `desc`). |
+| Option                | Type             | Default                                              | Description                                                                                                                                                                                 |
+| --------------------- | ---------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`                 | String           | `""`                                                 | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                             |
+| `token`               | String           | `""`                                                 | Your permanent YouTrack API token.                                                                                                                                                          |
+| `page_size`           | Integer          | `20`                                                 | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
+| `max_issues`          | Integer          | `500`                                                | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
+| `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names.                 |
+| `custom_types`        | Array of Strings | `[]` (empty)                                         | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.).                                                        |
+| `custom_priorities`   | Array of Strings | `[]` (empty)                                         | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.).                                                  |
+| `custom_states`       | Array of Strings | `[]` (empty)                                         | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.).                               |
+| `filtered_states`     | Array of Strings | `[]` (empty)                                         | List of selected issue states to display on the tasks list. States not in this list will be filtered out.                                                                                   |
+| `filtered_priorities` | Array of Strings | `[]` (empty)                                         | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out.                                                                           |
+| `sort_column`         | String           | `""`                                                 | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
+| `sort_direction`      | String           | `""`                                                 | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
 
 ---
 
