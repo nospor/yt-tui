@@ -18,6 +18,7 @@ type KeyMap struct {
 	State      key.Binding
 	Assign     key.Binding
 	Clone      key.Binding
+	Edit       key.Binding
 	Refresh    key.Binding
 	Help       key.Binding
 	Quit       key.Binding
@@ -81,6 +82,10 @@ var Keys = KeyMap{
 	Clone: key.NewBinding(
 		key.WithKeys("C"),
 		key.WithHelp("C", "clone"),
+	),
+	Edit: key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "edit"),
 	),
 	Refresh: key.NewBinding(
 		key.WithKeys("r"),

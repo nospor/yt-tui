@@ -130,15 +130,16 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 * `c`: Add a comment. Type your comment and press `Ctrl+S` to submit, or `Esc` to cancel.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `a`: Assign issue (opens assignee input prompt; type username or `me` and hit `Enter`).
+* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
 * `r`: Force refresh issue details and comments.
 * `Esc` / `Backspace`: Go back to the issues list.
 
-### 📝 Issue Creation / Clone Form
+### 📝 Issue Form (Create / Clone / Edit)
 * `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee).
 * `←` / `→` (or `h` / `l`): Cycle options in dropdown fields (Project, Type, Priority).
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
-* `Ctrl+S` (or `Enter` on text inputs): Submit the form and create/clone the issue.
+* `Ctrl+S` (or `Enter` on text inputs): Submit the form and save/create/clone the issue.
 * `Esc`: Cancel and discard changes.
 
 ## License

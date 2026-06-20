@@ -262,6 +262,11 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, func() tea.Msg {
 				return pushStateMsg{state: stateForm, data: "clone:" + m.issue.IDReadable}
 			}
+		case "e":
+			// Edit issue (pushes form pre-filled)
+			return m, func() tea.Msg {
+				return pushStateMsg{state: stateForm, data: "edit:" + m.issue.IDReadable}
+			}
 		case "r":
 			m.loading = true
 			m.err = nil
@@ -456,7 +461,7 @@ func (m detailModel) View() string {
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", optsStr.String()))
 	}
 
-	help := StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [c] Comment  [s] Transition State  [a] Assign  [C] Clone  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		StyleTitle.Render(" Issue Detail "),

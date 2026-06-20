@@ -31,6 +31,8 @@ type formModel struct {
 	loading    bool
 	isClone    bool
 	cloneKey   string
+	isEdit     bool
+	editKey    string
 	err        error
 	spinner    spinner.Model
 	width      int
@@ -82,7 +84,7 @@ func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
 	}
 }
 
-type cloneDataLoadedMsg struct {
+type formDataLoadedMsg struct {
 	issue *ytcli.Issue
 	err   error
 }
@@ -97,10 +99,10 @@ type projectsLoadedMsg struct {
 	err      error
 }
 
-func (m formModel) loadCloneDataCmd(key string) tea.Cmd {
+func (m formModel) loadFormDataCmd(key string) tea.Cmd {
 	return func() tea.Msg {
 		issue, err := m.client.GetIssue(key)
-		return cloneDataLoadedMsg{issue: issue, err: err}
+		return formDataLoadedMsg{issue: issue, err: err}
 	}
 }
 
@@ -179,6 +181,8 @@ func (m formModel) getPriorities() []string {
 func (m *formModel) setupForm(data string) tea.Cmd {
 	m.isClone = false
 	m.cloneKey = ""
+	m.isEdit = false
+	m.editKey = ""
 	m.loading = false
 	m.err = nil
 	m.summaryInput.SetValue("")
@@ -198,7 +202,12 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 		m.isClone = true
 		m.cloneKey = strings.TrimPrefix(data, "clone:")
 		m.loading = true
-		cmds = append(cmds, m.loadCloneDataCmd(m.cloneKey))
+		cmds = append(cmds, m.loadFormDataCmd(m.cloneKey))
+	} else if strings.HasPrefix(data, "edit:") {
+		m.isEdit = true
+		m.editKey = strings.TrimPrefix(data, "edit:")
+		m.loading = true
+		cmds = append(cmds, m.loadFormDataCmd(m.editKey))
 	} else if data != "" {
 		m.initialProjectCode = data
 		m.blurCurrent()
@@ -236,7 +245,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		}
 		return m, nil
 
-	case cloneDataLoadedMsg:
+	case formDataLoadedMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
@@ -244,7 +253,11 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		}
 
 		issue := msg.issue
-		m.summaryInput.SetValue("Clone: " + issue.Summary)
+		if m.isClone {
+			m.summaryInput.SetValue("Clone: " + issue.Summary)
+		} else { // edit mode
+			m.summaryInput.SetValue(issue.Summary)
+		}
 		m.descTextArea.SetValue(issue.Description)
 		m.setTypeByValue(issue.Type())
 		m.setPriorityByValue(issue.Priority())
@@ -321,16 +334,30 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 
 				m.loading = true
 				m.err = nil
-				return m, func() tea.Msg {
-					id, err := m.client.CreateIssue(
-						proj,
-						sum,
-						m.descTextArea.Value(),
-						priority,
-						issueType,
-						m.assigneeInput.Value(),
-					)
-					return formSubmittedMsg{issueID: id, err: err}
+				if m.isEdit {
+					return m, func() tea.Msg {
+						err := m.client.UpdateIssue(
+							m.editKey,
+							sum,
+							m.descTextArea.Value(),
+							priority,
+							issueType,
+							m.assigneeInput.Value(),
+						)
+						return formSubmittedMsg{issueID: m.editKey, err: err}
+					}
+				} else {
+					return m, func() tea.Msg {
+						id, err := m.client.CreateIssue(
+							proj,
+							sum,
+							m.descTextArea.Value(),
+							priority,
+							issueType,
+							m.assigneeInput.Value(),
+						)
+						return formSubmittedMsg{issueID: id, err: err}
+					}
 				}
 			}
 
@@ -355,46 +382,68 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			return m, nil
 
 		case "left", "h":
-			switch m.focusIndex {
-			case fieldProject:
-				if len(m.projects) > 0 {
-					m.projectIndex = (m.projectIndex - 1 + len(m.projects)) % len(m.projects)
+			if m.focusIndex == fieldProject || m.focusIndex == fieldType || m.focusIndex == fieldPriority {
+				switch m.focusIndex {
+				case fieldProject:
+					if len(m.projects) > 0 {
+						m.projectIndex = (m.projectIndex - 1 + len(m.projects)) % len(m.projects)
+					}
+					return m, nil
+				case fieldType:
+					opts := m.getTypes()
+					if len(opts) > 0 {
+						m.typeIndex = (m.typeIndex - 1 + len(opts)) % len(opts)
+					}
+					return m, nil
+				case fieldPriority:
+					opts := m.getPriorities()
+					if len(opts) > 0 {
+						m.priorityIndex = (m.priorityIndex - 1 + len(opts)) % len(opts)
+					}
+					return m, nil
 				}
-				return m, nil
-			case fieldType:
-				opts := m.getTypes()
-				if len(opts) > 0 {
-					m.typeIndex = (m.typeIndex - 1 + len(opts)) % len(opts)
-				}
-				return m, nil
-			case fieldPriority:
-				opts := m.getPriorities()
-				if len(opts) > 0 {
-					m.priorityIndex = (m.priorityIndex - 1 + len(opts)) % len(opts)
-				}
-				return m, nil
 			}
+			switch m.focusIndex {
+			case fieldSummary:
+				m.summaryInput, cmd = m.summaryInput.Update(msg)
+			case fieldDescription:
+				m.descTextArea, cmd = m.descTextArea.Update(msg)
+			case fieldAssignee:
+				m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+			}
+			return m, cmd
 
 		case "right", "l":
-			switch m.focusIndex {
-			case fieldProject:
-				if len(m.projects) > 0 {
-					m.projectIndex = (m.projectIndex + 1) % len(m.projects)
+			if m.focusIndex == fieldProject || m.focusIndex == fieldType || m.focusIndex == fieldPriority {
+				switch m.focusIndex {
+				case fieldProject:
+					if len(m.projects) > 0 {
+						m.projectIndex = (m.projectIndex + 1) % len(m.projects)
+					}
+					return m, nil
+				case fieldType:
+					opts := m.getTypes()
+					if len(opts) > 0 {
+						m.typeIndex = (m.typeIndex + 1) % len(opts)
+					}
+					return m, nil
+				case fieldPriority:
+					opts := m.getPriorities()
+					if len(opts) > 0 {
+						m.priorityIndex = (m.priorityIndex + 1) % len(opts)
+					}
+					return m, nil
 				}
-				return m, nil
-			case fieldType:
-				opts := m.getTypes()
-				if len(opts) > 0 {
-					m.typeIndex = (m.typeIndex + 1) % len(opts)
-				}
-				return m, nil
-			case fieldPriority:
-				opts := m.getPriorities()
-				if len(opts) > 0 {
-					m.priorityIndex = (m.priorityIndex + 1) % len(opts)
-				}
-				return m, nil
 			}
+			switch m.focusIndex {
+			case fieldSummary:
+				m.summaryInput, cmd = m.summaryInput.Update(msg)
+			case fieldDescription:
+				m.descTextArea, cmd = m.descTextArea.Update(msg)
+			case fieldAssignee:
+				m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+			}
+			return m, cmd
 
 		default:
 			// Jump to option by starting letter for dropdowns
@@ -448,12 +497,18 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 func (m *formModel) nextField() {
 	m.blurCurrent()
 	m.focusIndex = (m.focusIndex + 1) % numFields
+	if m.isEdit && m.focusIndex == fieldProject {
+		m.focusIndex = (m.focusIndex + 1) % numFields
+	}
 	m.focusCurrent()
 }
 
 func (m *formModel) prevField() {
 	m.blurCurrent()
 	m.focusIndex = (m.focusIndex - 1 + numFields) % numFields
+	if m.isEdit && m.focusIndex == fieldProject {
+		m.focusIndex = (m.focusIndex - 1 + numFields) % numFields
+	}
 	m.focusCurrent()
 }
 
@@ -488,6 +543,17 @@ func (m formModel) View() string {
 		statusText := "Creating issue..."
 		if m.isClone {
 			statusText = "Loading clone details..."
+		} else if m.isEdit {
+			statusText = "Loading issue details..."
+		}
+		if m.summaryInput.Value() != "" {
+			if m.isEdit {
+				statusText = "Updating issue..."
+			} else if m.isClone {
+				statusText = "Creating cloned issue..."
+			} else {
+				statusText = "Creating issue..."
+			}
 		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " "+statusText))
@@ -496,6 +562,8 @@ func (m formModel) View() string {
 	titleText := " Create New Issue "
 	if m.isClone {
 		titleText = fmt.Sprintf(" Clone Issue: %s ", m.cloneKey)
+	} else if m.isEdit {
+		titleText = fmt.Sprintf(" Edit Issue: %s ", m.editKey)
 	}
 	title := StyleTitle.Render(titleText)
 
@@ -515,13 +583,24 @@ func (m formModel) View() string {
 
 	// Render Dropdowns values
 	var projectVal string
-	if len(m.projects) > 0 {
-		proj := m.projects[m.projectIndex]
-		projectVal = fmt.Sprintf("◀  %s  ▶   %s", proj.ShortName, proj.Name)
-	} else if m.initialProjectCode != "" {
-		projectVal = fmt.Sprintf("◀  %s  ▶   (Loading projects...)", m.initialProjectCode)
+	if m.isEdit {
+		if len(m.projects) > 0 {
+			proj := m.projects[m.projectIndex]
+			projectVal = fmt.Sprintf("%s - %s (Read-only)", proj.ShortName, proj.Name)
+		} else if m.initialProjectCode != "" {
+			projectVal = fmt.Sprintf("%s (Read-only)", m.initialProjectCode)
+		} else {
+			projectVal = "None (Read-only)"
+		}
 	} else {
-		projectVal = "◀  None  ▶   (Loading projects...)"
+		if len(m.projects) > 0 {
+			proj := m.projects[m.projectIndex]
+			projectVal = fmt.Sprintf("◀  %s  ▶   %s", proj.ShortName, proj.Name)
+		} else if m.initialProjectCode != "" {
+			projectVal = fmt.Sprintf("◀  %s  ▶   (Loading projects...)", m.initialProjectCode)
+		} else {
+			projectVal = "◀  None  ▶   (Loading projects...)"
+		}
 	}
 
 	var typeVal string
@@ -542,7 +621,7 @@ func (m formModel) View() string {
 
 	// Horizontal options helper lists when dropdown is focused
 	var projectOptsList string
-	if m.focusIndex == fieldProject && len(m.projects) > 0 {
+	if !m.isEdit && m.focusIndex == fieldProject && len(m.projects) > 0 {
 		var shortNames []string
 		for _, p := range m.projects {
 			shortNames = append(shortNames, p.ShortName)

@@ -655,6 +655,92 @@ func (c *Client) CreateIssue(projectID, summary, description, priority, issueTyp
 	return created.ID, nil
 }
 
+// UpdateIssue updates an existing issue's details.
+func (c *Client) UpdateIssue(id, summary, description, priority, issueType, assignee string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	var customFields []map[string]interface{}
+
+	if priority != "" {
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Priority",
+			"$type": "SingleEnumIssueCustomField",
+			"value": map[string]interface{}{
+				"name": priority,
+			},
+		})
+	}
+
+	if issueType != "" {
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Type",
+			"$type": "SingleEnumIssueCustomField",
+			"value": map[string]interface{}{
+				"name": issueType,
+			},
+		})
+	}
+
+	assignee = normalizeAssignee(assignee)
+	if assignee == "me" {
+		if resolved, err := c.GetCurrentUserLogin(); err == nil {
+			assignee = resolved
+		}
+	}
+	if assignee == "" {
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Assignee",
+			"$type": "SingleUserIssueCustomField",
+			"value": nil,
+		})
+	} else {
+		customFields = append(customFields, map[string]interface{}{
+			"name":  "Assignee",
+			"$type": "SingleUserIssueCustomField",
+			"value": map[string]interface{}{
+				"login": assignee,
+			},
+		})
+	}
+
+	payload := map[string]interface{}{
+		"summary":     summary,
+		"description": description,
+	}
+	if len(customFields) > 0 {
+		payload["customFields"] = customFields
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + id
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent {
+		return parseAPIError(statusCode, body)
+	}
+
+	return nil
+}
+
 // ListComments lists comments for a specific issue.
 func (c *Client) ListComments(id string) ([]Comment, error) {
 	if c.baseURL == "" || c.token == "" {
