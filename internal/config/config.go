@@ -18,6 +18,8 @@ type Config struct {
 	CustomStates       []string `json:"custom_states"`
 	FilteredStates     []string `json:"filtered_states"`
 	FilteredPriorities []string `json:"filtered_priorities"`
+	SortColumn         string   `json:"sort_column"`
+	SortDirection      string   `json:"sort_direction"`
 }
 
 const (

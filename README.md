@@ -69,7 +69,9 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
   "fields": ["ID", "Summary", "State", "Priority", "Assignee"],
   "custom_types": ["Bug", "Task", "Ops", "Initiative", "Epic"],
   "custom_priorities": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"],
-  "custom_states": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"]
+  "custom_states": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"],
+  "sort_column": "ID",
+  "sort_direction": "asc"
 }
 ```
 
@@ -87,6 +89,8 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 | `custom_states` | Array of Strings | `[]` (empty) | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.). |
 | `filtered_states` | Array of Strings | `[]` (empty) | List of selected issue states to display on the tasks list. States not in this list will be filtered out. |
 | `filtered_priorities` | Array of Strings | `[]` (empty) | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out. |
+| `sort_column` | String | `""` | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.). |
+| `sort_direction` | String | `""` | The sorting direction (`asc` or `desc`). |
 
 ---
 
@@ -130,6 +134,7 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 * `Enter`: View details of the selected issue.
 * `/`: Activate search/filter mode. Type keywords to filter issues by summary/ID. Press `Esc` or `Enter` to close search mode.
 * `f`: Open the State & Priority filter panel. Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
+* `s`: Open the Column & Direction sort panel. Use arrow keys/hjkl to navigate, Space to select choices, Enter to save, and Esc to cancel.
 * `n`: Create a new issue in the current project context.
 * `r`: Clear cache and force reload issues list.
 * `Esc` / `Backspace`: Go back to the dashboard/previous screen.

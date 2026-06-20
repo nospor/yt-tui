@@ -78,3 +78,61 @@ func TestIssuesModel_MaxIssuesLimit(t *testing.T) {
 		t.Error("expected initProject to return nil cmd because cache.loadedAll is true")
 	}
 }
+
+func TestIssuesModel_Sort(t *testing.T) {
+	cfg := &config.Config{
+		CustomPriorities: []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"},
+		CustomStates:     []string{"Open", "In Progress", "Verified", "Done"},
+		SortColumn:       "ID",
+		SortDirection:    "asc",
+	}
+
+	m := newIssuesModel(nil, cfg)
+	m.issues = []ytcli.Issue{
+		{ID: "3", IDReadable: "TEST-3", Summary: "Issue 3"},
+		{ID: "1", IDReadable: "TEST-1", Summary: "Issue 1"},
+		{ID: "10", IDReadable: "TEST-10", Summary: "Issue 10"},
+		{ID: "2", IDReadable: "TEST-2", Summary: "Issue 2"},
+	}
+
+	// Verify sorting headers
+	m.updateTableColumns()
+	cols := m.table.Columns()
+	if len(cols) == 0 || cols[0].Title != "ID ▲" {
+		t.Errorf("expected first column title to be 'ID ▲', got '%s'", cols[0].Title)
+	}
+
+	m.cfg.SortDirection = "desc"
+	m.updateTableColumns()
+	cols = m.table.Columns()
+	if len(cols) == 0 || cols[0].Title != "ID ▼" {
+		t.Errorf("expected first column title to be 'ID ▼', got '%s'", cols[0].Title)
+	}
+
+	// Sort by ID asc
+	m.cfg.SortDirection = "asc"
+	m.sortIssues()
+	if m.issues[0].IDReadable != "TEST-1" || m.issues[1].IDReadable != "TEST-2" || m.issues[2].IDReadable != "TEST-3" || m.issues[3].IDReadable != "TEST-10" {
+		t.Errorf("ID asc sort failed, got order: %v, %v, %v, %v", m.issues[0].IDReadable, m.issues[1].IDReadable, m.issues[2].IDReadable, m.issues[3].IDReadable)
+	}
+
+	// Sort by ID desc
+	m.cfg.SortDirection = "desc"
+	m.sortIssues()
+	if m.issues[0].IDReadable != "TEST-10" || m.issues[1].IDReadable != "TEST-3" || m.issues[2].IDReadable != "TEST-2" || m.issues[3].IDReadable != "TEST-1" {
+		t.Errorf("ID desc sort failed, got order: %v, %v, %v, %v", m.issues[0].IDReadable, m.issues[1].IDReadable, m.issues[2].IDReadable, m.issues[3].IDReadable)
+	}
+
+	// Sort by Priority
+	m.cfg.SortColumn = "Priority"
+	m.cfg.SortDirection = "asc"
+	m.issues = []ytcli.Issue{
+		{ID: "1", IDReadable: "TEST-1", CustomFields: []ytcli.CustomField{{Name: "Priority", Value: map[string]interface{}{"name": "Critical"}}}},
+		{ID: "2", IDReadable: "TEST-2", CustomFields: []ytcli.CustomField{{Name: "Priority", Value: map[string]interface{}{"name": "Minor"}}}},
+		{ID: "3", IDReadable: "TEST-3", CustomFields: []ytcli.CustomField{{Name: "Priority", Value: map[string]interface{}{"name": "Normal"}}}},
+	}
+	m.sortIssues()
+	if m.issues[0].IDReadable != "TEST-2" || m.issues[1].IDReadable != "TEST-3" || m.issues[2].IDReadable != "TEST-1" {
+		t.Errorf("Priority sort failed, got order: %v, %v, %v", m.issues[0].IDReadable, m.issues[1].IDReadable, m.issues[2].IDReadable)
+	}
+}

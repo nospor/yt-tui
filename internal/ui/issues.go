@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
@@ -55,6 +56,12 @@ type issuesModel struct {
 	fields              []issueField
 	visibleIssueIDs     []string
 	lastSelectedIssueID string
+	sortMode            bool
+	sortActiveSection   int // 0: Column list, 1: Direction list
+	sortColCursor       int
+	sortDirCursor       int
+	tempSortCol         string
+	tempSortDir         string
 }
 
 func newIssuesModel(client *ytcli.Client, cfg *config.Config) issuesModel {
@@ -148,7 +155,7 @@ func newIssuesModel(client *ytcli.Client, cfg *config.Config) issuesModel {
 	ti.Prompt = " 🔍 / "
 	ti.Focus()
 
-	return issuesModel{
+	m := issuesModel{
 		client:      client,
 		cfg:         cfg,
 		table:       t,
@@ -161,6 +168,8 @@ func newIssuesModel(client *ytcli.Client, cfg *config.Config) issuesModel {
 		cache:       make(map[string]projectCache),
 		fields:      fields,
 	}
+	m.updateTableColumns()
+	return m
 }
 
 type issuesDataMsg struct {
@@ -271,7 +280,133 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 	return true
 }
 
+func compareIDs(idA, idB string) int {
+	partsA := strings.SplitN(idA, "-", 2)
+	partsB := strings.SplitN(idB, "-", 2)
+	if len(partsA) == 2 && len(partsB) == 2 {
+		if partsA[0] != partsB[0] {
+			return strings.Compare(partsA[0], partsB[0])
+		}
+		var numA, numB int
+		_, errA := fmt.Sscan(partsA[1], &numA)
+		_, errB := fmt.Sscan(partsB[1], &numB)
+		if errA == nil && errB == nil {
+			if numA < numB {
+				return -1
+			}
+			if numA > numB {
+				return 1
+			}
+			return 0
+		}
+	}
+	return strings.Compare(idA, idB)
+}
+
+func priorityIndex(p string, priorities []string) int {
+	for i, pr := range priorities {
+		if strings.EqualFold(pr, p) {
+			return i
+		}
+	}
+	return -1
+}
+
+func stateIndex(s string, states []string) int {
+	for i, st := range states {
+		if strings.EqualFold(st, s) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
+	var valA, valB string
+	var valueFn func(ytcli.Issue) string
+	for _, f := range m.fields {
+		if strings.EqualFold(f.title, fieldTitle) {
+			valueFn = f.value
+			break
+		}
+	}
+	if valueFn == nil {
+		return 0
+	}
+	valA = valueFn(a)
+	valB = valueFn(b)
+
+	titleLower := strings.ToLower(fieldTitle)
+	if titleLower == "id" {
+		return compareIDs(valA, valB)
+	}
+
+	if titleLower == "priority" && m.cfg != nil {
+		idxA := priorityIndex(valA, m.cfg.CustomPriorities)
+		idxB := priorityIndex(valB, m.cfg.CustomPriorities)
+		if idxA != -1 && idxB != -1 {
+			if idxA < idxB {
+				return -1
+			}
+			if idxA > idxB {
+				return 1
+			}
+			return 0
+		}
+	}
+
+	if titleLower == "state" && m.cfg != nil {
+		idxA := stateIndex(valA, m.cfg.CustomStates)
+		idxB := stateIndex(valB, m.cfg.CustomStates)
+		if idxA != -1 && idxB != -1 {
+			if idxA < idxB {
+				return -1
+			}
+			if idxA > idxB {
+				return 1
+			}
+			return 0
+		}
+	}
+
+	// Default case-insensitive string comparison
+	return strings.Compare(strings.ToLower(valA), strings.ToLower(valB))
+}
+
+func (m *issuesModel) sortIssues() {
+	if m.cfg == nil || m.cfg.SortColumn == "" {
+		return
+	}
+	sort.SliceStable(m.issues, func(i, j int) bool {
+		cmp := m.compareIssues(m.issues[i], m.issues[j], m.cfg.SortColumn)
+		if strings.EqualFold(m.cfg.SortDirection, "desc") {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
+}
+
+func (m *issuesModel) updateTableColumns() {
+	var columns []table.Column
+	for _, f := range m.fields {
+		title := f.title
+		if m.cfg != nil && strings.EqualFold(f.title, m.cfg.SortColumn) {
+			if strings.EqualFold(m.cfg.SortDirection, "desc") {
+				title += " ▼"
+			} else {
+				title += " ▲"
+			}
+		}
+		columns = append(columns, table.Column{
+			Title: title,
+			Width: f.width,
+		})
+	}
+	m.table.SetColumns(columns)
+}
+
 func (m *issuesModel) updateTableRows() {
+	m.sortIssues()
 	rows := []table.Row{}
 	m.visibleIssueIDs = []string{}
 	filterPhrase := strings.ToLower(m.searchInput.Value())
@@ -430,6 +565,84 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.sortMode {
+			numCols := len(m.fields)
+			switch msg.String() {
+			case "esc":
+				m.sortMode = false
+				return m, nil
+			case "q":
+				return m, tea.Quit
+			case "left", "h":
+				m.sortActiveSection = 0
+				return m, nil
+			case "right", "l":
+				m.sortActiveSection = 1
+				return m, nil
+			case "up", "k":
+				if m.sortActiveSection == 0 {
+					m.sortColCursor--
+					if m.sortColCursor < 0 {
+						m.sortColCursor = numCols - 1
+					}
+				} else {
+					m.sortDirCursor--
+					if m.sortDirCursor < 0 {
+						m.sortDirCursor = 1
+					}
+				}
+				return m, nil
+			case "down", "j":
+				if m.sortActiveSection == 0 {
+					m.sortColCursor++
+					if m.sortColCursor >= numCols {
+						m.sortColCursor = 0
+					}
+				} else {
+					m.sortDirCursor++
+					if m.sortDirCursor >= 2 {
+						m.sortDirCursor = 0
+					}
+				}
+				return m, nil
+			case " ":
+				if m.sortActiveSection == 0 {
+					if m.sortColCursor >= 0 && m.sortColCursor < numCols {
+						m.tempSortCol = m.fields[m.sortColCursor].title
+					}
+				} else {
+					if m.sortDirCursor == 0 {
+						m.tempSortDir = "asc"
+					} else {
+						m.tempSortDir = "desc"
+					}
+				}
+				return m, nil
+			case "enter":
+				if m.sortActiveSection == 0 {
+					if m.sortColCursor >= 0 && m.sortColCursor < numCols {
+						m.tempSortCol = m.fields[m.sortColCursor].title
+					}
+				} else {
+					if m.sortDirCursor == 0 {
+						m.tempSortDir = "asc"
+					} else {
+						m.tempSortDir = "desc"
+					}
+				}
+				if m.cfg != nil {
+					m.cfg.SortColumn = m.tempSortCol
+					m.cfg.SortDirection = m.tempSortDir
+					_ = config.SaveConfig(m.cfg)
+					m.updateTableColumns()
+					m.updateTableRows()
+				}
+				m.sortMode = false
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.filterMode {
 			numStates := 0
 			numPriorities := 0
@@ -574,6 +787,33 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "s":
+			if m.cfg != nil {
+				m.sortMode = true
+				m.sortActiveSection = 0
+				m.tempSortCol = m.cfg.SortColumn
+				if m.tempSortCol == "" && len(m.fields) > 0 {
+					m.tempSortCol = m.fields[0].title
+				}
+				m.tempSortDir = m.cfg.SortDirection
+				if m.tempSortDir == "" {
+					m.tempSortDir = "asc"
+				}
+
+				m.sortColCursor = 0
+				for idx, f := range m.fields {
+					if strings.EqualFold(f.title, m.tempSortCol) {
+						m.sortColCursor = idx
+						break
+					}
+				}
+				if strings.EqualFold(m.tempSortDir, "desc") {
+					m.sortDirCursor = 1
+				} else {
+					m.sortDirCursor = 0
+				}
+			}
+			return m, nil
 		case "enter":
 			if len(m.table.Rows()) > 0 {
 				cursor := m.table.Cursor()
@@ -614,6 +854,73 @@ func (m issuesModel) View() string {
 	if m.loading {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading issues..."))
+	}
+
+	if m.sortMode && m.cfg != nil {
+		// Build columns list
+		var colsList strings.Builder
+		colsList.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" SORT COLUMN") + "\n\n")
+		for i, f := range m.fields {
+			selected := "( )"
+			if strings.EqualFold(f.title, m.tempSortCol) {
+				selected = "(*)"
+			}
+			item := fmt.Sprintf(" %s %s ", selected, f.title)
+			if m.sortActiveSection == 0 && i == m.sortColCursor {
+				colsList.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorBg)).Background(lipgloss.Color(ColorCyan)).Bold(true).Render(item) + "\n")
+			} else {
+				colsList.WriteString(item + "\n")
+			}
+		}
+
+		// Build direction list
+		var dirList strings.Builder
+		dirList.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" SORT DIRECTION") + "\n\n")
+
+		dirs := []string{"asc", "desc"}
+		labels := []string{"Ascending", "Descending"}
+		for i, d := range dirs {
+			selected := "( )"
+			if strings.EqualFold(d, m.tempSortDir) {
+				selected = "(*)"
+			}
+			item := fmt.Sprintf(" %s %s ", selected, labels[i])
+			if m.sortActiveSection == 1 && i == m.sortDirCursor {
+				dirList.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorBg)).Background(lipgloss.Color(ColorCyan)).Bold(true).Render(item) + "\n")
+			} else {
+				dirList.WriteString(item + "\n")
+			}
+		}
+
+		// Calculate column width
+		colWidth := (m.width - 8) / 2
+		if colWidth < 20 {
+			colWidth = 20
+		}
+
+		columns := lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(colWidth).Render(colsList.String()),
+			lipgloss.NewStyle().Width(colWidth).Render(dirList.String()),
+		)
+
+		boxTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Sort Tasks List ")
+		box := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Padding(1, 2).
+			Width(m.width - 4).
+			Render(lipgloss.JoinVertical(lipgloss.Left,
+				boxTitle,
+				"",
+				columns,
+			))
+
+		titleText := " Issues Sort "
+		title := StyleTitle.Render(titleText)
+
+		help := StyleHelp.Render(" [↑↓←→] Navigate  [Space] Select  [Enter] Save  [Esc] Cancel  [q] Quit ")
+
+		return lipgloss.JoinVertical(lipgloss.Left, title, box, "", help)
 	}
 
 	if m.filterMode && m.cfg != nil {
@@ -756,7 +1063,7 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [f] Filter  [n] New  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [f] Filter  [s] Sort  [n] New  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 }
