@@ -1443,7 +1443,7 @@ func (m detailModel) View() string {
 		descBorder = StyleFocusBorder
 	}
 	descView := renderBoxWithTitle(
-		descBorder.Width(m.descViewport.Width).Height(m.descViewport.Height),
+		descBorder.Width(m.descViewport.Width+2).Height(m.descViewport.Height),
 		"Description",
 		m.descViewport.View(),
 		m.activeViewport == 0,
@@ -1454,7 +1454,7 @@ func (m detailModel) View() string {
 		commentsBorder = StyleFocusBorder
 	}
 	commentsView := renderBoxWithTitle(
-		commentsBorder.Width(m.commentsViewport.Width).Height(m.commentsViewport.Height),
+		commentsBorder.Width(m.commentsViewport.Width+2).Height(m.commentsViewport.Height),
 		"Comments",
 		m.commentsViewport.View(),
 		m.activeViewport == 1,
@@ -1465,7 +1465,7 @@ func (m detailModel) View() string {
 		linksBorder = StyleFocusBorder
 	}
 	linksView := renderBoxWithTitle(
-		linksBorder.Width(m.linksViewport.Width).Height(m.linksViewport.Height),
+		linksBorder.Width(m.linksViewport.Width+2).Height(m.linksViewport.Height),
 		"Links",
 		m.linksViewport.View(),
 		m.activeViewport == 2,
@@ -1476,7 +1476,7 @@ func (m detailModel) View() string {
 		attachmentsBorder = StyleFocusBorder
 	}
 	attachmentsView := renderBoxWithTitle(
-		attachmentsBorder.Width(m.attachmentsViewport.Width).Height(m.attachmentsViewport.Height),
+		attachmentsBorder.Width(m.attachmentsViewport.Width+2).Height(m.attachmentsViewport.Height),
 		"Attachments",
 		m.attachmentsViewport.View(),
 		m.activeViewport == 3,

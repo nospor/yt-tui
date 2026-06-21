@@ -412,3 +412,84 @@ func TestActivitiesFilterSelect(t *testing.T) {
 		t.Errorf("expected normal mode after escape, got %v", m.mode)
 	}
 }
+
+func TestDetailModel_ReproduceLayoutBug(t *testing.T) {
+	m := newDetailModel(nil, nil)
+	m.width = 120
+	m.height = 27 // childHeight corresponding to H=32
+	m.mode = modeNormal
+
+	issue := &ytcli.Issue{
+		ID:          "MTEL-21156",
+		IDReadable:  "MTEL-21156",
+		Summary:     "Add symfony authorisation",
+		Description: "as in the title",
+	}
+
+	activities := []ytcli.ActivityItem{
+		{
+			ID:        "act-1",
+			Type:      "CommentActivityItem",
+			Timestamp: float64(1744386539000), // 2025-04-11 16:48:59
+			Added: []interface{}{
+				map[string]interface{}{
+					"text": "Code pushed by robert.nodzewski@mediatel.co.uk:\nhttp://gitlab.mediatel.co.uk/mediatel/connected-\napi/commit/d0c6ebda55a18a29c2aa0e8a023c226e8d361965",
+				},
+			},
+		},
+		{
+			ID:        "act-2",
+			Type:      "CommentActivityItem",
+			Timestamp: float64(1744386539000),
+			Added: []interface{}{
+				map[string]interface{}{
+					"text": "[Robert Nodzewski](https://gitlab.mediatel.co.uk/robertn) mentioned this issue in a commit of [mediatel/connected-api] on branch issue/MTEL-21156",
+				},
+			},
+		},
+		{
+			ID:        "act-3",
+			Type:      "CommentActivityItem",
+			Timestamp: float64(1744389924000), // 2025-04-11 17:45:24
+			Added: []interface{}{
+				map[string]interface{}{
+					"text": "Code reviewed (merged to develop) by augusto.silvino@mediatel.co.uk",
+				},
+			},
+		},
+	}
+
+	m, _ = m.Update(detailDataMsg{
+		issue:      issue,
+		activities: activities,
+	})
+
+	t.Logf("m.descViewport.Height: %d", m.descViewport.Height)
+	t.Logf("m.commentsViewport.Height: %d", m.commentsViewport.Height)
+
+	descBorder := StyleNormalBorder
+	descView := renderBoxWithTitle(
+		descBorder.Width(m.descViewport.Width+2).Height(m.descViewport.Height),
+		"Description",
+		m.descViewport.View(),
+		false,
+	)
+
+	commentsBorder := StyleNormalBorder
+	commentsView := renderBoxWithTitle(
+		commentsBorder.Width(m.commentsViewport.Width+2).Height(m.commentsViewport.Height),
+		"Comments",
+		m.commentsViewport.View(),
+		false,
+	)
+
+	t.Logf("descView lines: %d", len(strings.Split(descView, "\n")))
+	t.Logf("descView:\n%s", descView)
+
+	t.Logf("commentsView lines: %d", len(strings.Split(commentsView, "\n")))
+	t.Logf("commentsView:\n%s", commentsView)
+
+	viewStr := m.View()
+	t.Logf("Rendered view height: %d lines", len(strings.Split(viewStr, "\n")))
+	t.Logf("Rendered View:\n%s", viewStr)
+}
