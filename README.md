@@ -71,7 +71,7 @@ You can resolve values in `config.json` dynamically from environment variables b
 
 ```json
 {
-  "url": "https://youtrack.adwanted.com/",
+  "url": "youtrack url",
   "token": "$SOMETOKEN"
 }
 ```

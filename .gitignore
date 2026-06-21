@@ -9,3 +9,6 @@ dist/
 # Release notes generated dynamically in pipelines
 RELEASE_NOTES.md
 todo.md
+
+# Local YouTrack dumps
+mtel_issues.json

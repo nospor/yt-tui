@@ -37,7 +37,7 @@ func newWelcomeModel(client *ytcli.Client) welcomeModel {
 	if prevURL != "" {
 		url.SetValue(prevURL)
 	} else {
-		url.SetValue("https://youtrack.adwanted.com/")
+		url.SetValue("")
 	}
 	url.Focus()
 
@@ -183,36 +183,44 @@ func (m welcomeModel) View() string {
 		builder.WriteString("Please configure your YouTrack API connection:\n\n")
 
 		// URL input
-		urlLabel := fmt.Sprintf("%-12s", "Base URL:")
+		urlLabelStyle := lipgloss.NewStyle().Width(12)
+		urlLabel := urlLabelStyle.Render("Base URL:")
 		urlView := m.urlInput.View()
 		if m.focusIndex == 0 {
 			urlView = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color(ColorViolet)).
+				Width(45).
 				Render(urlView)
 		} else {
 			urlView = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color(ColorOverlay)).
+				Width(45).
 				Render(urlView)
 		}
-		builder.WriteString(fmt.Sprintf("%s %s\n\n", urlLabel, urlView))
+		urlRow := lipgloss.JoinHorizontal(lipgloss.Center, urlLabel, urlView)
+		builder.WriteString(urlRow + "\n\n")
 
 		// Token input
-		tokenLabel := fmt.Sprintf("%-12s", "API Token:")
+		tokenLabelStyle := lipgloss.NewStyle().Width(12)
+		tokenLabel := tokenLabelStyle.Render("API Token:")
 		tokenView := m.tokenInput.View()
 		if m.focusIndex == 1 {
 			tokenView = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color(ColorViolet)).
+				Width(45).
 				Render(tokenView)
 		} else {
 			tokenView = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color(ColorOverlay)).
+				Width(45).
 				Render(tokenView)
 		}
-		builder.WriteString(fmt.Sprintf("%s %s\n\n", tokenLabel, tokenView))
+		tokenRow := lipgloss.JoinHorizontal(lipgloss.Center, tokenLabel, tokenView)
+		builder.WriteString(tokenRow + "\n\n")
 
 		builder.WriteString(StyleHelp.Render(" [Tab] Switch Fields  [Enter] Save & Login  [Ctrl+C] Quit "))
 		body = builder.String()
