@@ -5,8 +5,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"yt-tui/internal/ytcli"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -21,6 +23,7 @@ const (
 	modeCommentInput
 	modeStateSelect
 	modeAssignInput
+	modeYank
 )
 
 type linkedIssue struct {
@@ -59,11 +62,13 @@ type detailModel struct {
 	linksHeights     []int
 
 	// Sub-modes fields
-	mode         detailMode
-	textInput    textinput.Model
-	stateOptions []string
-	stateCursor  int
-	isModified   bool
+	mode            detailMode
+	textInput       textinput.Model
+	stateOptions    []string
+	stateCursor     int
+	isModified      bool
+	statusMessage   string
+	statusMessageID int
 }
 
 func newDetailModel(client *ytcli.Client, states []string) detailModel {
@@ -95,6 +100,10 @@ type detailDataMsg struct {
 
 type detailActionFinishedMsg struct {
 	err error
+}
+
+type clearStatusMsg struct {
+	id int
 }
 
 func (m detailModel) loadDetailCmd() tea.Cmd {
@@ -129,6 +138,12 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		res.updateViewportSizes()
 	}()
 	switch msg := msg.(type) {
+	case clearStatusMsg:
+		if msg.id == m.statusMessageID {
+			m.statusMessage = ""
+		}
+		return m, nil
+
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
@@ -164,6 +179,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		if m.loading {
 			return m, nil
 		}
+
+		// Save current status message, but reset it if the user presses another key
+		m.statusMessage = ""
 
 		// Handle sub-modes key events
 		switch m.mode {
@@ -226,10 +244,56 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 			}
 			return m, nil
+
+		case modeYank:
+			switch msg.String() {
+			case "s":
+				var copyCmd tea.Cmd
+				if m.issue != nil {
+					text := fmt.Sprintf("%s %s", m.issue.IDReadable, m.issue.Summary)
+					if err := clipboard.WriteAll(text); err != nil {
+						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+					} else {
+						m.statusMessage = "Copied ID and summary to clipboard!"
+						m.statusMessageID++
+						currentID := m.statusMessageID
+						copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+							return clearStatusMsg{id: currentID}
+						})
+					}
+				}
+				m.mode = modeNormal
+				return m, copyCmd
+			case "d":
+				var copyCmd tea.Cmd
+				if m.issue != nil {
+					text := m.issue.Description
+					if err := clipboard.WriteAll(text); err != nil {
+						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+					} else {
+						m.statusMessage = "Copied description to clipboard!"
+						m.statusMessageID++
+						currentID := m.statusMessageID
+						copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+							return clearStatusMsg{id: currentID}
+						})
+					}
+				}
+				m.mode = modeNormal
+				return m, copyCmd
+			case "esc":
+				m.mode = modeNormal
+			default:
+				m.mode = modeNormal
+			}
+			return m, nil
 		}
 
 		// Normal Mode Key Handling
 		switch msg.String() {
+		case "y":
+			m.mode = modeYank
+			return m, nil
 		case "esc", "backspace":
 			var proj string
 			if m.isModified && m.issue != nil && m.issue.Project != nil {
@@ -348,7 +412,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 
 func (m *detailModel) updateViewportSizes() {
 	var actionHeight int
-	if m.mode != modeNormal {
+	if m.mode != modeNormal && m.mode != modeYank {
 		actionHeight = 5
 	}
 	bottomHeight := m.height - 9 - actionHeight
@@ -734,23 +798,136 @@ func (m detailModel) View() string {
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
 	}
 
-	help := StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [Enter] Jump to Task  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [r] Refresh  [q] Quit ")
+	var footer string
+	if m.statusMessage != "" {
+		footer = StyleStatusMessage.Render(" " + m.statusMessage + " ")
+	} else {
+		footer = StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [Enter] Jump to Task  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ")
+	}
 
-	return lipgloss.JoinVertical(lipgloss.Left,
+	view := lipgloss.JoinVertical(lipgloss.Left,
 		StyleTitle.Render(" Issue Detail "),
 		metaView,
 		" ",
 		splitView,
 		actionView,
 		" ",
-		help,
+		footer,
 	)
+
+	if m.mode == modeYank {
+		popupContent := lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Yank Options:"),
+			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[s]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("ID & Summary")),
+			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[d]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("Description")),
+		)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(0, 1).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		x := (m.width - 4) - popupWidth
+		if x < 0 {
+			x = 0
+		}
+		// Overlay starting at row 0 (aligned with title), col x
+		view = overlayLines(view, popup, x, 0)
+	}
+
+	return view
 }
 
 var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 func stripAnsi(s string) string {
 	return ansiRegexp.ReplaceAllString(s, "")
+}
+
+type cell struct {
+	char  rune
+	style string
+}
+
+func parseANSILine(line string) []cell {
+	var cells []cell
+	var currentStyle strings.Builder
+	runes := []rune(line)
+	inEscape := false
+
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == '\x1b' {
+			inEscape = true
+			currentStyle.WriteRune(r)
+			continue
+		}
+		if inEscape {
+			currentStyle.WriteRune(r)
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+		cells = append(cells, cell{
+			char:  r,
+			style: currentStyle.String(),
+		})
+	}
+	return cells
+}
+
+func cellsToString(cells []cell) string {
+	var sb strings.Builder
+	var lastStyle string
+	for _, c := range cells {
+		if c.style != lastStyle {
+			sb.WriteString(c.style)
+			lastStyle = c.style
+		}
+		sb.WriteRune(c.char)
+	}
+	sb.WriteString("\x1b[0m")
+	return sb.String()
+}
+
+func overlayLines(base, overlay string, x, y int) string {
+	baseLines := strings.Split(base, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	for i, oLine := range overlayLines {
+		targetY := y + i
+		if targetY < 0 || targetY >= len(baseLines) {
+			continue
+		}
+
+		bLine := baseLines[targetY]
+		bCells := parseANSILine(bLine)
+		oCells := parseANSILine(oLine)
+
+		if len(bCells) < x {
+			padding := make([]cell, x-len(bCells))
+			for p := range padding {
+				padding[p] = cell{char: ' '}
+			}
+			bCells = append(bCells, padding...)
+		}
+
+		for j, oCell := range oCells {
+			pos := x + j
+			if pos >= len(bCells) {
+				bCells = append(bCells, oCell)
+			} else {
+				bCells[pos] = oCell
+			}
+		}
+
+		baseLines[targetY] = cellsToString(bCells)
+	}
+
+	return strings.Join(baseLines, "\n")
 }
 
 func renderBoxWithTitle(style lipgloss.Style, title string, content string, active bool) string {

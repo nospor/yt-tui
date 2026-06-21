@@ -275,11 +275,9 @@ func (m AppModel) View() string {
 
 	// Root visual container wrapping child screens
 	brand := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render("YouTrack")
-	tui := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("Terminal TUI")
-	separator := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Render("│")
 	diamond := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Render("◆")
 
-	headerText := fmt.Sprintf("%s  %s  %s  %s  %s", diamond, brand, separator, tui, diamond)
+	headerText := fmt.Sprintf("%s  %s  %s", diamond, brand, diamond)
 
 	topHeader := lipgloss.NewStyle().
 		Width(m.width).

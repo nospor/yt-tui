@@ -4,6 +4,19 @@ A sleek, keyboard-driven terminal dashboard for JetBrains YouTrack, written in G
 
 Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui` keeps you in your terminal flow while tracking your project tasks.
 
+<p float="left">
+  <img src="assets/images/dashboard.png" width="300" />
+  <img src="assets/images/taskslist.png" width="300" />
+</p>
+<p float="left">
+  <img src="assets/images/taskdetails.png" width="300" />
+  <img src="assets/images/tasknew.png" width="300" />
+</p>
+<p float="left">
+  <img src="assets/images/listfiltering.png" width="300" />
+  <img src="assets/images/listsorting.png" width="300" />
+</p>
+
 ---
 
 ## ✨ Features
@@ -204,6 +217,10 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `a`: Assign issue (opens assignee input prompt; type username or `me` and hit `Enter`).
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
+* `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
+  - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.
+  - `d`: Copy the task description to the clipboard.
+  - Pressing any other key cancels the yanking motion.
 * `r`: Force refresh issue details, comments, and links.
 * `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
 

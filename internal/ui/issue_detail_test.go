@@ -83,3 +83,80 @@ func TestDetailModel_ViewportScrolling(t *testing.T) {
 		t.Errorf("expected YOffset to return to 0 after pressing 'K', got %d", m.descViewport.YOffset)
 	}
 }
+
+func TestDetailModel_YankMotion(t *testing.T) {
+	// Initialize model
+	m := newDetailModel(nil, nil)
+	m.width = 80
+	m.height = 24
+
+	// Load issue data
+	issue := &ytcli.Issue{
+		ID:          "1",
+		IDReadable:  "DEMO-1",
+		Summary:     "Test issue summary",
+		Description: "Test description content",
+	}
+
+	m, _ = m.Update(detailDataMsg{
+		issue:    issue,
+		comments: []ytcli.Comment{},
+	})
+
+	// 1. Initially mode should be modeNormal
+	if m.mode != modeNormal {
+		t.Fatalf("expected initial mode to be modeNormal, got %v", m.mode)
+	}
+
+	// 2. Press 'y' to enter yank mode
+	yMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
+	m, _ = m.Update(yMsg)
+
+	if m.mode != modeYank {
+		t.Fatalf("expected mode to transition to modeYank after pressing 'y', got %v", m.mode)
+	}
+
+	// 3. Press 's' to copy summary (should go back to modeNormal)
+	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
+	m, _ = m.Update(sMsg)
+
+	if m.mode != modeNormal {
+		t.Fatalf("expected mode to transition back to modeNormal after pressing 's', got %v", m.mode)
+	}
+
+	// Verify clipboard action or error
+	if m.err == nil && m.statusMessage != "Copied ID and summary to clipboard!" {
+		t.Errorf("expected statusMessage to be set when copy succeeds, got: %s", m.statusMessage)
+	}
+
+	// 4. Press 'y' again to enter yank mode
+	m, _ = m.Update(yMsg)
+	if m.mode != modeYank {
+		t.Fatalf("expected mode to transition to modeYank after pressing 'y' second time, got %v", m.mode)
+	}
+
+	// 5. Press 'd' to copy description (should go back to modeNormal)
+	dMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")}
+	m, _ = m.Update(dMsg)
+
+	if m.mode != modeNormal {
+		t.Fatalf("expected mode to transition back to modeNormal after pressing 'd', got %v", m.mode)
+	}
+
+	if m.err == nil && m.statusMessage != "Copied description to clipboard!" {
+		t.Errorf("expected statusMessage to be set when description copy succeeds, got: %s", m.statusMessage)
+	}
+
+	// 6. Test cancel yanking with escape or other key
+	m, _ = m.Update(yMsg)
+	if m.mode != modeYank {
+		t.Fatalf("expected mode to transition to modeYank after pressing 'y', got %v", m.mode)
+	}
+
+	// Press 'esc'
+	escMsg := tea.KeyMsg{Type: tea.KeyEsc}
+	m, _ = m.Update(escMsg)
+	if m.mode != modeNormal {
+		t.Fatalf("expected mode to transition back to modeNormal after pressing 'esc', got %v", m.mode)
+	}
+}
