@@ -30,6 +30,13 @@ type linkedIssue struct {
 	state      string
 }
 
+func isStateClosed(state string) bool {
+	return strings.EqualFold(state, "Fixed") ||
+		strings.EqualFold(state, "Done") ||
+		strings.EqualFold(state, "Resolved") ||
+		strings.EqualFold(state, "Closed")
+}
+
 type detailModel struct {
 	client           *ytcli.Client
 	issueKey         string
@@ -473,13 +480,21 @@ func (m *detailModel) updateViewportContents() {
 		}
 	}
 
-	// Sort linkedIssues by relation first (matching the sorted relations order)
-	// and secondarily by ID to keep consistent layout
+	// Sort linkedIssues by relation first (matching the sorted relations order),
+	// then by unresolved (open) status before resolved (closed) status,
+	// and thirdly by ID to keep consistent layout
 	sort.Slice(m.linkedIssues, func(i, j int) bool {
-		if m.linkedIssues[i].relation != m.linkedIssues[j].relation {
-			return m.linkedIssues[i].relation < m.linkedIssues[j].relation
+		a := m.linkedIssues[i]
+		b := m.linkedIssues[j]
+		if a.relation != b.relation {
+			return a.relation < b.relation
 		}
-		return m.linkedIssues[i].idReadable < m.linkedIssues[j].idReadable
+		aClosed := isStateClosed(a.state)
+		bClosed := isStateClosed(b.state)
+		if aClosed != bClosed {
+			return !aClosed // unresolved (false) comes first
+		}
+		return a.idReadable < b.idReadable
 	})
 
 	if len(m.linkedIssues) == 0 {
@@ -543,13 +558,11 @@ func (m *detailModel) updateViewportContents() {
 				}
 
 				stateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext))
-				isClosed := strings.EqualFold(item.state, "Fixed") ||
-					strings.EqualFold(item.state, "Done") ||
-					strings.EqualFold(item.state, "Resolved") ||
-					strings.EqualFold(item.state, "Closed")
+				isClosed := isStateClosed(item.state)
 
 				if isClosed {
 					stateStyle = stateStyle.Foreground(lipgloss.Color(ColorGreen)).Strikethrough(true)
+					idStyle = idStyle.Strikethrough(true)
 				}
 
 				stateLabel := ""
