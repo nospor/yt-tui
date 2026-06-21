@@ -66,6 +66,22 @@ sudo cp yt-tui /usr/local/bin/
 
 `yt-tui` loads its user settings and credentials from a JSON file located at `~/.config/yt-tui/config.json`. The file and its parent directories are automatically created with default settings on the first run.
 
+### Environment Variables & `.env` Files (Optional)
+You can resolve values in `config.json` dynamically from environment variables by prefixing the value with `$`. For example:
+
+```json
+{
+  "url": "https://youtrack.adwanted.com/",
+  "token": "$SOMETOKEN"
+}
+```
+
+When `yt-tui` encounters a value starting with `$`, it resolves it using:
+1. **System Environment Variables**: (e.g., `os.Getenv("SOMETOKEN")`).
+2. **Local/Config `.env` Files**: It checks for the variable definition in a local `.env` file in the current working directory, falling back to `~/.config/yt-tui/.env`.
+
+If you do not specify a `url` or `token` in `config.json` at all, `yt-tui` will check standard fallback variables: `YOUTRACK_BASE_URL` and `YOUTRACK_TOKEN`.
+
 If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they will be automatically migrated to your `config.json` on the first launch.
 
 ### Default Config Structure

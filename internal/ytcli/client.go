@@ -29,7 +29,11 @@ func NewClient() *Client {
 		c.token = cfg.Token
 	}
 
-	// Environment variable overrides
+	// 1. Resolve $env variables from config if they are present
+	c.baseURL = resolveEnvValue(c.baseURL)
+	c.token = resolveEnvValue(c.token)
+
+	// 2. Check standard environment variable overrides
 	if envURL := os.Getenv("YOUTRACK_BASE_URL"); envURL != "" {
 		c.baseURL = envURL
 	}
@@ -37,7 +41,15 @@ func NewClient() *Client {
 		c.token = envToken
 	}
 
-	// If still empty, check legacy ~/.config/youtrack-cli/.env for migration
+	// 3. If c.baseURL or c.token is still empty, check standard keys in .env files
+	if c.baseURL == "" {
+		c.baseURL = resolveEnvValue("$YOUTRACK_BASE_URL")
+	}
+	if c.token == "" {
+		c.token = resolveEnvValue("$YOUTRACK_TOKEN")
+	}
+
+	// 4. If still empty, check legacy ~/.config/youtrack-cli/.env for migration
 	if c.baseURL == "" || c.token == "" {
 		legacyURL, legacyToken, err := getLegacyCredentials()
 		if err == nil {
@@ -929,6 +941,65 @@ func (c *Client) SaveCredentials(baseURL, token string) error {
 	return config.SaveConfig(cfg)
 }
 
+// parseEnvFile reads an env file and returns all key-value pairs.
+func parseEnvFile(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	envMap := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		key = strings.TrimPrefix(key, "export ")
+		key = strings.TrimSpace(key)
+		val := strings.TrimSpace(parts[1])
+		// Remove surrounding quotes
+		val = strings.Trim(val, "'\"")
+		envMap[key] = val
+	}
+
+	return envMap, nil
+}
+
+// resolveEnvValue checks if val starts with "$" and resolves it from the environment
+// or from available .env files (checking local `./.env` first, then `~/.config/yt-tui/.env`).
+func resolveEnvValue(val string) string {
+	if !strings.HasPrefix(val, "$") {
+		return val
+	}
+	envName := strings.TrimPrefix(val, "$")
+
+	// 1. Check process environment first
+	if envVal := os.Getenv(envName); envVal != "" {
+		return envVal
+	}
+
+	// 2. Check local/config .env files
+	envPaths := []string{".env"}
+	if home, err := os.UserHomeDir(); err == nil {
+		envPaths = append(envPaths, filepath.Join(home, ".config", "yt-tui", ".env"))
+	}
+
+	for _, path := range envPaths {
+		if envMap, err := parseEnvFile(path); err == nil {
+			if fileVal, exists := envMap[envName]; exists && fileVal != "" {
+				return fileVal
+			}
+		}
+	}
+
+	return ""
+}
+
 // getLegacyCredentials retrieves the legacy config for migration fallback.
 func getLegacyCredentials() (string, string, error) {
 	home, err := os.UserHomeDir()
@@ -937,22 +1008,13 @@ func getLegacyCredentials() (string, string, error) {
 	}
 
 	configPath := filepath.Join(home, ".config", "youtrack-cli", ".env")
-	data, err := os.ReadFile(configPath)
+	envMap, err := parseEnvFile(configPath)
 	if err != nil {
 		return "", "", err
 	}
 
-	var baseURL, token string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "YOUTRACK_BASE_URL=") {
-			val := strings.TrimPrefix(line, "YOUTRACK_BASE_URL=")
-			baseURL = strings.Trim(val, "'\"")
-		} else if strings.HasPrefix(line, "YOUTRACK_TOKEN=") {
-			val := strings.TrimPrefix(line, "YOUTRACK_TOKEN=")
-			token = strings.Trim(val, "'\"")
-		}
-	}
+	baseURL := envMap["YOUTRACK_BASE_URL"]
+	token := envMap["YOUTRACK_TOKEN"]
 
 	if baseURL == "" || token == "" {
 		return "", "", errors.New("legacy credentials incomplete")
