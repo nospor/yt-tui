@@ -364,13 +364,22 @@ func (m *detailModel) updateViewportSizes() {
 		viewportCommentsWidth = 1
 	}
 
-	commentsViewportHeight := (viewportHeight - 7) / 2
+	commentsViewportHeight := viewportHeight
 	if commentsViewportHeight < 1 {
 		commentsViewportHeight = 1
 	}
-	linksViewportHeight := (viewportHeight - 7) - commentsViewportHeight
+
+	linksViewportHeight := 4
+	if linksViewportHeight > viewportHeight-2 {
+		linksViewportHeight = viewportHeight - 2
+	}
 	if linksViewportHeight < 1 {
 		linksViewportHeight = 1
+	}
+
+	descViewportHeight := viewportHeight - linksViewportHeight - 7
+	if descViewportHeight < 1 {
+		descViewportHeight = 1
 	}
 
 	// Check if the dimensions actually changed
@@ -378,10 +387,10 @@ func (m *detailModel) updateViewportSizes() {
 	commentsWidthChanged := m.commentsViewport.Width != viewportCommentsWidth
 
 	m.descViewport.Width = viewportDescWidth
-	m.descViewport.Height = viewportHeight
+	m.descViewport.Height = descViewportHeight
 	m.commentsViewport.Width = viewportCommentsWidth
 	m.commentsViewport.Height = commentsViewportHeight
-	m.linksViewport.Width = viewportCommentsWidth
+	m.linksViewport.Width = viewportDescWidth
 	m.linksViewport.Height = linksViewportHeight
 
 	// Only re-wrap and set content if the width changed and we have the issue loaded
@@ -455,6 +464,15 @@ func (m *detailModel) updateViewportContents() {
 			})
 		}
 	}
+
+	// Sort linkedIssues by relation first (matching the sorted relations order)
+	// and secondarily by ID to keep consistent layout
+	sort.Slice(m.linkedIssues, func(i, j int) bool {
+		if m.linkedIssues[i].relation != m.linkedIssues[j].relation {
+			return m.linkedIssues[i].relation < m.linkedIssues[j].relation
+		}
+		return m.linkedIssues[i].idReadable < m.linkedIssues[j].idReadable
+	})
 
 	if len(m.linkedIssues) == 0 {
 		linksStr.WriteString("No linked issues.")
@@ -631,8 +649,8 @@ func (m detailModel) View() string {
 		Height(m.linksViewport.Height + 4).
 		Render(lipgloss.JoinVertical(lipgloss.Left, linksTitle, "", m.linksViewport.View()))
 
-	rightColumn := lipgloss.JoinVertical(lipgloss.Left, commentsView, "", linksView)
-	splitView := lipgloss.JoinHorizontal(lipgloss.Top, descView, " ", rightColumn)
+	leftColumn := lipgloss.JoinVertical(lipgloss.Left, descView, "", linksView)
+	splitView := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", commentsView)
 
 	// 3. Lower Action overlay
 	var actionView string
