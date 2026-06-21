@@ -577,9 +577,14 @@ func (c *Client) GetCurrentUserLogin() (string, error) {
 }
 
 // normalizeAssignee converts assignee username input to lowercase and replaces spaces with dots.
+// It also maps unassignment keywords like "unassigned", "unassign", "none", and "-" to an empty string.
 func normalizeAssignee(assignee string) string {
 	assignee = strings.TrimSpace(assignee)
 	if assignee == "" {
+		return ""
+	}
+	lower := strings.ToLower(assignee)
+	if lower == "unassigned" || lower == "unassign" || lower == "none" || lower == "-" {
 		return ""
 	}
 	parts := strings.Fields(assignee)

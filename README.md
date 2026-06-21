@@ -29,7 +29,7 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 - **🔄 Complete Issue Lifecycle**:
   - **Create & Clone**: Instantly spawn new issues or clone existing ones (pre-populating description, type, priority, and assignee details).
   - **State Transitions**: Transition states (e.g. `Open` ➔ `In Progress` ➔ `Fixed`) dynamically.
-  - **Assigning**: Quickly assign tickets to other team members or self-assign with `me`.
+  - **Assigning**: Quickly assign tickets to other team members, self-assign with `me`, or unassign with `unassigned` (also supports `unassign`, `none`, or `-`).
   - **Commenting**: Write and submit markdown comments directly from the detail view.
 - **🛡️ Native REST API Integration**: Directly interacts with YouTrack REST API endpoints, completely avoiding Python keyring lockouts, credential corruption, or subprocess TTY issues.
 
@@ -215,7 +215,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
 * `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
-* `a`: Assign issue (opens assignee input prompt; type username or `me` and hit `Enter`).
+* `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:

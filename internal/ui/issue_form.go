@@ -71,7 +71,7 @@ func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
 	desc.SetHeight(10) // Bigger description field
 
 	a := textinput.New()
-	a.Placeholder = "Assignee username (or 'me')"
+	a.Placeholder = "Assignee username (or 'me', 'unassigned')"
 
 	return formModel{
 		client:        client,

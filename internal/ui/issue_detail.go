@@ -494,7 +494,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, nil
 		case "a":
 			m.mode = modeAssignInput
-			m.textInput.Placeholder = "Assignee username (or 'me')..."
+			m.textInput.Placeholder = "Assignee (username, 'me', or 'unassigned')..."
 			m.textInput.SetValue("")
 			m.textInput.Focus()
 			return m, nil
@@ -901,7 +901,7 @@ func (m detailModel) View() string {
 			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeAssignInput:
-		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username or 'me', Esc to cancel) ")
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username, 'me', or 'unassigned', Esc to cancel) ")
 		actionView = "\n" + lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
