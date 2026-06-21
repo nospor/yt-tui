@@ -532,7 +532,7 @@ func (m *detailModel) updateViewportSizes() {
 	if m.mode != modeNormal && m.mode != modeYank && m.mode != modeYankUrlSelect {
 		actionHeight = 5
 	}
-	bottomHeight := m.height - 9 - actionHeight
+	bottomHeight := m.height - 10 - actionHeight
 	if bottomHeight < 3 {
 		bottomHeight = 3
 	}
@@ -827,19 +827,31 @@ func (m detailModel) View() string {
 		projectStr = fmt.Sprintf("%s (%s)", issue.Project.Name, issue.Project.ShortName)
 	}
 
+	creatorVal := "N/A"
+	if issue.Reporter != nil {
+		creatorVal = issue.Reporter.DisplayName()
+	}
+
+	projPadded := fmt.Sprintf("%-30s", projectStr)
+	assigneePadded := fmt.Sprintf("%-20s", issue.Assignee())
+	creatorPadded := fmt.Sprintf("%-20s", creatorVal)
+
 	row1 := fmt.Sprintf("%s  %-30s  Priority: %-12s  Type: %-12s",
 		lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(issue.IDReadable),
 		issue.Summary,
 		StyleNormal.Foreground(lipgloss.Color(ColorYellow)).Render(issue.Priority()),
 		StyleNormal.Foreground(lipgloss.Color(ColorViolet)).Render(issue.Type()),
 	)
-	row2 := fmt.Sprintf("Project: %-30s  Assignee: %-20s  State: %s",
-		projectStr,
-		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(issue.Assignee()),
+	row2 := fmt.Sprintf("Project: %s  State: %s",
+		projPadded,
 		stateBadge,
 	)
+	row3 := fmt.Sprintf("Assignee: %s  Creator: %s",
+		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(assigneePadded),
+		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(creatorPadded),
+	)
 
-	metaView := metaStyle.Render(lipgloss.JoinVertical(lipgloss.Left, row1, row2))
+	metaView := metaStyle.Render(lipgloss.JoinVertical(lipgloss.Left, row1, row2, row3))
 
 	// 2. Bottom viewports
 	descBorder := StyleNormalBorder

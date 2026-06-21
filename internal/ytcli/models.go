@@ -108,6 +108,7 @@ type Issue struct {
 	CustomFields []CustomField `json:"customFields,omitempty"`
 	Comments     []Comment     `json:"comments,omitempty"`
 	Links        []IssueLink   `json:"links,omitempty"`
+	Reporter     *User         `json:"reporter,omitempty"`
 }
 
 // Parents returns the parent issues linked to this issue.
