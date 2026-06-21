@@ -22,6 +22,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var clipboardWriteAll = clipboard.WriteAll
+
 type detailMode int
 
 const (
@@ -367,7 +369,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				var copyCmd tea.Cmd
 				if m.issue != nil {
 					text := fmt.Sprintf("%s %s", m.issue.IDReadable, m.issue.Summary)
-					if err := clipboard.WriteAll(text); err != nil {
+					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
 					} else {
 						m.statusMessage = "Copied ID and summary to clipboard!"
@@ -384,7 +386,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				var copyCmd tea.Cmd
 				if m.issue != nil {
 					text := m.issue.Description
-					if err := clipboard.WriteAll(text); err != nil {
+					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
 					} else {
 						m.statusMessage = "Copied description to clipboard!"
@@ -472,7 +474,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					m.mode = modeNormal
 					return m, copyCmd
 				} else if len(urls) == 1 {
-					if err := clipboard.WriteAll(urls[0]); err != nil {
+					if err := clipboardWriteAll(urls[0]); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
 					} else {
 						m.statusMessage = "Copied URL to clipboard!"
@@ -513,7 +515,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				var copyCmd tea.Cmd
 				if len(m.yankUrls) > 0 && m.yankUrlCursor >= 0 && m.yankUrlCursor < len(m.yankUrls) {
 					text := m.yankUrls[m.yankUrlCursor]
-					if err := clipboard.WriteAll(text); err != nil {
+					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
 					} else {
 						m.statusMessage = "Copied URL to clipboard!"

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"yt-tui/internal/ytcli"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbletea"
 )
 
@@ -85,6 +86,15 @@ func TestDetailModel_ViewportScrolling(t *testing.T) {
 }
 
 func TestDetailModel_YankMotion(t *testing.T) {
+	var yankedText string
+	clipboardWriteAll = func(text string) error {
+		yankedText = text
+		return nil
+	}
+	defer func() {
+		clipboardWriteAll = clipboard.WriteAll
+	}()
+
 	// Initialize model
 	m := newDetailModel(nil, nil)
 	m.width = 80
@@ -125,8 +135,14 @@ func TestDetailModel_YankMotion(t *testing.T) {
 	}
 
 	// Verify clipboard action or error
-	if m.err == nil && m.statusMessage != "Copied ID and summary to clipboard!" {
+	if m.err != nil {
+		t.Errorf("expected no error, got: %v", m.err)
+	}
+	if m.statusMessage != "Copied ID and summary to clipboard!" {
 		t.Errorf("expected statusMessage to be set when copy succeeds, got: %s", m.statusMessage)
+	}
+	if yankedText != "DEMO-1 Test issue summary" {
+		t.Errorf("expected yanked text 'DEMO-1 Test issue summary', got: %q", yankedText)
 	}
 
 	// 4. Press 'y' again to enter yank mode
@@ -143,8 +159,14 @@ func TestDetailModel_YankMotion(t *testing.T) {
 		t.Fatalf("expected mode to transition back to modeNormal after pressing 'd', got %v", m.mode)
 	}
 
-	if m.err == nil && m.statusMessage != "Copied description to clipboard!" {
+	if m.err != nil {
+		t.Errorf("expected no error, got: %v", m.err)
+	}
+	if m.statusMessage != "Copied description to clipboard!" {
 		t.Errorf("expected statusMessage to be set when description copy succeeds, got: %s", m.statusMessage)
+	}
+	if yankedText != "Test description content" {
+		t.Errorf("expected yanked text 'Test description content', got: %q", yankedText)
 	}
 
 	// 6. Test cancel yanking with escape or other key
@@ -162,6 +184,15 @@ func TestDetailModel_YankMotion(t *testing.T) {
 }
 
 func TestDetailModel_YankUrls(t *testing.T) {
+	var yankedText string
+	clipboardWriteAll = func(text string) error {
+		yankedText = text
+		return nil
+	}
+	defer func() {
+		clipboardWriteAll = clipboard.WriteAll
+	}()
+
 	// 1. Test case: No URLs
 	m := newDetailModel(nil, nil)
 	issue := &ytcli.Issue{
@@ -208,6 +239,9 @@ func TestDetailModel_YankUrls(t *testing.T) {
 	}
 	if m.statusMessage != "Copied URL to clipboard!" {
 		t.Errorf("expected 'Copied URL to clipboard!' status, got: %s", m.statusMessage)
+	}
+	if yankedText != "https://google.com/" {
+		t.Errorf("expected yanked text 'https://google.com/', got: %q", yankedText)
 	}
 
 	// 3. Test case: Multiple URLs (should open selection menu, select second, press Enter)
@@ -297,6 +331,9 @@ func TestDetailModel_YankUrls(t *testing.T) {
 	}
 	if m.statusMessage != "Copied URL to clipboard!" {
 		t.Errorf("expected 'Copied URL to clipboard!', got: %s", m.statusMessage)
+	}
+	if yankedText != "https://github.com" {
+		t.Errorf("expected yanked text 'https://github.com', got: %q", yankedText)
 	}
 }
 
