@@ -27,6 +27,7 @@ type detailMode int
 const (
 	modeNormal detailMode = iota
 	modeCommentInput
+	modeCommentEdit
 	modeStateSelect
 	modeAssignInput
 	modeYank
@@ -65,6 +66,11 @@ type detailModel struct {
 	commentsViewport    viewport.Model
 	linksViewport       viewport.Model
 	attachmentsViewport viewport.Model
+
+	// Comments selection
+	commentsCursor      int
+	commentsLineNumbers []int
+	commentsHeights     []int
 
 	// Links selection
 	linkedIssues     []linkedIssue
@@ -200,6 +206,7 @@ func (m *detailModel) setIssueKey(key string) tea.Cmd {
 	m.activeViewport = 0
 	m.linksCursor = 0
 	m.attachmentsCursor = 0
+	m.commentsCursor = 0
 	m.loadingText = ""
 	return m.loadDetailCmd()
 }
@@ -283,6 +290,25 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					m.loading = true
 					return m, func() tea.Msg {
 						err := m.client.AddComment(m.issue.IDReadable, val)
+						return detailActionFinishedMsg{err: err}
+					}
+				}
+				m.mode = modeNormal
+			case "esc":
+				m.mode = modeNormal
+			}
+			m.textInput, cmd = m.textInput.Update(msg)
+			return m, cmd
+
+		case modeCommentEdit:
+			switch msg.String() {
+			case "enter":
+				val := m.textInput.Value()
+				if val != "" && len(m.comments) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.comments) {
+					m.loading = true
+					commentID := m.comments[m.commentsCursor].ID
+					return m, func() tea.Msg {
+						err := m.client.UpdateComment(m.issue.IDReadable, commentID, val)
 						return detailActionFinishedMsg{err: err}
 					}
 				}
@@ -674,6 +700,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.updateViewportContents()
 			return m, nil
 		case "up", "k":
+			if m.activeViewport == 1 {
+				m.commentsCursor--
+				if m.commentsCursor < 0 {
+					m.commentsCursor = 0
+				}
+				m.updateViewportContents()
+				return m, nil
+			}
 			if m.activeViewport == 2 {
 				m.linksCursor--
 				if m.linksCursor < 0 {
@@ -691,6 +725,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return m, nil
 			}
 		case "down", "j":
+			if m.activeViewport == 1 {
+				m.commentsCursor++
+				if len(m.comments) > 0 && m.commentsCursor >= len(m.comments) {
+					m.commentsCursor = len(m.comments) - 1
+				}
+				m.updateViewportContents()
+				return m, nil
+			}
 			if m.activeViewport == 2 {
 				m.linksCursor++
 				if len(m.linkedIssues) > 0 && m.linksCursor >= len(m.linkedIssues) {
@@ -798,6 +840,13 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return pushStateMsg{state: stateForm, data: "clone:" + m.issue.IDReadable}
 			}
 		case "e":
+			if m.activeViewport == 1 && len(m.comments) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.comments) {
+				m.mode = modeCommentEdit
+				m.textInput.Placeholder = "Edit comment..."
+				m.textInput.SetValue(m.comments[m.commentsCursor].Text)
+				m.textInput.Focus()
+				return m, nil
+			}
 			// Edit issue (pushes form pre-filled)
 			return m, func() tea.Msg {
 				return pushStateMsg{state: stateForm, data: "edit:" + m.issue.IDReadable}
@@ -897,23 +946,61 @@ func (m *detailModel) updateViewportContents() {
 	var commentsStr strings.Builder
 	if len(m.comments) == 0 {
 		commentsStr.WriteString("No comments yet.")
+		m.commentsLineNumbers = nil
+		m.commentsHeights = nil
 	} else {
+		// Ensure commentsCursor is within bounds
+		if m.commentsCursor < 0 {
+			m.commentsCursor = 0
+		}
+		if m.commentsCursor >= len(m.comments) {
+			m.commentsCursor = len(m.comments) - 1
+		}
+
+		m.commentsLineNumbers = make([]int, len(m.comments))
+		m.commentsHeights = make([]int, len(m.comments))
+		currentLine := 0
+
 		for idx, c := range m.comments {
 			if idx > 0 {
 				commentsStr.WriteString("\n\n---\n\n")
+				currentLine += 5
 			}
 			authorName := "System"
 			if c.Author != nil {
 				authorName = c.Author.DisplayName()
 			}
 
-			header := fmt.Sprintf("%s (%s):",
+			prefix := "  "
+			if idx == m.commentsCursor && m.activeViewport == 1 {
+				prefix = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Render("➔ ")
+			}
+
+			header := fmt.Sprintf("%s%s (%s):",
+				prefix,
 				lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
 				StyleSubtext.Render(c.CreatedTime()),
 			)
-			bodyWrapped := lipgloss.NewStyle().Width(m.commentsViewport.Width).Render(c.Text)
 
-			commentsStr.WriteString(header + "\n" + bodyWrapped)
+			commentBodyWidth := m.commentsViewport.Width - 2
+			if commentBodyWidth < 1 {
+				commentBodyWidth = 1
+			}
+			bodyWrapped := lipgloss.NewStyle().Width(commentBodyWidth).Render(c.Text)
+			bodyLines := strings.Split(bodyWrapped, "\n")
+			for i, line := range bodyLines {
+				bodyLines[i] = "  " + line
+			}
+			bodyIndented := strings.Join(bodyLines, "\n")
+
+			row := header + "\n" + bodyIndented
+			itemHeight := strings.Count(row, "\n") + 1
+
+			m.commentsLineNumbers[idx] = currentLine
+			m.commentsHeights[idx] = itemHeight
+
+			commentsStr.WriteString(row)
+			currentLine += itemHeight
 		}
 	}
 	m.commentsViewport.SetContent(commentsStr.String())
@@ -1162,6 +1249,17 @@ func (m *detailModel) updateViewportScroll() {
 			m.attachmentsViewport.SetYOffset(selectedLine + itemHeight - m.attachmentsViewport.Height)
 		}
 	}
+
+	if len(m.comments) > 0 && len(m.commentsLineNumbers) == len(m.comments) && len(m.commentsHeights) == len(m.comments) {
+		selectedLine := m.commentsLineNumbers[m.commentsCursor]
+		itemHeight := m.commentsHeights[m.commentsCursor]
+
+		if selectedLine < m.commentsViewport.YOffset {
+			m.commentsViewport.SetYOffset(selectedLine)
+		} else if selectedLine+itemHeight > m.commentsViewport.YOffset+m.commentsViewport.Height {
+			m.commentsViewport.SetYOffset(selectedLine + itemHeight - m.commentsViewport.Height)
+		}
+	}
 }
 
 func (m detailModel) View() string {
@@ -1277,6 +1375,13 @@ func (m detailModel) View() string {
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
+	case modeCommentEdit:
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Edit Comment (Press Enter to submit, Esc to cancel) ")
+		actionView = "\n" + lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorCyan)).
+			Width(m.width-4).
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeAssignInput:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username, 'me', or 'unassigned', Esc to cancel) ")
 		actionView = "\n" + lipgloss.NewStyle().
@@ -1312,7 +1417,11 @@ func (m detailModel) View() string {
 		if m.activeViewport == 3 {
 			enterAction = "Open Attachment"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction))
+		editAction := "Edit"
+		if m.activeViewport == 1 {
+			editAction = "Edit Comment"
+		}
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] %s  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction, editAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,

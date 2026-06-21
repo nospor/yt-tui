@@ -473,6 +473,45 @@ func (c *Client) AddComment(id string, text string) error {
 	return nil
 }
 
+// UpdateComment updates an existing comment on an issue.
+func (c *Client) UpdateComment(issueID string, commentID string, text string) error {
+	if text == "" {
+		return errors.New("comment text cannot be empty")
+	}
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + issueID + "/comments/" + commentID
+
+	payload := map[string]string{
+		"text": text,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusCreated {
+		return parseAPIError(statusCode, body)
+	}
+	return nil
+}
+
 // UpdateIssueState moves an issue to a new state.
 func (c *Client) UpdateIssueState(id string, state string) error {
 	if c.baseURL == "" || c.token == "" {

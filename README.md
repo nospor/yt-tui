@@ -218,13 +218,13 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 
 ### 🔍 Issue Detail View
 * `Tab` / `Shift+Tab`: Cycle focus forwards/backwards between the Description, Comments, Links (Parents/Children), and Attachments viewports.
-* `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Links and Attachments viewports, this moves the selection cursor.
+* `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Comments, Links, and Attachments viewports, this moves the selection cursor.
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
 * `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.
 * `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
-* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee).
+* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead.
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.
