@@ -84,6 +84,29 @@ If you do not specify a `url` or `token` in `config.json` at all, `yt-tui` will 
 
 If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they will be automatically migrated to your `config.json` on the first launch.
 
+### Multi-Server Support (Optional)
+
+If you manage issues across multiple YouTrack instances, you can configure an array of servers in your `config.json`. When the `servers` array is set, the application will display a list of these instances on startup for you to choose from.
+
+```json
+{
+  "servers": [
+    {
+      "name": "Work YouTrack",
+      "url": "https://work.youtrack.cloud",
+      "token": "$WORK_TOKEN"
+    },
+    {
+      "name": "Personal YouTrack",
+      "url": "https://personal.youtrack.cloud",
+      "token": "perm:abc123yourtokenhere"
+    }
+  ]
+}
+```
+
+If you select one of the configured servers, `yt-tui` will authenticate using those credentials. You can also select the `➕ Connect to another YouTrack...` option to manually input a new server's URL and token.
+
 ### Default Config Structure
 
 ```json
@@ -107,6 +130,7 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 | --------------------- | ---------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`                 | String           | `""`                                                 | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                             |
 | `token`               | String           | `""`                                                 | Your permanent YouTrack API token.                                                                                                                                                          |
+| `servers`             | Array of Objects | `[]` (empty)                                         | List of YouTrack server configurations (each containing `name`, `url`, and `token`) to choose from on startup. |
 | `page_size`           | Integer          | `20`                                                 | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
 | `max_issues`          | Integer          | `500`                                                | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
 | `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names.                 |
@@ -126,9 +150,15 @@ If you have legacy credentials configured in `~/.config/youtrack-cli/.env`, they
 * `Ctrl+C`: Force quit the application at any time.
 
 ### 🚪 Welcome / Login View
-* `Tab` / `Shift+Tab`: Switch focus between YouTrack Base URL and API Token fields.
-* `Enter`: Save credentials and authenticate.
-* `q`: Exit application.
+* **Server Selection Mode** (when `servers` is configured):
+  - `↑` / `↓` (or `k` / `j`): Navigate the server list.
+  - `Enter`: Select and authenticate with the chosen YouTrack instance.
+  - `q` / `Ctrl+C`: Force quit the application.
+* **Credentials Entry Mode**:
+  - `Tab` / `Shift+Tab`: Switch focus between YouTrack Base URL and API Token fields.
+  - `Enter`: Save credentials and authenticate.
+  - `Esc`: Return to Server Selection Mode (if `servers` array is set).
+  - `Ctrl+C`: Force quit the application.
 
 ### 🏠 Dashboard View (Home Screen)
 * `Tab` / `Shift+Tab`: Switch active focus panel (**My Open Issues** vs **Projects**).

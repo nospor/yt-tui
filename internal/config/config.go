@@ -8,18 +8,25 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	URL                string   `json:"url"`
-	Token              string   `json:"token"`
-	PageSize           int      `json:"page_size"`
-	MaxIssues          int      `json:"max_issues"`
-	Fields             []string `json:"fields"`
-	CustomTypes        []string `json:"custom_types"`
-	CustomPriorities   []string `json:"custom_priorities"`
-	CustomStates       []string `json:"custom_states"`
-	FilteredStates     []string `json:"filtered_states"`
-	FilteredPriorities []string `json:"filtered_priorities"`
-	SortColumn         string   `json:"sort_column"`
-	SortDirection      string   `json:"sort_direction"`
+	URL                string         `json:"url"`
+	Token              string         `json:"token"`
+	Servers            []ServerConfig `json:"servers,omitempty"`
+	PageSize           int            `json:"page_size"`
+	MaxIssues          int            `json:"max_issues"`
+	Fields             []string       `json:"fields"`
+	CustomTypes        []string       `json:"custom_types"`
+	CustomPriorities   []string       `json:"custom_priorities"`
+	CustomStates       []string       `json:"custom_states"`
+	FilteredStates     []string       `json:"filtered_states"`
+	FilteredPriorities []string       `json:"filtered_priorities"`
+	SortColumn         string         `json:"sort_column"`
+	SortDirection      string         `json:"sort_direction"`
+}
+
+type ServerConfig struct {
+	Name  string `json:"name,omitempty"`
+	URL   string `json:"url"`
+	Token string `json:"token"`
 }
 
 const (

@@ -144,7 +144,7 @@ func (c *Client) CheckAuth() (bool, error) {
 		return true, nil
 	}
 	if statusCode == http.StatusUnauthorized {
-		return false, nil
+		return false, fmt.Errorf("unauthorized: invalid token or URL")
 	}
 	return false, parseAPIError(statusCode, body)
 }
@@ -927,10 +927,16 @@ func (c *Client) GetConfiguredBaseURL() string {
 	return c.baseURL
 }
 
+// SetCredentials sets the credentials for the current session without saving them to config.json.
+func (c *Client) SetCredentials(baseURL, token string) {
+	c.baseURL = resolveEnvValue(baseURL)
+	c.token = resolveEnvValue(token)
+}
+
 // SaveCredentials writes the config.json.
 func (c *Client) SaveCredentials(baseURL, token string) error {
-	c.baseURL = baseURL
-	c.token = token
+	c.baseURL = resolveEnvValue(baseURL)
+	c.token = resolveEnvValue(token)
 
 	cfg, err := config.LoadConfig()
 	if err != nil {

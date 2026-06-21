@@ -66,12 +66,12 @@ type AppModel struct {
 
 func NewAppModel() AppModel {
 	client := ytcli.NewClient()
-	cfg, _ := config.LoadConfig()
+	cfg, err := config.LoadConfig()
 
 	return AppModel{
 		client:    client,
 		state:     stateWelcome,
-		welcome:   newWelcomeModel(client),
+		welcome:   newWelcomeModel(client, cfg, err),
 		dashboard: newDashboardModel(client),
 		projects:  newProjectsModel(client),
 		boards:    newBoardsModel(client),
