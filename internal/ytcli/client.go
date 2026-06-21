@@ -360,7 +360,7 @@ func (c *Client) GetIssue(id string) (*Issue, error) {
 	}
 
 	params := url.Values{}
-	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email))")
+	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)),links(id,direction,linkType(name,sourceToTarget,targetToSource),issues(id,idReadable,summary,customFields(name,value(name))))")
 	apiURL := fmt.Sprintf("%sapi/issues/%s?%s", baseURL, id, params.Encode())
 
 	req, err := c.newRequest("GET", apiURL, nil)

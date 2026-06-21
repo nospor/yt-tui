@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"yt-tui/internal/ytcli"
 
@@ -21,6 +22,13 @@ const (
 	modeAssignInput
 )
 
+type linkedIssue struct {
+	idReadable string
+	summary    string
+	relation   string
+	state      string
+}
+
 type detailModel struct {
 	client           *ytcli.Client
 	issueKey         string
@@ -31,9 +39,15 @@ type detailModel struct {
 	spinner          spinner.Model
 	width            int
 	height           int
-	activeViewport   int // 0 = description, 1 = comments
+	activeViewport   int // 0 = description, 1 = comments, 2 = links
 	descViewport     viewport.Model
 	commentsViewport viewport.Model
+	linksViewport    viewport.Model
+
+	// Links selection
+	linkedIssues     []linkedIssue
+	linksCursor      int
+	linksLineNumbers []int
 
 	// Sub-modes fields
 	mode         detailMode
@@ -60,6 +74,7 @@ func newDetailModel(client *ytcli.Client, states []string) detailModel {
 		stateOptions:     states,
 		descViewport:     viewport.New(0, 0),
 		commentsViewport: viewport.New(0, 0),
+		linksViewport:    viewport.New(0, 0),
 	}
 }
 
@@ -91,6 +106,8 @@ func (m *detailModel) setIssueKey(key string) tea.Cmd {
 	m.loading = true
 	m.err = nil
 	m.mode = modeNormal
+	m.activeViewport = 0
+	m.linksCursor = 0
 	return m.loadDetailCmd()
 }
 
@@ -213,25 +230,59 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return popStateMsg{projectCodeToInvalidate: proj}
 			}
 		case "tab":
-			// Switch focus between Description and Comments viewports
-			if m.activeViewport == 0 {
-				m.activeViewport = 1
-			} else {
-				m.activeViewport = 0
-			}
+			// Switch focus between Description, Comments and Links viewports
+			m.activeViewport = (m.activeViewport + 1) % 3
+			m.updateViewportContents()
 			return m, nil
+		case "up", "k":
+			if m.activeViewport == 2 {
+				m.linksCursor--
+				if m.linksCursor < 0 {
+					m.linksCursor = 0
+				}
+				m.updateViewportContents()
+				return m, nil
+			}
+		case "down", "j":
+			if m.activeViewport == 2 {
+				m.linksCursor++
+				if len(m.linkedIssues) > 0 && m.linksCursor >= len(m.linkedIssues) {
+					m.linksCursor = len(m.linkedIssues) - 1
+				}
+				m.updateViewportContents()
+				return m, nil
+			}
+		case "enter":
+			if m.activeViewport == 2 && len(m.linkedIssues) > 0 {
+				selected := m.linkedIssues[m.linksCursor]
+				return m, func() tea.Msg {
+					return pushStateMsg{state: stateDetail, data: selected.idReadable}
+				}
+			}
 		case "J":
 			if m.activeViewport == 0 {
 				m.descViewport.LineDown(1)
-			} else {
+			} else if m.activeViewport == 1 {
 				m.commentsViewport.LineDown(1)
+			} else {
+				m.linksCursor++
+				if len(m.linkedIssues) > 0 && m.linksCursor >= len(m.linkedIssues) {
+					m.linksCursor = len(m.linkedIssues) - 1
+				}
+				m.updateViewportContents()
 			}
 			return m, nil
 		case "K":
 			if m.activeViewport == 0 {
 				m.descViewport.LineUp(1)
-			} else {
+			} else if m.activeViewport == 1 {
 				m.commentsViewport.LineUp(1)
+			} else {
+				m.linksCursor--
+				if m.linksCursor < 0 {
+					m.linksCursor = 0
+				}
+				m.updateViewportContents()
 			}
 			return m, nil
 		case "c":
@@ -276,8 +327,10 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		// Scroll active viewport
 		if m.activeViewport == 0 {
 			m.descViewport, cmd = m.descViewport.Update(msg)
-		} else {
+		} else if m.activeViewport == 1 {
 			m.commentsViewport, cmd = m.commentsViewport.Update(msg)
+		} else {
+			m.linksViewport, cmd = m.linksViewport.Update(msg)
 		}
 		return m, cmd
 	}
@@ -311,6 +364,15 @@ func (m *detailModel) updateViewportSizes() {
 		viewportCommentsWidth = 1
 	}
 
+	commentsViewportHeight := (viewportHeight - 7) / 2
+	if commentsViewportHeight < 1 {
+		commentsViewportHeight = 1
+	}
+	linksViewportHeight := (viewportHeight - 7) - commentsViewportHeight
+	if linksViewportHeight < 1 {
+		linksViewportHeight = 1
+	}
+
 	// Check if the dimensions actually changed
 	descWidthChanged := m.descViewport.Width != viewportDescWidth
 	commentsWidthChanged := m.commentsViewport.Width != viewportCommentsWidth
@@ -318,7 +380,9 @@ func (m *detailModel) updateViewportSizes() {
 	m.descViewport.Width = viewportDescWidth
 	m.descViewport.Height = viewportHeight
 	m.commentsViewport.Width = viewportCommentsWidth
-	m.commentsViewport.Height = viewportHeight
+	m.commentsViewport.Height = commentsViewportHeight
+	m.linksViewport.Width = viewportCommentsWidth
+	m.linksViewport.Height = linksViewportHeight
 
 	// Only re-wrap and set content if the width changed and we have the issue loaded
 	if m.issue != nil {
@@ -361,6 +425,141 @@ func (m *detailModel) updateViewportContents() {
 		}
 	}
 	m.commentsViewport.SetContent(commentsStr.String())
+
+	// Format and wrap links
+	var linksStr strings.Builder
+
+	// Create flat list for cursor matching and display grouping
+	m.linkedIssues = nil
+	for _, link := range m.issue.Links {
+		if link.LinkType == nil {
+			continue
+		}
+
+		relation := ""
+		if link.Direction == "INWARD" {
+			relation = link.LinkType.TargetToSource
+		} else {
+			relation = link.LinkType.SourceToTarget
+		}
+		if relation == "" {
+			relation = link.LinkType.Name
+		}
+
+		for _, linked := range link.Issues {
+			m.linkedIssues = append(m.linkedIssues, linkedIssue{
+				idReadable: linked.IDReadable,
+				summary:    linked.Summary,
+				relation:   relation,
+				state:      linked.State(),
+			})
+		}
+	}
+
+	if len(m.linkedIssues) == 0 {
+		linksStr.WriteString("No linked issues.")
+		m.linksLineNumbers = nil
+	} else {
+		// Ensure cursor is within bounds
+		if m.linksCursor < 0 {
+			m.linksCursor = 0
+		}
+		if m.linksCursor >= len(m.linkedIssues) {
+			m.linksCursor = len(m.linkedIssues) - 1
+		}
+
+		m.linksLineNumbers = make([]int, len(m.linkedIssues))
+		currentLine := 0
+
+		// Find unique relations and sort them
+		var relations []string
+		relationMap := make(map[string]bool)
+		for _, item := range m.linkedIssues {
+			if !relationMap[item.relation] {
+				relationMap[item.relation] = true
+				relations = append(relations, item.relation)
+			}
+		}
+		sort.Strings(relations)
+
+		capitalize := func(s string) string {
+			if len(s) == 0 {
+				return ""
+			}
+			return strings.ToUpper(s[:1]) + s[1:]
+		}
+
+		for rIdx, rel := range relations {
+			if rIdx > 0 {
+				linksStr.WriteString("\n")
+				currentLine++
+			}
+			header := capitalize(rel) + ":"
+			headerWrapped := lipgloss.NewStyle().Width(m.linksViewport.Width).Render(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(header))
+			linksStr.WriteString(headerWrapped + "\n")
+			currentLine += strings.Count(headerWrapped, "\n") + 1
+
+			for idx, item := range m.linkedIssues {
+				if item.relation != rel {
+					continue
+				}
+
+				prefix := "  "
+				if idx == m.linksCursor && m.activeViewport == 2 {
+					prefix = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Render("➔ ")
+				}
+
+				idStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan))
+				if idx == m.linksCursor && m.activeViewport == 2 {
+					idStyle = idStyle.Bold(true).Underline(true)
+				}
+
+				stateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext))
+				isClosed := strings.EqualFold(item.state, "Fixed") ||
+					strings.EqualFold(item.state, "Done") ||
+					strings.EqualFold(item.state, "Resolved") ||
+					strings.EqualFold(item.state, "Closed")
+
+				if isClosed {
+					stateStyle = stateStyle.Foreground(lipgloss.Color(ColorGreen)).Strikethrough(true)
+				}
+
+				stateLabel := ""
+				if item.state != "" {
+					stateLabel = " " + stateStyle.Render("["+item.state+"]")
+				}
+
+				row := fmt.Sprintf("%s%s: %s%s",
+					prefix,
+					idStyle.Render(item.idReadable),
+					item.summary,
+					stateLabel,
+				)
+				wrapped := lipgloss.NewStyle().Width(m.linksViewport.Width).Render(row)
+
+				m.linksLineNumbers[idx] = currentLine
+				linksStr.WriteString(wrapped + "\n")
+				currentLine += strings.Count(wrapped, "\n") + 1
+			}
+		}
+	}
+	m.linksViewport.SetContent(linksStr.String())
+	m.updateViewportScroll()
+}
+
+func (m *detailModel) updateViewportScroll() {
+	if len(m.linkedIssues) == 0 || len(m.linksLineNumbers) != len(m.linkedIssues) {
+		return
+	}
+
+	selectedLine := m.linksLineNumbers[m.linksCursor]
+
+	// Ensure the selected line is visible within viewport height constraints
+	if selectedLine < m.linksViewport.YOffset {
+		m.linksViewport.SetYOffset(selectedLine)
+	} else if selectedLine >= m.linksViewport.YOffset+m.linksViewport.Height {
+		m.linksViewport.SetYOffset(selectedLine - m.linksViewport.Height + 1)
+	}
 }
 
 func (m detailModel) View() string {
@@ -422,7 +621,18 @@ func (m detailModel) View() string {
 		Height(m.commentsViewport.Height + 4).
 		Render(lipgloss.JoinVertical(lipgloss.Left, commentsTitle, "", m.commentsViewport.View()))
 
-	splitView := lipgloss.JoinHorizontal(lipgloss.Top, descView, " ", commentsView)
+	linksBorder := StyleNormalBorder
+	if m.activeViewport == 2 {
+		linksBorder = StyleFocusBorder
+	}
+	linksTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" Links ")
+	linksView := linksBorder.
+		Width(m.linksViewport.Width + 4).
+		Height(m.linksViewport.Height + 4).
+		Render(lipgloss.JoinVertical(lipgloss.Left, linksTitle, "", m.linksViewport.View()))
+
+	rightColumn := lipgloss.JoinVertical(lipgloss.Left, commentsView, "", linksView)
+	splitView := lipgloss.JoinHorizontal(lipgloss.Top, descView, " ", rightColumn)
 
 	// 3. Lower Action overlay
 	var actionView string
@@ -461,7 +671,7 @@ func (m detailModel) View() string {
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", optsStr.String()))
 	}
 
-	help := StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [Enter] Jump to Task  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		StyleTitle.Render(" Issue Detail "),

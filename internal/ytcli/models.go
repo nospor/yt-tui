@@ -3,6 +3,7 @@ package ytcli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -79,6 +80,21 @@ func (c Comment) CreatedTime() string {
 	return "Unknown time"
 }
 
+// IssueLink represents YouTrack links.
+type IssueLink struct {
+	ID        string         `json:"id"`
+	Direction string         `json:"direction"`
+	LinkType  *IssueLinkType `json:"linkType,omitempty"`
+	Issues    []Issue        `json:"issues,omitempty"`
+}
+
+// IssueLinkType represents YouTrack link types.
+type IssueLinkType struct {
+	Name           string `json:"name"`
+	SourceToTarget string `json:"sourceToTarget"`
+	TargetToSource string `json:"targetToSource"`
+}
+
 // Issue represents a YouTrack issue.
 type Issue struct {
 	ID           string        `json:"id"`
@@ -88,6 +104,43 @@ type Issue struct {
 	Project      *Project      `json:"project,omitempty"`
 	CustomFields []CustomField `json:"customFields,omitempty"`
 	Comments     []Comment     `json:"comments,omitempty"`
+	Links        []IssueLink   `json:"links,omitempty"`
+}
+
+// Parents returns the parent issues linked to this issue.
+func (i Issue) Parents() []Issue {
+	var parents []Issue
+	for _, link := range i.Links {
+		if link.LinkType == nil {
+			continue
+		}
+		isSubtask := strings.EqualFold(link.LinkType.Name, "Subtask") ||
+			strings.EqualFold(link.LinkType.SourceToTarget, "parent for") ||
+			strings.EqualFold(link.LinkType.TargetToSource, "subtask of")
+
+		if isSubtask && link.Direction == "INWARD" {
+			parents = append(parents, link.Issues...)
+		}
+	}
+	return parents
+}
+
+// Children returns the subtask/child issues linked to this issue.
+func (i Issue) Children() []Issue {
+	var children []Issue
+	for _, link := range i.Links {
+		if link.LinkType == nil {
+			continue
+		}
+		isSubtask := strings.EqualFold(link.LinkType.Name, "Subtask") ||
+			strings.EqualFold(link.LinkType.SourceToTarget, "parent for") ||
+			strings.EqualFold(link.LinkType.TargetToSource, "subtask of")
+
+		if isSubtask && link.Direction == "OUTWARD" {
+			children = append(children, link.Issues...)
+		}
+	}
+	return children
 }
 
 // ExtractStringField extracts the string value of a named custom field.

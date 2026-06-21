@@ -242,6 +242,8 @@ func (m *AppModel) switchState(state State, data string, isBack bool) tea.Cmd {
 		m.detail.err = nil
 		m.detail.mode = modeNormal
 		m.detail.isModified = false
+		m.detail.activeViewport = 0
+		m.detail.linksCursor = 0
 		return m.detail.loadDetailCmd()
 	case stateForm:
 		return m.form.setupForm(data)

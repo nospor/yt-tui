@@ -196,15 +196,16 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `Esc` / `Backspace`: Go back to the dashboard/previous screen.
 
 ### 🔍 Issue Detail View
-* `↑` / `↓` (or `k` / `j`): Scroll the issue description viewport.
-* `PageUp` / `PageDown` (or `Ctrl+U` / `Ctrl+D`): Scroll the comments list viewport.
-* `c`: Add a comment. Type your comment and press `Ctrl+S` to submit, or `Esc` to cancel.
+* `Tab`: Cycle focus between the Description, Comments, and Links (Parents/Children) viewports.
+* `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Links viewport, this moves the selection cursor.
+* `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
+* `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `a`: Assign issue (opens assignee input prompt; type username or `me` and hit `Enter`).
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
-* `r`: Force refresh issue details and comments.
-* `Esc` / `Backspace`: Go back to the issues list.
+* `r`: Force refresh issue details, comments, and links.
+* `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
 
 ### 📝 Issue Form (Create / Clone / Edit)
 * `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee).
