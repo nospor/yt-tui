@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"yt-tui/internal/ytcli"
@@ -351,10 +352,6 @@ func (m *detailModel) updateViewportSizes() {
 	descWidth := availWidth * 2 / 3
 	commentsWidth := availWidth - descWidth
 
-	viewportHeight := bottomHeight - 4
-	if viewportHeight < 1 {
-		viewportHeight = 1
-	}
 	viewportDescWidth := descWidth - 4
 	if viewportDescWidth < 1 {
 		viewportDescWidth = 1
@@ -364,20 +361,20 @@ func (m *detailModel) updateViewportSizes() {
 		viewportCommentsWidth = 1
 	}
 
-	commentsViewportHeight := viewportHeight
+	commentsViewportHeight := bottomHeight - 2
 	if commentsViewportHeight < 1 {
 		commentsViewportHeight = 1
 	}
 
 	linksViewportHeight := 4
-	if linksViewportHeight > viewportHeight-2 {
-		linksViewportHeight = viewportHeight - 2
+	if linksViewportHeight > commentsViewportHeight-4 {
+		linksViewportHeight = commentsViewportHeight - 4
 	}
 	if linksViewportHeight < 1 {
 		linksViewportHeight = 1
 	}
 
-	descViewportHeight := viewportHeight - linksViewportHeight - 7
+	descViewportHeight := commentsViewportHeight - linksViewportHeight - 3
 	if descViewportHeight < 1 {
 		descViewportHeight = 1
 	}
@@ -623,33 +620,36 @@ func (m detailModel) View() string {
 	if m.activeViewport == 0 {
 		descBorder = StyleFocusBorder
 	}
-	descTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" Description ")
-	descView := descBorder.
-		Width(m.descViewport.Width + 4).
-		Height(m.descViewport.Height + 4).
-		Render(lipgloss.JoinVertical(lipgloss.Left, descTitle, "", m.descViewport.View()))
+	descView := renderBoxWithTitle(
+		descBorder.Width(m.descViewport.Width).Height(m.descViewport.Height),
+		"Description",
+		m.descViewport.View(),
+		m.activeViewport == 0,
+	)
 
 	commentsBorder := StyleNormalBorder
 	if m.activeViewport == 1 {
 		commentsBorder = StyleFocusBorder
 	}
-	commentsTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" Comments ")
-	commentsView := commentsBorder.
-		Width(m.commentsViewport.Width + 4).
-		Height(m.commentsViewport.Height + 4).
-		Render(lipgloss.JoinVertical(lipgloss.Left, commentsTitle, "", m.commentsViewport.View()))
+	commentsView := renderBoxWithTitle(
+		commentsBorder.Width(m.commentsViewport.Width).Height(m.commentsViewport.Height),
+		"Comments",
+		m.commentsViewport.View(),
+		m.activeViewport == 1,
+	)
 
 	linksBorder := StyleNormalBorder
 	if m.activeViewport == 2 {
 		linksBorder = StyleFocusBorder
 	}
-	linksTitle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" Links ")
-	linksView := linksBorder.
-		Width(m.linksViewport.Width + 4).
-		Height(m.linksViewport.Height + 4).
-		Render(lipgloss.JoinVertical(lipgloss.Left, linksTitle, "", m.linksViewport.View()))
+	linksView := renderBoxWithTitle(
+		linksBorder.Width(m.linksViewport.Width).Height(m.linksViewport.Height),
+		"Links",
+		m.linksViewport.View(),
+		m.activeViewport == 2,
+	)
 
-	leftColumn := lipgloss.JoinVertical(lipgloss.Left, descView, "", linksView)
+	leftColumn := lipgloss.JoinVertical(lipgloss.Left, descView, " ", linksView)
 	splitView := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", commentsView)
 
 	// 3. Lower Action overlay
@@ -661,14 +661,14 @@ func (m detailModel) View() string {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width-4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", m.textInput.View()))
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeAssignInput:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username or 'me', Esc to cancel) ")
 		actionView = "\n" + lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width-4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", m.textInput.View()))
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeStateSelect:
 		var optsStr strings.Builder
 		for idx, opt := range m.stateOptions {
@@ -686,7 +686,7 @@ func (m detailModel) View() string {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width-4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, "", optsStr.String()))
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
 	}
 
 	help := StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [Enter] Jump to Task  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [r] Refresh  [q] Quit ")
@@ -694,10 +694,81 @@ func (m detailModel) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left,
 		StyleTitle.Render(" Issue Detail "),
 		metaView,
-		"",
+		" ",
 		splitView,
 		actionView,
-		"",
+		" ",
 		help,
 	)
+}
+
+var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripAnsi(s string) string {
+	return ansiRegexp.ReplaceAllString(s, "")
+}
+
+func renderBoxWithTitle(style lipgloss.Style, title string, content string, active bool) string {
+	// Pad content to match the style's height
+	expectedHeight := style.GetHeight()
+	if expectedHeight > 0 {
+		trimmedContent := strings.TrimRight(content, "\n")
+		lines := strings.Split(trimmedContent, "\n")
+		if len(lines) < expectedHeight {
+			padding := make([]string, expectedHeight-len(lines))
+			content = trimmedContent + "\n" + strings.Join(padding, "\n")
+		}
+	}
+
+	rendered := style.Render(content)
+	lines := strings.Split(rendered, "\n")
+	if len(lines) == 0 {
+		return rendered
+	}
+
+	totalWidth := lipgloss.Width(lines[0])
+
+	borderColor := lipgloss.Color(ColorOverlay)
+	if active {
+		borderColor = lipgloss.Color(ColorViolet)
+	}
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+
+	plainTop := stripAnsi(lines[0])
+	runes := []rune(plainTop)
+
+	topLeft := "╭"
+	topRight := "╮"
+	horizontal := "─"
+	if len(runes) >= 2 {
+		topLeft = string(runes[0])
+		topRight = string(runes[len(runes)-1])
+		horizontal = string(runes[1])
+	}
+
+	titleText := " " + title + " "
+	titleLen := len(titleText)
+	if totalWidth < titleLen+4 {
+		return rendered
+	}
+
+	var titleStyle lipgloss.Style
+	if active {
+		titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true)
+	} else {
+		titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext))
+	}
+	titleRendered := titleStyle.Render(titleText)
+
+	leftDashes := 2
+	rightDashes := totalWidth - 2 - leftDashes - titleLen
+	if rightDashes < 0 {
+		rightDashes = 0
+	}
+
+	leftPart := borderStyle.Render(topLeft + strings.Repeat(horizontal, leftDashes))
+	rightPart := borderStyle.Render(strings.Repeat(horizontal, rightDashes) + topRight)
+
+	lines[0] = leftPart + titleRendered + rightPart
+	return strings.Join(lines, "\n")
 }
