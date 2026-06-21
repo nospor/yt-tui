@@ -217,7 +217,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `Esc` / `Backspace`: Go back to the dashboard/previous screen.
 
 ### 🔍 Issue Detail View
-* `Tab`: Cycle focus between the Description, Comments, Links (Parents/Children), and Attachments viewports.
+* `Tab` / `Shift+Tab`: Cycle focus forwards/backwards between the Description, Comments, Links (Parents/Children), and Attachments viewports.
 * `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Links and Attachments viewports, this moves the selection cursor.
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
 * `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.

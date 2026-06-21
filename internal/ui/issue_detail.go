@@ -668,6 +668,11 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.activeViewport = (m.activeViewport + 1) % 4
 			m.updateViewportContents()
 			return m, nil
+		case "shift+tab":
+			// Switch focus in opposite direction
+			m.activeViewport = (m.activeViewport - 1 + 4) % 4
+			m.updateViewportContents()
+			return m, nil
 		case "up", "k":
 			if m.activeViewport == 2 {
 				m.linksCursor--
@@ -1307,7 +1312,7 @@ func (m detailModel) View() string {
 		if m.activeViewport == 3 {
 			enterAction = "Open Attachment"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
