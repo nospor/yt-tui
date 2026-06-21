@@ -1,4 +1,32 @@
 
+## [0.4.0] - 2026-06-21
+
+### Features
+
+- *(config)* Support environment variable placeholders in config.json ([9f77c00](https://github.com/nospor/yt-tui/commit/9f77c007a96b52914b025d857b4a7b7831e61726))
+- Add multi-server selection on startup ([1301d8e](https://github.com/nospor/yt-tui/commit/1301d8e6b81e648e940ba2f9c62c64280e51e099))
+- *(ui)* Support editing issue description in external editor with Ctrl+g ([9ba9e5e](https://github.com/nospor/yt-tui/commit/9ba9e5e3f62c6258f9b6b671abc56c8804e52b3a))
+- *(ui)* Add interactive linked issues pane in detail view ([0aa7f79](https://github.com/nospor/yt-tui/commit/0aa7f792a170e0bac19fdda768df3c750332bc4a))
+- *(ui)* Normalize issue link relations and improve detail viewport scrolling ([d5c3b26](https://github.com/nospor/yt-tui/commit/d5c3b2639f64901a1eff6fc1eb7c0466545be434))
+
+### Bug Fixes
+
+- *(ui)* Fix alignment of text inputs and labels on welcome screen ([52e4a18](https://github.com/nospor/yt-tui/commit/52e4a18c92fa28f7844bf60c48961e49e2f381b9))
+- *(ui)* Synchronize table heights in Update to prevent disappearing rows on scroll ([4cf8ee5](https://github.com/nospor/yt-tui/commit/4cf8ee590fc3a256276c476300f10cc8386fc677))
+
+### Other
+
+- Move links pane under description and fix navigation order ([c9c9298](https://github.com/nospor/yt-tui/commit/c9c929849fef7580a5106d9ffbdbe7f56dfc8239))
+- Apply strikethrough to closed linked task IDs and sort them to the bottom ([689d61a](https://github.com/nospor/yt-tui/commit/689d61a0ffcff602d883525f88cf9d4811cab819))
+
+### Styling
+
+- Move issue details section titles to top borders and fix viewport alignment ([2109ccc](https://github.com/nospor/yt-tui/commit/2109ccca4e7f00b44987271b825b92a8422b1a1d))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.3.1 [skip ci] ([1e3efcc](https://github.com/nospor/yt-tui/commit/1e3efccc5ac0202d268a63ff1f6c8626a847c400))
+
 ## [0.3.1] - 2026-06-20
 
 ### Documentation
