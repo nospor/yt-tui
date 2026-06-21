@@ -46,6 +46,7 @@ type popStateMsg struct {
 // AppModel is the root Bubble Tea model.
 type AppModel struct {
 	client      *ytcli.Client
+	cfg         *config.Config
 	state       State
 	stateData   string
 	history     []navEntry
@@ -70,6 +71,7 @@ func NewAppModel() AppModel {
 
 	return AppModel{
 		client:    client,
+		cfg:       cfg,
 		state:     stateWelcome,
 		welcome:   newWelcomeModel(client, cfg, err),
 		dashboard: newDashboardModel(client),
@@ -78,6 +80,12 @@ func NewAppModel() AppModel {
 		issues:    newIssuesModel(client, cfg),
 		detail:    newDetailModel(client, cfg.CustomStates),
 		form:      newFormModel(client, cfg),
+	}
+}
+
+func (m *AppModel) reloadConfig() {
+	if cfg, err := config.LoadConfig(); err == nil {
+		*m.cfg = *cfg
 	}
 }
 
@@ -92,8 +100,24 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 1. Handle global/window messages
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		m.status = ""
+		m.isStatusErr = false
+
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
+		if msg.String() == "f" && m.state == stateDashboard {
+			if cfg, err := config.LoadConfig(); err == nil {
+				*m.cfg = *cfg
+			}
+			if m.cfg.FavoriteView == "" {
+				m.status = "No favourite view set yet."
+				m.isStatusErr = true
+				return m, nil
+			}
+			m.history = append(m.history, navEntry{state: m.state, data: m.stateData})
+			cmd := m.switchState(stateIssues, m.cfg.FavoriteView, false)
+			return m, cmd
 		}
 		if msg.String() == "q" {
 			canQuit := false
@@ -298,8 +322,18 @@ func (m AppModel) View() string {
 	crumbs = append(crumbs, string(m.state))
 	breadcrumbStr := strings.Join(crumbs, " ❯ ")
 
+	var statusPart string
+	if m.status != "" {
+		style := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)).Bold(true)
+		if m.isStatusErr {
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true)
+		}
+		statusPart = "  " + style.Render(m.status)
+	}
+
 	statusBarText := lipgloss.JoinHorizontal(lipgloss.Left,
 		lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Render(" 🧭 "+breadcrumbStr),
+		statusPart,
 	)
 
 	statusBar := lipgloss.NewStyle().

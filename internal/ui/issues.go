@@ -458,6 +458,22 @@ func (m *issuesModel) restoreCursor() {
 	}
 }
 
+func (m *issuesModel) currentViewData() string {
+	if m.projectCode != "" {
+		return m.projectCode
+	}
+	if m.query == "reporter: me" {
+		return "ME"
+	}
+	if strings.HasPrefix(m.query, "sprint:") {
+		return m.query
+	}
+	if m.query != "" {
+		return "query:" + m.query
+	}
+	return ""
+}
+
 func (m *issuesModel) initProject(projectCode string, isBack bool) tea.Cmd {
 	return m.initContext(projectCode, "", isBack)
 }
@@ -789,6 +805,17 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			return m, nil
 		case "f":
 			if m.cfg != nil {
+				currentView := m.currentViewData()
+				if m.cfg.FavoriteView == currentView {
+					m.cfg.FavoriteView = ""
+				} else {
+					m.cfg.FavoriteView = currentView
+				}
+				_ = config.SaveConfig(m.cfg)
+			}
+			return m, nil
+		case "F":
+			if m.cfg != nil {
 				m.filterMode = true
 				m.filterCursor = 0
 				m.tempStates = make(map[string]bool)
@@ -1060,7 +1087,13 @@ func (m issuesModel) View() string {
 	} else {
 		titleText = fmt.Sprintf(" Issues%s ", statusSuffix)
 	}
-	title := StyleTitle.Render(titleText)
+	isFavorite := m.cfg != nil && m.cfg.FavoriteView != "" && m.cfg.FavoriteView == m.currentViewData()
+	var starStr string
+	if isFavorite {
+		starStr = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorYellow)).Bold(true).Render("★ ")
+	}
+	titleTextStyled := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(titleText)
+	title := lipgloss.NewStyle().MarginBottom(1).Render(starStr + titleTextStyled)
 
 	m.updateTableHeight()
 
@@ -1074,7 +1107,7 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [f] Filter  [s] Sort  [n] New  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [F] Filter  [f] Favorite  [s] Sort  [n] New  [r] Refresh  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 }

@@ -133,7 +133,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "custom_priorities": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"],
   "custom_states": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"],
   "sort_column": "ID",
-  "sort_direction": "asc"
+  "sort_direction": "asc",
+  "favorite_view": ""
 }
 ```
 
@@ -154,6 +155,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `filtered_priorities` | Array of Strings | `[]` (empty)                                         | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out.                                                                           |
 | `sort_column`         | String           | `""`                                                 | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
 | `sort_direction`      | String           | `""`                                                 | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
+| `favorite_view`       | String           | `""`                                                 | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                   |
 
 ---
 
@@ -182,6 +184,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `n`: Create a new issue (pre-selects the highlighted project if focused).
 * `p`: View the full **Projects List** screen.
 * `b`: View the full **Agile Boards** screen.
+* `f`: Jump directly to your configured favorite tasks list (shows an error message if none is set yet).
 * `r`: Reload and refresh all dashboard data.
 * `q`: Exit application.
 
@@ -203,7 +206,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `↑` / `↓` (or `k` / `j`): Scroll issues table.
 * `Enter`: View details of the selected issue.
 * `/`: Activate search/filter mode. Type keywords to filter issues by summary/ID. Press `Esc` or `Enter` to close search mode.
-* `f`: Open the State & Priority filter panel. Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
+* `f`: Toggle the current tasks list view as your favorite view (adds/removes a yellow star `★` in the header and saves to config).
+* `F`: Open the State & Priority filter panel. Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
 * `s`: Open the Column & Direction sort panel. Use arrow keys/hjkl to navigate, Space to select choices, Enter to save, and Esc to cancel.
 * `n`: Create a new issue in the current project context.
 * `r`: Clear cache and force reload issues list.

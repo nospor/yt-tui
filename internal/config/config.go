@@ -21,6 +21,7 @@ type Config struct {
 	FilteredPriorities []string       `json:"filtered_priorities"`
 	SortColumn         string         `json:"sort_column"`
 	SortDirection      string         `json:"sort_direction"`
+	FavoriteView       string         `json:"favorite_view,omitempty"`
 }
 
 type ServerConfig struct {
