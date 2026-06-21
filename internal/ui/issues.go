@@ -429,6 +429,17 @@ func (m *issuesModel) updateTableRows() {
 	m.table.SetRows(rows)
 }
 
+func (m *issuesModel) updateTableHeight() {
+	tableHeight := m.height - 6
+	if m.searchMode {
+		tableHeight = m.height - 10
+	}
+	if tableHeight < 0 {
+		tableHeight = 0
+	}
+	m.table.SetHeight(tableHeight)
+}
+
 func (m *issuesModel) invalidateCache(projectCode string) {
 	delete(m.cache, projectCode)
 }
@@ -515,6 +526,7 @@ func (m issuesModel) Init() tea.Cmd {
 }
 
 func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
+	m.updateTableHeight()
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
@@ -747,6 +759,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			case "enter", "esc":
 				m.searchMode = false
 				m.searchInput.Blur()
+				m.updateTableHeight()
 				return m, nil
 			}
 			oldValue := m.searchInput.Value()
@@ -772,6 +785,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			m.searchInput.Focus()
 			m.searchInput.SetValue("")
 			m.updateTableRows()
+			m.updateTableHeight()
 			return m, nil
 		case "f":
 			if m.cfg != nil {
@@ -1046,12 +1060,7 @@ func (m issuesModel) View() string {
 	}
 	title := StyleTitle.Render(titleText)
 
-	// Adjust table height based on search bar visibility
-	tableHeight := m.height - 6
-	if m.searchMode {
-		tableHeight = m.height - 10
-	}
-	m.table.SetHeight(tableHeight)
+	m.updateTableHeight()
 
 	var searchBar string
 	if m.searchMode {

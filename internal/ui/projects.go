@@ -73,6 +73,12 @@ func (m projectsModel) Init() tea.Cmd {
 }
 
 func (m projectsModel) Update(msg tea.Msg) (projectsModel, tea.Cmd) {
+	tableHeight := m.height - 7
+	if tableHeight < 0 {
+		tableHeight = 0
+	}
+	m.table.SetHeight(tableHeight)
+
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
@@ -147,7 +153,11 @@ func (m projectsModel) View() string {
 	}
 
 	// Adjust table height according to screen size
-	m.table.SetHeight(m.height - 7)
+	tableHeight := m.height - 7
+	if tableHeight < 0 {
+		tableHeight = 0
+	}
+	m.table.SetHeight(tableHeight)
 
 	title := StyleTitle.Render(" YouTrack Projects ")
 	tableStr := m.table.View()

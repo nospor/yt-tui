@@ -270,6 +270,12 @@ func (m *boardsModel) rebuildTable() {
 }
 
 func (m boardsModel) Update(msg tea.Msg) (boardsModel, tea.Cmd) {
+	tableHeight := m.height - 7
+	if tableHeight < 0 {
+		tableHeight = 0
+	}
+	m.table.SetHeight(tableHeight)
+
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
@@ -390,7 +396,11 @@ func (m boardsModel) View() string {
 			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading agile boards..."))
 	}
 
-	m.table.SetHeight(m.height - 7)
+	tableHeight := m.height - 7
+	if tableHeight < 0 {
+		tableHeight = 0
+	}
+	m.table.SetHeight(tableHeight)
 
 	title := StyleTitle.Render(" YouTrack Agile Boards ")
 	tableStr := m.table.View()
