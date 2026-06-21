@@ -2,6 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -42,25 +45,32 @@ func isStateClosed(state string) bool {
 }
 
 type detailModel struct {
-	client           *ytcli.Client
-	issueKey         string
-	issue            *ytcli.Issue
-	comments         []ytcli.Comment
-	loading          bool
-	err              error
-	spinner          spinner.Model
-	width            int
-	height           int
-	activeViewport   int // 0 = description, 1 = comments, 2 = links
-	descViewport     viewport.Model
-	commentsViewport viewport.Model
-	linksViewport    viewport.Model
+	client              *ytcli.Client
+	issueKey            string
+	issue               *ytcli.Issue
+	comments            []ytcli.Comment
+	loading             bool
+	loadingText         string
+	err                 error
+	spinner             spinner.Model
+	width               int
+	height              int
+	activeViewport      int // 0 = description, 1 = comments, 2 = links, 3 = attachments
+	descViewport        viewport.Model
+	commentsViewport    viewport.Model
+	linksViewport       viewport.Model
+	attachmentsViewport viewport.Model
 
 	// Links selection
 	linkedIssues     []linkedIssue
 	linksCursor      int
 	linksLineNumbers []int
 	linksHeights     []int
+
+	// Attachments selection
+	attachmentsCursor      int
+	attachmentsLineNumbers []int
+	attachmentsHeights     []int
 
 	// Sub-modes fields
 	mode            detailMode
@@ -85,15 +95,16 @@ func newDetailModel(client *ytcli.Client, states []string) detailModel {
 	ti.Prompt = " ✏️  "
 
 	return detailModel{
-		client:           client,
-		spinner:          s,
-		loading:          true,
-		mode:             modeNormal,
-		textInput:        ti,
-		stateOptions:     states,
-		descViewport:     viewport.New(0, 0),
-		commentsViewport: viewport.New(0, 0),
-		linksViewport:    viewport.New(0, 0),
+		client:              client,
+		spinner:             s,
+		loading:             true,
+		mode:                modeNormal,
+		textInput:           ti,
+		stateOptions:        states,
+		descViewport:        viewport.New(0, 0),
+		commentsViewport:    viewport.New(0, 0),
+		linksViewport:       viewport.New(0, 0),
+		attachmentsViewport: viewport.New(0, 0),
 	}
 }
 
@@ -109,6 +120,12 @@ type detailActionFinishedMsg struct {
 
 type clearStatusMsg struct {
 	id int
+}
+
+type openFileFinishedMsg struct {
+	fileName string
+	filePath string
+	err      error
 }
 
 func (m detailModel) loadDetailCmd() tea.Cmd {
@@ -131,6 +148,8 @@ func (m *detailModel) setIssueKey(key string) tea.Cmd {
 	m.mode = modeNormal
 	m.activeViewport = 0
 	m.linksCursor = 0
+	m.attachmentsCursor = 0
+	m.loadingText = ""
 	return m.loadDetailCmd()
 }
 
@@ -179,6 +198,20 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		// Reload issue data
 		m.loading = true
 		return m, m.loadDetailCmd()
+
+	case openFileFinishedMsg:
+		m.loading = false
+		m.loadingText = ""
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.statusMessage = fmt.Sprintf("Opened %s!", msg.fileName)
+		m.statusMessageID++
+		currentID := m.statusMessageID
+		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+			return clearStatusMsg{id: currentID}
+		})
 
 	case tea.KeyMsg:
 		if m.loading {
@@ -334,6 +367,23 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					}
 				}
 
+				// 4. Add all attachment URLs
+				if m.issue != nil && baseURL != "" {
+					for _, att := range m.issue.Attachments {
+						var attURL string
+						if strings.HasPrefix(att.URL, "http://") || strings.HasPrefix(att.URL, "https://") {
+							attURL = att.URL
+						} else {
+							trimmedURL := strings.TrimPrefix(att.URL, "/")
+							attURL = baseURL + trimmedURL
+						}
+						if !seen[attURL] {
+							seen[attURL] = true
+							urls = append(urls, attURL)
+						}
+					}
+				}
+
 				if len(urls) == 0 {
 					m.statusMessage = "No URLs found to yank!"
 					m.statusMessageID++
@@ -420,8 +470,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return popStateMsg{projectCodeToInvalidate: proj}
 			}
 		case "tab":
-			// Switch focus between Description, Comments and Links viewports
-			m.activeViewport = (m.activeViewport + 1) % 3
+			// Switch focus between Description, Comments, Links and Attachments viewports
+			m.activeViewport = (m.activeViewport + 1) % 4
 			m.updateViewportContents()
 			return m, nil
 		case "up", "k":
@@ -429,6 +479,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.linksCursor--
 				if m.linksCursor < 0 {
 					m.linksCursor = 0
+				}
+				m.updateViewportContents()
+				return m, nil
+			}
+			if m.activeViewport == 3 {
+				m.attachmentsCursor--
+				if m.attachmentsCursor < 0 {
+					m.attachmentsCursor = 0
 				}
 				m.updateViewportContents()
 				return m, nil
@@ -442,6 +500,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.updateViewportContents()
 				return m, nil
 			}
+			if m.activeViewport == 3 {
+				m.attachmentsCursor++
+				if len(m.issue.Attachments) > 0 && m.attachmentsCursor >= len(m.issue.Attachments) {
+					m.attachmentsCursor = len(m.issue.Attachments) - 1
+				}
+				m.updateViewportContents()
+				return m, nil
+			}
 		case "enter":
 			if m.activeViewport == 2 && len(m.linkedIssues) > 0 {
 				selected := m.linkedIssues[m.linksCursor]
@@ -449,15 +515,27 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					return pushStateMsg{state: stateDetail, data: selected.idReadable}
 				}
 			}
+			if m.activeViewport == 3 && len(m.issue.Attachments) > 0 {
+				att := m.issue.Attachments[m.attachmentsCursor]
+				m.loading = true
+				m.loadingText = fmt.Sprintf("Downloading and opening %s...", att.Name)
+				return m, m.downloadAndOpenFileCmd(att)
+			}
 		case "J":
 			if m.activeViewport == 0 {
 				m.descViewport.LineDown(1)
 			} else if m.activeViewport == 1 {
 				m.commentsViewport.LineDown(1)
-			} else {
+			} else if m.activeViewport == 2 {
 				m.linksCursor++
 				if len(m.linkedIssues) > 0 && m.linksCursor >= len(m.linkedIssues) {
 					m.linksCursor = len(m.linkedIssues) - 1
+				}
+				m.updateViewportContents()
+			} else if m.activeViewport == 3 {
+				m.attachmentsCursor++
+				if len(m.issue.Attachments) > 0 && m.attachmentsCursor >= len(m.issue.Attachments) {
+					m.attachmentsCursor = len(m.issue.Attachments) - 1
 				}
 				m.updateViewportContents()
 			}
@@ -467,10 +545,16 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.descViewport.LineUp(1)
 			} else if m.activeViewport == 1 {
 				m.commentsViewport.LineUp(1)
-			} else {
+			} else if m.activeViewport == 2 {
 				m.linksCursor--
 				if m.linksCursor < 0 {
 					m.linksCursor = 0
+				}
+				m.updateViewportContents()
+			} else if m.activeViewport == 3 {
+				m.attachmentsCursor--
+				if m.attachmentsCursor < 0 {
+					m.attachmentsCursor = 0
 				}
 				m.updateViewportContents()
 			}
@@ -519,8 +603,10 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.descViewport, cmd = m.descViewport.Update(msg)
 		} else if m.activeViewport == 1 {
 			m.commentsViewport, cmd = m.commentsViewport.Update(msg)
-		} else {
+		} else if m.activeViewport == 2 {
 			m.linksViewport, cmd = m.linksViewport.Update(msg)
+		} else {
+			m.attachmentsViewport, cmd = m.attachmentsViewport.Update(msg)
 		}
 		return m, cmd
 	}
@@ -550,22 +636,21 @@ func (m *detailModel) updateViewportSizes() {
 		viewportCommentsWidth = 1
 	}
 
-	commentsViewportHeight := bottomHeight - 2
-	if commentsViewportHeight < 1 {
-		commentsViewportHeight = 1
+	bottomPanelHeight := 6
+	if bottomPanelHeight > bottomHeight-8 {
+		bottomPanelHeight = bottomHeight - 8
+	}
+	if bottomPanelHeight < 1 {
+		bottomPanelHeight = 1
 	}
 
-	linksViewportHeight := 6
-	if linksViewportHeight > commentsViewportHeight-6 {
-		linksViewportHeight = commentsViewportHeight - 6
-	}
-	if linksViewportHeight < 1 {
-		linksViewportHeight = 1
-	}
-
-	descViewportHeight := commentsViewportHeight - linksViewportHeight - 3
+	descViewportHeight := bottomHeight - bottomPanelHeight - 5
 	if descViewportHeight < 1 {
 		descViewportHeight = 1
+	}
+	commentsViewportHeight := bottomHeight - bottomPanelHeight - 5
+	if commentsViewportHeight < 1 {
+		commentsViewportHeight = 1
 	}
 
 	// Check if the dimensions actually changed
@@ -577,7 +662,9 @@ func (m *detailModel) updateViewportSizes() {
 	m.commentsViewport.Width = viewportCommentsWidth
 	m.commentsViewport.Height = commentsViewportHeight
 	m.linksViewport.Width = viewportDescWidth
-	m.linksViewport.Height = linksViewportHeight
+	m.linksViewport.Height = bottomPanelHeight
+	m.attachmentsViewport.Width = viewportCommentsWidth
+	m.attachmentsViewport.Height = bottomPanelHeight
 
 	// Only re-wrap and set content if the width changed and we have the issue loaded
 	if m.issue != nil {
@@ -768,38 +855,102 @@ func (m *detailModel) updateViewportContents() {
 		}
 	}
 	m.linksViewport.SetContent(linksStr.String())
+
+	// Format and wrap attachments
+	var attachmentsStr strings.Builder
+	if m.issue != nil {
+		if len(m.issue.Attachments) == 0 {
+			attachmentsStr.WriteString("No attachments.")
+			m.attachmentsLineNumbers = nil
+			m.attachmentsHeights = nil
+		} else {
+			// Ensure cursor is within bounds
+			if m.attachmentsCursor < 0 {
+				m.attachmentsCursor = 0
+			}
+			if m.attachmentsCursor >= len(m.issue.Attachments) {
+				m.attachmentsCursor = len(m.issue.Attachments) - 1
+			}
+
+			m.attachmentsLineNumbers = make([]int, len(m.issue.Attachments))
+			m.attachmentsHeights = make([]int, len(m.issue.Attachments))
+			currentLine := 0
+
+			for idx, att := range m.issue.Attachments {
+				prefix := "  "
+				if idx == m.attachmentsCursor && m.activeViewport == 3 {
+					prefix = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Render("➔ ")
+				}
+
+				nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan))
+				if idx == m.attachmentsCursor && m.activeViewport == 3 {
+					nameStyle = nameStyle.Bold(true).Underline(true)
+				}
+
+				sizeStr := ""
+				if att.Size > 0 {
+					sizeStr = " " + StyleSubtext.Render(fmt.Sprintf("(%s)", formatBytes(att.Size)))
+				}
+
+				row := fmt.Sprintf("%s%s%s",
+					prefix,
+					nameStyle.Render(att.Name),
+					sizeStr,
+				)
+
+				wrapped := lipgloss.NewStyle().Width(m.attachmentsViewport.Width).Render(row)
+				itemHeight := strings.Count(wrapped, "\n") + 1
+
+				m.attachmentsLineNumbers[idx] = currentLine
+				m.attachmentsHeights[idx] = itemHeight
+				attachmentsStr.WriteString(wrapped + "\n")
+				currentLine += itemHeight
+			}
+		}
+	}
+	m.attachmentsViewport.SetContent(attachmentsStr.String())
+
 	m.updateViewportScroll()
 }
 
 func (m *detailModel) updateViewportScroll() {
-	if len(m.linkedIssues) == 0 || len(m.linksLineNumbers) != len(m.linkedIssues) || len(m.linksHeights) != len(m.linkedIssues) {
-		return
-	}
+	if len(m.linkedIssues) > 0 && len(m.linksLineNumbers) == len(m.linkedIssues) && len(m.linksHeights) == len(m.linkedIssues) {
+		selectedLine := m.linksLineNumbers[m.linksCursor]
+		itemHeight := m.linksHeights[m.linksCursor]
 
-	selectedLine := m.linksLineNumbers[m.linksCursor]
-	itemHeight := m.linksHeights[m.linksCursor]
-
-	// When scrolling up, we want to make sure the header of the group is also visible if this is the first item in the group
-	targetScrollLine := selectedLine
-	if m.linksCursor > 0 {
-		if m.linkedIssues[m.linksCursor].relation != m.linkedIssues[m.linksCursor-1].relation {
-			// This is the first item in its group. Ensure its header (which is at selectedLine - 1) is visible.
-			targetScrollLine = selectedLine - 1
-			if targetScrollLine < 0 {
-				targetScrollLine = 0
+		// When scrolling up, we want to make sure the header of the group is also visible if this is the first item in the group
+		targetScrollLine := selectedLine
+		if m.linksCursor > 0 {
+			if m.linkedIssues[m.linksCursor].relation != m.linkedIssues[m.linksCursor-1].relation {
+				// This is the first item in its group. Ensure its header (which is at selectedLine - 1) is visible.
+				targetScrollLine = selectedLine - 1
+				if targetScrollLine < 0 {
+					targetScrollLine = 0
+				}
 			}
+		} else {
+			// First item of the whole list. Ensure the very first header (at line 0) is visible.
+			targetScrollLine = 0
 		}
-	} else {
-		// First item of the whole list. Ensure the very first header (at line 0) is visible.
-		targetScrollLine = 0
+
+		// Ensure the selected line (and its header when scrolling up, or its full height when scrolling down) is visible
+		if targetScrollLine < m.linksViewport.YOffset {
+			m.linksViewport.SetYOffset(targetScrollLine)
+		} else if selectedLine+itemHeight > m.linksViewport.YOffset+m.linksViewport.Height {
+			// Scroll down just enough to show the entire item
+			m.linksViewport.SetYOffset(selectedLine + itemHeight - m.linksViewport.Height)
+		}
 	}
 
-	// Ensure the selected line (and its header when scrolling up, or its full height when scrolling down) is visible
-	if targetScrollLine < m.linksViewport.YOffset {
-		m.linksViewport.SetYOffset(targetScrollLine)
-	} else if selectedLine+itemHeight > m.linksViewport.YOffset+m.linksViewport.Height {
-		// Scroll down just enough to show the entire item
-		m.linksViewport.SetYOffset(selectedLine + itemHeight - m.linksViewport.Height)
+	if m.issue != nil && len(m.issue.Attachments) > 0 && len(m.attachmentsLineNumbers) == len(m.issue.Attachments) && len(m.attachmentsHeights) == len(m.issue.Attachments) {
+		selectedLine := m.attachmentsLineNumbers[m.attachmentsCursor]
+		itemHeight := m.attachmentsHeights[m.attachmentsCursor]
+
+		if selectedLine < m.attachmentsViewport.YOffset {
+			m.attachmentsViewport.SetYOffset(selectedLine)
+		} else if selectedLine+itemHeight > m.attachmentsViewport.YOffset+m.attachmentsViewport.Height {
+			m.attachmentsViewport.SetYOffset(selectedLine + itemHeight - m.attachmentsViewport.Height)
+		}
 	}
 }
 
@@ -809,8 +960,12 @@ func (m detailModel) View() string {
 	}
 
 	if m.loading {
+		txt := m.loadingText
+		if txt == "" {
+			txt = "Loading issue details..."
+		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading issue details..."))
+			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " "+txt))
 	}
 
 	// 1. Top Metadata panel
@@ -887,8 +1042,20 @@ func (m detailModel) View() string {
 		m.activeViewport == 2,
 	)
 
+	attachmentsBorder := StyleNormalBorder
+	if m.activeViewport == 3 {
+		attachmentsBorder = StyleFocusBorder
+	}
+	attachmentsView := renderBoxWithTitle(
+		attachmentsBorder.Width(m.attachmentsViewport.Width).Height(m.attachmentsViewport.Height),
+		"Attachments",
+		m.attachmentsViewport.View(),
+		m.activeViewport == 3,
+	)
+
 	leftColumn := lipgloss.JoinVertical(lipgloss.Left, descView, " ", linksView)
-	splitView := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", commentsView)
+	rightColumn := lipgloss.JoinVertical(lipgloss.Left, commentsView, " ", attachmentsView)
+	splitView := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", rightColumn)
 
 	// 3. Lower Action overlay
 	var actionView string
@@ -931,7 +1098,11 @@ func (m detailModel) View() string {
 	if m.statusMessage != "" {
 		footer = StyleStatusMessage.Render(" " + m.statusMessage + " ")
 	} else {
-		footer = StyleHelp.Render(" [Esc] Back  [Tab] Toggle Pane  [Enter] Jump to Task  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ")
+		enterAction := "Jump to Task"
+		if m.activeViewport == 3 {
+			enterAction = "Open Attachment"
+		}
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Toggle Pane  [Enter] %s  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
@@ -1187,4 +1358,38 @@ func extractURLs(text string) []string {
 		}
 	}
 	return urls
+}
+
+func (m *detailModel) downloadAndOpenFileCmd(att ytcli.Attachment) tea.Cmd {
+	return func() tea.Msg {
+		dir := filepath.Join(os.TempDir(), "yt-tui-attachments")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return openFileFinishedMsg{err: fmt.Errorf("failed to create temp dir: %w", err)}
+		}
+
+		destPath := filepath.Join(dir, att.Name)
+		if err := m.client.DownloadAttachment(att.URL, destPath); err != nil {
+			return openFileFinishedMsg{err: fmt.Errorf("failed to download attachment: %w", err)}
+		}
+
+		cmd := exec.Command("xdg-open", destPath)
+		if err := cmd.Start(); err != nil {
+			return openFileFinishedMsg{err: fmt.Errorf("failed to open file with xdg-open: %w", err)}
+		}
+
+		return openFileFinishedMsg{fileName: att.Name, filePath: destPath}
+	}
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

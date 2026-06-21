@@ -98,6 +98,14 @@ type IssueLinkType struct {
 	LocalizedTargetToSource string `json:"localizedTargetToSource,omitempty"`
 }
 
+// Attachment represents an issue attachment in YouTrack.
+type Attachment struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Size int64  `json:"size,omitempty"`
+}
+
 // Issue represents a YouTrack issue.
 type Issue struct {
 	ID           string        `json:"id"`
@@ -109,6 +117,7 @@ type Issue struct {
 	Comments     []Comment     `json:"comments,omitempty"`
 	Links        []IssueLink   `json:"links,omitempty"`
 	Reporter     *User         `json:"reporter,omitempty"`
+	Attachments  []Attachment  `json:"attachments,omitempty"`
 }
 
 // Parents returns the parent issues linked to this issue.

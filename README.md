@@ -25,12 +25,14 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 - **📂 Global Project Browser**: View and browse all accessible YouTrack projects in a clean tabular view.
 - **⚡ Asynchronous Paginated Loading**: Loads issues in the background without blocking the UI, giving you an instantly responsive view even on large codebases.
 - **🔍 Filter & Search**: Instantly query and filter issues in lists by readable ID or summary text using local filtering.
-- **📝 Comprehensive Issue Detail**: Renders full markdown descriptions, assignees, priorities, states, and custom fields. Supports dedicated scrollable viewports for description and comments.
+- **📝 Comprehensive Issue Detail**: Renders full markdown descriptions, assignees, priorities, states, and custom fields. Supports dedicated scrollable viewports for description, comments, linked issues, and attachments.
 - **🔄 Complete Issue Lifecycle**:
   - **Create & Clone**: Instantly spawn new issues or clone existing ones (pre-populating description, type, priority, and assignee details).
   - **State Transitions**: Transition states (e.g. `Open` ➔ `In Progress` ➔ `Fixed`) dynamically.
   - **Assigning**: Quickly assign tickets to other team members, self-assign with `me`, or unassign with `unassigned` (also supports `unassign`, `none`, or `-`).
   - **Commenting**: Write and submit markdown comments directly from the detail view.
+  - **Linked Issues**: Displays grouped relations (e.g., parent/subtask, depends on, etc.) with quick jump navigation on `Enter`.
+  - **Task Attachments**: Lists issue files and attachments with their sizes; download and open them directly via `xdg-open` on `Enter`.
 - **🛡️ Native REST API Integration**: Directly interacts with YouTrack REST API endpoints, completely avoiding Python keyring lockouts, credential corruption, or subprocess TTY issues.
 
 ---
@@ -214,9 +216,10 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `Esc` / `Backspace`: Go back to the dashboard/previous screen.
 
 ### 🔍 Issue Detail View
-* `Tab`: Cycle focus between the Description, Comments, and Links (Parents/Children) viewports.
-* `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Links viewport, this moves the selection cursor.
+* `Tab`: Cycle focus between the Description, Comments, Links (Parents/Children), and Attachments viewports.
+* `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Links and Attachments viewports, this moves the selection cursor.
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
+* `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.
 * `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
@@ -225,9 +228,9 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.
   - `d`: Copy the task description to the clipboard.
-  - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, and any linked issues; copies if only 1 is found, or shows a selection popup if multiple exist).
+  - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
   - Pressing any other key cancels the yanking motion.
-* `r`: Force refresh issue details, comments, and links.
+* `r`: Force refresh issue details, comments, links, and attachments.
 * `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
 
 ### 📝 Issue Form (Create / Clone / Edit)

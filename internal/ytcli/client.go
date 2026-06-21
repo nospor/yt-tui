@@ -360,7 +360,7 @@ func (c *Client) GetIssue(id string) (*Issue, error) {
 	}
 
 	params := url.Values{}
-	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)),reporter(login,fullName,email),links(id,direction,linkType(name,localizedName,sourceToTarget,localizedSourceToTarget,targetToSource,localizedTargetToSource),issues(id,idReadable,summary,customFields(name,value(name))))")
+	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)),reporter(login,fullName,email),links(id,direction,linkType(name,localizedName,sourceToTarget,localizedSourceToTarget,targetToSource,localizedTargetToSource),issues(id,idReadable,summary,customFields(name,value(name)))),attachments(id,name,url,size)")
 	apiURL := fmt.Sprintf("%sapi/issues/%s?%s", baseURL, id, params.Encode())
 
 	req, err := c.newRequest("GET", apiURL, nil)
@@ -386,6 +386,52 @@ func (c *Client) GetIssue(id string) (*Issue, error) {
 		return nil, err
 	}
 	return &issue, nil
+}
+
+// DownloadAttachment downloads an attachment to a local path.
+func (c *Client) DownloadAttachment(attachmentURL string, destPath string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	var downloadURL string
+	if strings.HasPrefix(attachmentURL, "http://") || strings.HasPrefix(attachmentURL, "https://") {
+		downloadURL = attachmentURL
+	} else {
+		baseURL := c.baseURL
+		if !strings.HasSuffix(baseURL, "/") {
+			baseURL += "/"
+		}
+		trimmedURL := strings.TrimPrefix(attachmentURL, "/")
+		downloadURL = baseURL + trimmedURL
+	}
+
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("download failed: status %d: %s", resp.StatusCode, string(body))
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 // AddComment adds a comment to an issue.
