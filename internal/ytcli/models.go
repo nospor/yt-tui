@@ -284,3 +284,156 @@ type WorkItemType struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
+
+// ActivityItem represents a YouTrack activity item.
+type ActivityItem struct {
+	ID        string         `json:"id"`
+	Type      string         `json:"$type"`
+	Timestamp interface{}    `json:"timestamp,omitempty"` // float64 or int64
+	Author    *User          `json:"author,omitempty"`
+	Field     *ActivityField `json:"field,omitempty"`
+	Added     interface{}    `json:"added,omitempty"`
+	Removed   interface{}    `json:"removed,omitempty"`
+}
+
+type ActivityField struct {
+	Name string `json:"name"`
+}
+
+func (a ActivityItem) CreatedTime() string {
+	if a.Timestamp == nil {
+		return "Unknown time"
+	}
+	switch val := a.Timestamp.(type) {
+	case float64:
+		t := time.UnixMilli(int64(val))
+		return t.Format("2006-01-02 15:04:05")
+	case int64:
+		t := time.UnixMilli(val)
+		return t.Format("2006-01-02 15:04:05")
+	}
+	return "Unknown time"
+}
+
+// helper to convert interface{} field values to a slice of interfaces.
+func toSlice(v interface{}) []interface{} {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case []interface{}:
+		return val
+	default:
+		return []interface{}{val}
+	}
+}
+
+// GetCommentText extracts comment text if this is a CommentActivityItem
+func (a ActivityItem) GetCommentText() string {
+	slice := toSlice(a.Added)
+	if len(slice) == 0 {
+		return ""
+	}
+	if m, ok := slice[0].(map[string]interface{}); ok {
+		if txt, ok := m["text"].(string); ok {
+			return txt
+		}
+	}
+	return ""
+}
+
+// GetCommentID extracts the comment ID if this is a CommentActivityItem
+func (a ActivityItem) GetCommentID() string {
+	slice := toSlice(a.Added)
+	if len(slice) == 0 {
+		return ""
+	}
+	if m, ok := slice[0].(map[string]interface{}); ok {
+		if id, ok := m["id"].(string); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+// GetWorkItemDetails extracts duration and text from a WorkItemActivityItem
+func (a ActivityItem) GetWorkItemDetails() (string, string) {
+	slice := toSlice(a.Added)
+	if len(slice) == 0 {
+		return "", ""
+	}
+	if m, ok := slice[0].(map[string]interface{}); ok {
+		desc, _ := m["text"].(string)
+		durationPres := ""
+		if dur, ok := m["duration"].(map[string]interface{}); ok {
+			durationPres, _ = dur["presentation"].(string)
+		}
+		return durationPres, desc
+	}
+	return "", ""
+}
+
+// GetVcsChangeDetails extracts revision and text from a VcsChangeActivityItem
+func (a ActivityItem) GetVcsChangeDetails() (string, string) {
+	slice := toSlice(a.Added)
+	if len(slice) == 0 {
+		return "", ""
+	}
+	if m, ok := slice[0].(map[string]interface{}); ok {
+		rev, _ := m["vcsRevision"].(string)
+		text, _ := m["text"].(string)
+		return rev, text
+	}
+	return "", ""
+}
+
+// GetCustomFieldChanges extracts added and removed custom field values as strings
+func (a ActivityItem) GetCustomFieldChanges() (string, string) {
+	addedStr := ""
+	removedStr := ""
+
+	parseValue := func(val interface{}) string {
+		if val == nil {
+			return ""
+		}
+		switch v := val.(type) {
+		case string:
+			return v
+		case float64:
+			return fmt.Sprintf("%.0f", v)
+		case bool:
+			return fmt.Sprintf("%t", v)
+		case map[string]interface{}:
+			if dn, ok := v["displayName"].(string); ok && dn != "" {
+				return dn
+			}
+			if n, ok := v["name"].(string); ok && n != "" {
+				return n
+			}
+			if value, ok := v["value"]; ok {
+				if vs, ok := value.(string); ok {
+					return vs
+				}
+				return fmt.Sprintf("%v", value)
+			}
+			if text, ok := v["text"].(string); ok {
+				return text
+			}
+			if id, ok := v["id"].(string); ok {
+				return id
+			}
+		}
+		return fmt.Sprintf("%v", val)
+	}
+
+	addedSlice := toSlice(a.Added)
+	if len(addedSlice) > 0 {
+		addedStr = parseValue(addedSlice[0])
+	}
+	removedSlice := toSlice(a.Removed)
+	if len(removedSlice) > 0 {
+		removedStr = parseValue(removedSlice[0])
+	}
+
+	return addedStr, removedStr
+}

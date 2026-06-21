@@ -35,6 +35,7 @@ const (
 	modeYank
 	modeYankUrlSelect
 	modeTrackTime
+	modeFilterSelect
 )
 
 type linkedIssue struct {
@@ -56,9 +57,11 @@ type detailModel struct {
 	cfg                 *config.Config
 	issueKey            string
 	issue               *ytcli.Issue
-	comments            []ytcli.Comment
+	activities          []ytcli.ActivityItem
 	loading             bool
 	loadingText         string
+	filterCursor        int
+	tempFilters         map[string]bool
 	err                 error
 	spinner             spinner.Model
 	width               int
@@ -164,7 +167,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 
 type detailDataMsg struct {
 	issue          *ytcli.Issue
-	comments       []ytcli.Comment
+	activities     []ytcli.ActivityItem
 	trackTimeTypes []ytcli.WorkItemType
 	err            error
 }
@@ -190,13 +193,19 @@ func (m detailModel) loadDetailCmd() tea.Cmd {
 			return detailDataMsg{err: err1}
 		}
 
-		// Also fetch comments
-		comments, err2 := m.client.ListComments(issue.IDReadable)
+		// Fetch activities using the configured filters
+		var categories []string
+		if m.cfg != nil {
+			categories = mapFiltersToCategories(m.cfg.ActivityFilters)
+		} else {
+			categories = []string{"CommentsCategory"}
+		}
+		activities, err2 := m.client.ListActivities(issue.IDReadable, categories)
 
 		// Also fetch work item types
 		wTypes, _ := m.client.ListWorkItemTypes()
 
-		return detailDataMsg{issue: issue, comments: comments, trackTimeTypes: wTypes, err: err2}
+		return detailDataMsg{issue: issue, activities: activities, trackTimeTypes: wTypes, err: err2}
 	}
 }
 
@@ -239,7 +248,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, nil
 		}
 		m.issue = msg.issue
-		m.comments = msg.comments
+		m.activities = msg.activities
 		m.trackTimeTypes = msg.trackTimeTypes
 
 		// Initialize viewports and set content
@@ -306,9 +315,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				val := m.textInput.Value()
-				if val != "" && len(m.comments) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.comments) {
+				if val != "" && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
 					m.loading = true
-					commentID := m.comments[m.commentsCursor].ID
+					commentID := m.activities[m.commentsCursor].GetCommentID()
 					return m, func() tea.Msg {
 						err := m.client.UpdateComment(m.issue.IDReadable, commentID, val)
 						return detailActionFinishedMsg{err: err}
@@ -676,6 +685,48 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return m, cmd
 			}
 			return m, nil
+
+		case modeFilterSelect:
+			switch msg.String() {
+			case "esc":
+				m.mode = modeNormal
+				return m, nil
+			case "up", "k":
+				m.filterCursor--
+				if m.filterCursor < 0 {
+					m.filterCursor = len(ActivityFilterOptions) - 1
+				}
+				return m, nil
+			case "down", "j":
+				m.filterCursor++
+				if m.filterCursor >= len(ActivityFilterOptions) {
+					m.filterCursor = 0
+				}
+				return m, nil
+			case " ":
+				f := ActivityFilterOptions[m.filterCursor]
+				m.tempFilters[f] = !m.tempFilters[f]
+				return m, nil
+			case "enter":
+				if m.cfg != nil {
+					var newFilters []string
+					for _, f := range ActivityFilterOptions {
+						if m.tempFilters[f] {
+							newFilters = append(newFilters, f)
+						}
+					}
+					m.cfg.ActivityFilters = newFilters
+					_ = config.SaveConfig(m.cfg)
+					m.loading = true
+					m.loadingText = "Filtering activities..."
+					m.commentsCursor = 0
+					m.mode = modeNormal
+					return m, m.loadDetailCmd()
+				}
+				m.mode = modeNormal
+				return m, nil
+			}
+			return m, nil
 		}
 
 		// Normal Mode Key Handling
@@ -729,8 +780,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		case "down", "j":
 			if m.activeViewport == 1 {
 				m.commentsCursor++
-				if len(m.comments) > 0 && m.commentsCursor >= len(m.comments) {
-					m.commentsCursor = len(m.comments) - 1
+				if len(m.activities) > 0 && m.commentsCursor >= len(m.activities) {
+					m.commentsCursor = len(m.activities) - 1
 				}
 				m.updateViewportContents()
 				return m, nil
@@ -842,16 +893,29 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return pushStateMsg{state: stateForm, data: "clone:" + m.issue.IDReadable}
 			}
 		case "e":
-			if m.activeViewport == 1 && len(m.comments) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.comments) {
-				m.mode = modeCommentEdit
-				m.textInput.Placeholder = "Edit comment..."
-				m.textInput.SetValue(m.comments[m.commentsCursor].Text)
-				m.textInput.Focus()
-				return m, nil
+			if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+				act := m.activities[m.commentsCursor]
+				if act.Type == "CommentActivityItem" {
+					m.mode = modeCommentEdit
+					m.textInput.Placeholder = "Edit comment..."
+					m.textInput.SetValue(act.GetCommentText())
+					m.textInput.Focus()
+					return m, nil
+				}
 			}
 			// Edit issue (pushes form pre-filled)
 			return m, func() tea.Msg {
 				return pushStateMsg{state: stateForm, data: "edit:" + m.issue.IDReadable}
+			}
+		case "F":
+			if m.activeViewport == 1 && m.cfg != nil {
+				m.mode = modeFilterSelect
+				m.filterCursor = 0
+				m.tempFilters = make(map[string]bool)
+				for _, f := range m.cfg.ActivityFilters {
+					m.tempFilters[f] = true
+				}
+				return m, nil
 			}
 		case "r":
 			m.loading = true
@@ -944,10 +1008,10 @@ func (m *detailModel) updateViewportContents() {
 	descWrapped := lipgloss.NewStyle().Width(m.descViewport.Width).Render(m.issue.Description)
 	m.descViewport.SetContent(descWrapped)
 
-	// Format and wrap comments
+	// Format and wrap activities
 	var commentsStr strings.Builder
-	if len(m.comments) == 0 {
-		commentsStr.WriteString("No comments yet.")
+	if len(m.activities) == 0 {
+		commentsStr.WriteString("No comments or activities matching filters.")
 		m.commentsLineNumbers = nil
 		m.commentsHeights = nil
 	} else {
@@ -955,22 +1019,22 @@ func (m *detailModel) updateViewportContents() {
 		if m.commentsCursor < 0 {
 			m.commentsCursor = 0
 		}
-		if m.commentsCursor >= len(m.comments) {
-			m.commentsCursor = len(m.comments) - 1
+		if m.commentsCursor >= len(m.activities) {
+			m.commentsCursor = len(m.activities) - 1
 		}
 
-		m.commentsLineNumbers = make([]int, len(m.comments))
-		m.commentsHeights = make([]int, len(m.comments))
+		m.commentsLineNumbers = make([]int, len(m.activities))
+		m.commentsHeights = make([]int, len(m.activities))
 		currentLine := 0
 
-		for idx, c := range m.comments {
+		for idx, act := range m.activities {
 			if idx > 0 {
 				commentsStr.WriteString("\n\n---\n\n")
 				currentLine += 5
 			}
 			authorName := "System"
-			if c.Author != nil {
-				authorName = c.Author.DisplayName()
+			if act.Author != nil {
+				authorName = act.Author.DisplayName()
 			}
 
 			prefix := "  "
@@ -978,24 +1042,79 @@ func (m *detailModel) updateViewportContents() {
 				prefix = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Render("➔ ")
 			}
 
-			header := fmt.Sprintf("%s%s (%s):",
-				prefix,
-				lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
-				StyleSubtext.Render(c.CreatedTime()),
-			)
+			headerText := ""
+			bodyText := ""
+
+			switch act.Type {
+			case "CommentActivityItem":
+				headerText = fmt.Sprintf("%s%s (%s) commented:",
+					prefix,
+					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
+					StyleSubtext.Render(act.CreatedTime()),
+				)
+				bodyText = act.GetCommentText()
+
+			case "WorkItemActivityItem":
+				dur, desc := act.GetWorkItemDetails()
+				headerText = fmt.Sprintf("%s%s (%s) logged work:",
+					prefix,
+					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
+					StyleSubtext.Render(act.CreatedTime()),
+				)
+				if desc != "" {
+					bodyText = fmt.Sprintf("Duration: %s\nDescription: %s", dur, desc)
+				} else {
+					bodyText = fmt.Sprintf("Duration: %s", dur)
+				}
+
+			case "VcsChangeActivityItem":
+				rev, msgText := act.GetVcsChangeDetails()
+				headerText = fmt.Sprintf("%s%s (%s) linked VCS change:",
+					prefix,
+					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
+					StyleSubtext.Render(act.CreatedTime()),
+				)
+				if msgText != "" {
+					bodyText = fmt.Sprintf("Commit: %s\nMessage: %s", rev, msgText)
+				} else {
+					bodyText = fmt.Sprintf("Commit: %s", rev)
+				}
+
+			default:
+				fieldName := "item"
+				if act.Field != nil && act.Field.Name != "" {
+					fieldName = act.Field.Name
+				}
+				headerText = fmt.Sprintf("%s%s (%s) updated %s:",
+					prefix,
+					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
+					StyleSubtext.Render(act.CreatedTime()),
+					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Render(fieldName),
+				)
+				addedVal, removedVal := act.GetCustomFieldChanges()
+				if removedVal != "" && addedVal != "" {
+					bodyText = fmt.Sprintf("Removed: %s\nAdded: %s", removedVal, addedVal)
+				} else if addedVal != "" {
+					bodyText = fmt.Sprintf("Added: %s", addedVal)
+				} else if removedVal != "" {
+					bodyText = fmt.Sprintf("Removed: %s", removedVal)
+				} else {
+					bodyText = "Updated field"
+				}
+			}
 
 			commentBodyWidth := m.commentsViewport.Width - 2
 			if commentBodyWidth < 1 {
 				commentBodyWidth = 1
 			}
-			bodyWrapped := lipgloss.NewStyle().Width(commentBodyWidth).Render(c.Text)
+			bodyWrapped := lipgloss.NewStyle().Width(commentBodyWidth).Render(bodyText)
 			bodyLines := strings.Split(bodyWrapped, "\n")
 			for i, line := range bodyLines {
 				bodyLines[i] = "  " + line
 			}
 			bodyIndented := strings.Join(bodyLines, "\n")
 
-			row := header + "\n" + bodyIndented
+			row := headerText + "\n" + bodyIndented
 			itemHeight := strings.Count(row, "\n") + 1
 
 			m.commentsLineNumbers[idx] = currentLine
@@ -1252,7 +1371,7 @@ func (m *detailModel) updateViewportScroll() {
 		}
 	}
 
-	if len(m.comments) > 0 && len(m.commentsLineNumbers) == len(m.comments) && len(m.commentsHeights) == len(m.comments) {
+	if len(m.activities) > 0 && len(m.commentsLineNumbers) == len(m.activities) && len(m.commentsHeights) == len(m.activities) {
 		selectedLine := m.commentsLineNumbers[m.commentsCursor]
 		itemHeight := m.commentsHeights[m.commentsCursor]
 
@@ -1420,10 +1539,12 @@ func (m detailModel) View() string {
 			enterAction = "Open Attachment"
 		}
 		editAction := "Edit"
+		filterAction := ""
 		if m.activeViewport == 1 {
 			editAction = "Edit Comment"
+			filterAction = "  [F] Filter"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] %s  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction, editAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] %s  [C] Clone  [y] Yank%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
@@ -1569,6 +1690,57 @@ func (m detailModel) View() string {
 
 		popupContent := lipgloss.JoinVertical(lipgloss.Left, popupBodyParts...)
 
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := strings.Count(popup, "\n") + 1
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, popup, x, y)
+	}
+
+	if m.mode == modeFilterSelect {
+		var filterLines []string
+		filterLines = append(filterLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Render("🔍  Filter Comments & Activity Stream"))
+		filterLines = append(filterLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+
+		for idx, f := range ActivityFilterOptions {
+			checked := "[ ]"
+			if m.tempFilters[f] {
+				checked = "[x]"
+			}
+			item := fmt.Sprintf("  %s %s ", checked, f)
+			if idx == m.filterCursor {
+				itemStyled := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorBg)).
+					Background(lipgloss.Color(ColorCyan)).
+					Bold(true).
+					Render(item)
+				filterLines = append(filterLines, itemStyled)
+			} else {
+				itemStyled := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorText)).
+					Background(lipgloss.Color(ColorSurface)).
+					Render(item)
+				filterLines = append(filterLines, itemStyled)
+			}
+		}
+
+		filterLines = append(filterLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+		filterLines = append(filterLines, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [↑↓/k/j] Navigate   [Space] Toggle   [Enter] Save   [Esc] Cancel "))
+
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, filterLines...)
 		popup := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorViolet)).
@@ -1951,4 +2123,23 @@ func renderTrackTimeDropdownOptions(options []string, activeIndex int) string {
 	}
 	row := "  " + strings.Join(formatted, "   ")
 	return lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(row)
+}
+
+var ActivityFilterOptions = []string{"Comments", "Spent Time", "VCS Changes", "Change History"}
+
+func mapFiltersToCategories(filters []string) []string {
+	var categories []string
+	for _, f := range filters {
+		switch f {
+		case "Comments":
+			categories = append(categories, "CommentsCategory")
+		case "Spent Time":
+			categories = append(categories, "WorkItemCategory")
+		case "VCS Changes":
+			categories = append(categories, "VcsChangeCategory")
+		case "Change History":
+			categories = append(categories, "CustomFieldCategory", "SummaryCategory", "DescriptionCategory", "LinksCategory", "SprintCategory", "AttachmentsCategory")
+		}
+	}
+	return categories
 }

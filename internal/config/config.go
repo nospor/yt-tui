@@ -23,6 +23,7 @@ type Config struct {
 	SortColumn         string         `json:"sort_column"`
 	SortDirection      string         `json:"sort_direction"`
 	FavoriteView       string         `json:"favorite_view,omitempty"`
+	ActivityFilters    []string       `json:"activity_filters,omitempty"`
 }
 
 type ServerConfig struct {
@@ -59,6 +60,7 @@ func LoadConfig() (*Config, error) {
 			WorkTypes:          DefaultWorkTypes,
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
+			ActivityFilters:    []string{"Comments"},
 		}, err
 	}
 
@@ -76,6 +78,7 @@ func LoadConfig() (*Config, error) {
 			CustomStates:       DefaultStates,
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
+			ActivityFilters:    []string{"Comments"},
 		}, err
 	}
 
@@ -90,6 +93,7 @@ func LoadConfig() (*Config, error) {
 		WorkTypes:          DefaultWorkTypes,
 		FilteredStates:     append([]string{}, DefaultStates...),
 		FilteredPriorities: append([]string{}, DefaultPriorities...),
+		ActivityFilters:    []string{"Comments"},
 	}
 
 	// Check if file exists
@@ -153,6 +157,10 @@ func LoadConfig() (*Config, error) {
 	}
 	if fileCfg.FilteredPriorities == nil {
 		fileCfg.FilteredPriorities = append([]string{}, fileCfg.CustomPriorities...)
+		needsWrite = true
+	}
+	if fileCfg.ActivityFilters == nil {
+		fileCfg.ActivityFilters = []string{"Comments"}
 		needsWrite = true
 	}
 

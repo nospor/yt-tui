@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/atotto/clipboard"
@@ -30,8 +31,8 @@ func TestDetailModel_ViewportScrolling(t *testing.T) {
 	}
 
 	m, _ = m.Update(detailDataMsg{
-		issue:    issue,
-		comments: []ytcli.Comment{},
+		issue:      issue,
+		activities: []ytcli.ActivityItem{},
 	})
 
 	if m.descViewport.Height <= 0 {
@@ -109,8 +110,8 @@ func TestDetailModel_YankMotion(t *testing.T) {
 	}
 
 	m, _ = m.Update(detailDataMsg{
-		issue:    issue,
-		comments: []ytcli.Comment{},
+		issue:      issue,
+		activities: []ytcli.ActivityItem{},
 	})
 
 	// 1. Initially mode should be modeNormal
@@ -202,8 +203,8 @@ func TestDetailModel_YankUrls(t *testing.T) {
 		Description: "No links here",
 	}
 	m, _ = m.Update(detailDataMsg{
-		issue:    issue,
-		comments: []ytcli.Comment{},
+		issue:      issue,
+		activities: []ytcli.ActivityItem{},
 	})
 
 	// Press 'y' then 'u'
@@ -228,8 +229,8 @@ func TestDetailModel_YankUrls(t *testing.T) {
 		Description: "Check this: https://google.com/.",
 	}
 	m, _ = m.Update(detailDataMsg{
-		issue:    issueSingle,
-		comments: []ytcli.Comment{},
+		issue:      issueSingle,
+		activities: []ytcli.ActivityItem{},
 	})
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
@@ -269,8 +270,8 @@ func TestDetailModel_YankUrls(t *testing.T) {
 		},
 	}
 	m, _ = m.Update(detailDataMsg{
-		issue:    issueMultiple,
-		comments: []ytcli.Comment{},
+		issue:      issueMultiple,
+		activities: []ytcli.ActivityItem{},
 	})
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
@@ -370,5 +371,44 @@ func TestParseDurationToMinutes(t *testing.T) {
 				t.Errorf("expected %d minutes for %q, got %d", tc.expected, tc.input, got)
 			}
 		}
+	}
+}
+
+func TestActivitiesFilterSelect(t *testing.T) {
+	cfg := &config.Config{
+		ActivityFilters: []string{"Comments", "Spent Time"},
+	}
+	m := newDetailModel(nil, cfg)
+	m.loading = false
+	m.activeViewport = 1 // Comments/Activities pane
+	m.mode = modeNormal
+
+	// Press capital F to enter filter mode
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("F")})
+	if m.mode != modeFilterSelect {
+		t.Fatalf("expected modeFilterSelect, got %v", m.mode)
+	}
+
+	// Should have initialized tempFilters based on cfg
+	if !m.tempFilters["Comments"] || !m.tempFilters["Spent Time"] {
+		t.Errorf("expected Comments and Spent Time filters to be true initially")
+	}
+
+	// Press down key (j) to move to the second item ("Spent Time")
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.filterCursor != 1 {
+		t.Errorf("expected filter cursor to be 1, got %d", m.filterCursor)
+	}
+
+	// Press Space to toggle "Spent Time" (should set it to false)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	if m.tempFilters["Spent Time"] {
+		t.Errorf("expected Spent Time filter to be toggled off (false)")
+	}
+
+	// Press escape to cancel (should reset mode back to normal and discard changes)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after escape, got %v", m.mode)
 	}
 }

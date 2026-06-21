@@ -232,6 +232,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
   - Pressing any other key cancels the yanking motion.
 * `t`: Track time (opens a popup with an interactive calendar to select a date, duration input in `1w 1d 1h 1m` format, work type selection, and comment textarea).
+* `F` (in Comments viewport): Open the Activity filter panel (Comments, Spent Time, VCS Changes, Change History). Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
 * `r`: Force refresh issue details, comments, links, and attachments.
 * `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
 

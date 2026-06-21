@@ -979,6 +979,46 @@ func (c *Client) ListComments(id string) ([]Comment, error) {
 	return comments, nil
 }
 
+// ListActivities lists activities for a specific issue.
+func (c *Client) ListActivities(id string, categories []string) ([]ActivityItem, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	apiURL := baseURL + "api/issues/" + id + "/activities"
+	if len(categories) > 0 {
+		apiURL += "?categories=" + strings.Join(categories, ",")
+		apiURL += "&fields=id,$type,timestamp,author(login,fullName,email),added(id,text,duration(presentation),vcsRevision,name,displayName),removed(id,text,name,displayName),field(name)"
+	} else {
+		return nil, nil
+	}
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var activities []ActivityItem
+	if err := json.Unmarshal(body, &activities); err != nil {
+		return nil, err
+	}
+	return activities, nil
+}
+
 // AddWorkItem adds a work item (time tracking entry) to an issue.
 func (c *Client) AddWorkItem(issueID string, dateMs int64, durationMinutes int, workTypeID string, comment string) error {
 	if c.baseURL == "" || c.token == "" {
