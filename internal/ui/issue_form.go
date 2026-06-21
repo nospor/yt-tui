@@ -246,7 +246,7 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 		m.editKey = strings.TrimPrefix(data, "edit:")
 		m.loading = true
 		cmds = append(cmds, m.loadFormDataCmd(m.editKey))
-	} else if data != "" {
+	} else if data != "" && data != "ME" {
 		m.initialProjectCode = data
 		m.blurCurrent()
 		m.focusIndex = fieldSummary

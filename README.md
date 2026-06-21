@@ -191,6 +191,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `n`: Create a new issue in the selected project.
 * `r`: Refresh projects list.
 * `Esc` / `Backspace`: Go back to the dashboard.
+* **Note**: A special project called **Issues created by me** is pinned at the top of the list (separated from real projects by a blank line). Entering this project displays all issues created/reported by you (`reporter: me`).
 
 ### 🎛️ Agile Boards View
 * `↑` / `↓` (or `k` / `j`): Navigate agile boards table.

@@ -228,6 +228,9 @@ func (m *AppModel) switchState(state State, data string, isBack bool) tea.Cmd {
 	case stateBoards:
 		return m.boards.loadBoardsCmd()
 	case stateIssues:
+		if data == "ME" {
+			return m.issues.initContext("", "reporter: me", isBack)
+		}
 		if strings.HasPrefix(data, "query:") {
 			queryStr := strings.TrimPrefix(data, "query:")
 			return m.issues.initContext("", queryStr, isBack)

@@ -92,7 +92,10 @@ func (m projectsModel) Update(msg tea.Msg) (projectsModel, tea.Cmd) {
 			return m, nil
 		}
 
-		rows := []table.Row{}
+		rows := []table.Row{
+			{"ME", "Issues created by me", "Show all issues/tasks created by you"},
+			{"", "", ""},
+		}
 		for _, proj := range msg.projects {
 			rows = append(rows, table.Row{
 				proj.ShortName,
@@ -117,6 +120,9 @@ func (m projectsModel) Update(msg tea.Msg) (projectsModel, tea.Cmd) {
 			if len(m.table.Rows()) > 0 {
 				selected := m.table.SelectedRow()
 				projectCode := selected[0]
+				if projectCode == "" {
+					return m, nil
+				}
 				return m, func() tea.Msg {
 					return pushStateMsg{state: stateIssues, data: projectCode}
 				}
@@ -125,6 +131,9 @@ func (m projectsModel) Update(msg tea.Msg) (projectsModel, tea.Cmd) {
 			if len(m.table.Rows()) > 0 {
 				selected := m.table.SelectedRow()
 				projectCode := selected[0]
+				if projectCode == "" {
+					return m, nil
+				}
 				return m, func() tea.Msg {
 					return pushStateMsg{state: stateForm, data: projectCode}
 				}
@@ -135,8 +144,21 @@ func (m projectsModel) Update(msg tea.Msg) (projectsModel, tea.Cmd) {
 			return m, m.loadProjectsCmd()
 		}
 
+		oldCursor := m.table.Cursor()
 		// Let the table handle standard navigation keys
 		m.table, cmd = m.table.Update(msg)
+		newCursor := m.table.Cursor()
+		if newCursor == 1 {
+			if oldCursor == 0 {
+				if len(m.table.Rows()) > 2 {
+					m.table.SetCursor(2)
+				} else {
+					m.table.SetCursor(0)
+				}
+			} else {
+				m.table.SetCursor(0)
+			}
+		}
 		return m, cmd
 	}
 	return m, nil

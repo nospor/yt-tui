@@ -1052,6 +1052,8 @@ func (m issuesModel) View() string {
 			} else {
 				titleText = fmt.Sprintf(" Issues on Board: %s%s ", boardName, statusSuffix)
 			}
+		} else if displayQuery == "reporter: me" {
+			titleText = fmt.Sprintf(" Issues Created by Me%s ", statusSuffix)
 		} else {
 			titleText = fmt.Sprintf(" Issues matching: %s%s ", displayQuery, statusSuffix)
 		}
