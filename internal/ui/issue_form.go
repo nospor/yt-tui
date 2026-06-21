@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
@@ -111,6 +113,42 @@ func (m formModel) loadProjectsCmd() tea.Cmd {
 		projects, err := m.client.ListProjects()
 		return projectsLoadedMsg{projects: projects, err: err}
 	}
+}
+
+type editorFinishedMsg struct {
+	tempPath string
+	err      error
+}
+
+func (m formModel) openEditorCmd() tea.Cmd {
+	editorParts := strings.Fields(os.Getenv("EDITOR"))
+	if len(editorParts) == 0 {
+		editorParts = []string{"vim"}
+	}
+
+	tempFile, err := os.CreateTemp("", "yt-tui-desc-*.md")
+	if err != nil {
+		return func() tea.Msg {
+			return editorFinishedMsg{err: err}
+		}
+	}
+
+	if _, err := tempFile.WriteString(m.descTextArea.Value()); err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		return func() tea.Msg {
+			return editorFinishedMsg{err: err}
+		}
+	}
+	tempFile.Close()
+
+	bin := editorParts[0]
+	args := append(editorParts[1:], tempFile.Name())
+
+	c := exec.Command(bin, args...)
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return editorFinishedMsg{tempPath: tempFile.Name(), err: err}
+	})
 }
 
 func (m *formModel) setProjectByCode(code string) {
@@ -234,6 +272,25 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			if msg.tempPath != "" {
+				os.Remove(msg.tempPath)
+			}
+			return m, tea.ClearScreen
+		}
+		if msg.tempPath != "" {
+			defer os.Remove(msg.tempPath)
+			content, err := os.ReadFile(msg.tempPath)
+			if err != nil {
+				m.err = err
+				return m, tea.ClearScreen
+			}
+			m.descTextArea.SetValue(string(content))
+		}
+		return m, tea.ClearScreen
+
 	case projectsLoadedMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -293,6 +350,10 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "ctrl+g":
+			if !m.loading && m.focusIndex == fieldDescription {
+				return m, m.openEditorCmd()
+			}
 		case "esc":
 			if !m.loading {
 				return m, func() tea.Msg {
@@ -687,7 +748,13 @@ func (m formModel) View() string {
 
 	formContent := formStyle.Render(builder.String())
 
-	help := StyleHelp.Render(" [Tab/Shift-Tab] Navigate Fields  [<- / -> or h/l] Select Dropdown Option  [Ctrl+S] Save & Submit  [Esc] Cancel/Back ")
+	var helpText string
+	if m.focusIndex == fieldDescription {
+		helpText = " [Tab/Shift-Tab] Navigate Fields  [Ctrl+g] External Editor  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
+	} else {
+		helpText = " [Tab/Shift-Tab] Navigate Fields  [<- / -> or h/l] Select Dropdown Option  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
+	}
+	help := StyleHelp.Render(helpText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, formContent, "", help)
 }

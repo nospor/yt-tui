@@ -210,7 +210,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee).
 * `←` / `→` (or `h` / `l`): Cycle options in dropdown fields (Project, Type, Priority).
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
-* `Ctrl+S` (or `Enter` on text inputs): Submit the form and save/create/clone the issue.
+* `Ctrl+g` (on Description field): Open preferred external editor (using the `$EDITOR` environment variable) to write/edit the description.
+* `Ctrl+s` (or `Enter` on text inputs): Submit the form and save/create/clone the issue.
 * `Esc`: Cancel and discard changes.
 
 ## License
