@@ -17,6 +17,7 @@ type Config struct {
 	CustomTypes        []string       `json:"custom_types"`
 	CustomPriorities   []string       `json:"custom_priorities"`
 	CustomStates       []string       `json:"custom_states"`
+	WorkTypes          []string       `json:"work_types"`
 	FilteredStates     []string       `json:"filtered_states"`
 	FilteredPriorities []string       `json:"filtered_priorities"`
 	SortColumn         string         `json:"sort_column"`
@@ -40,6 +41,7 @@ var (
 	DefaultTypes      = []string{"Bug", "Feature", "Task", "Epic", "Improvement", "Support"}
 	DefaultPriorities = []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"}
 	DefaultStates     = []string{"Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"}
+	DefaultWorkTypes  = []string{"Development", "Documentation", "Implementation", "Investigation", "Testing"}
 )
 
 // LoadConfig loads config from ~/.config/yt-tui/config.json.
@@ -54,6 +56,7 @@ func LoadConfig() (*Config, error) {
 			CustomTypes:        DefaultTypes,
 			CustomPriorities:   DefaultPriorities,
 			CustomStates:       DefaultStates,
+			WorkTypes:          DefaultWorkTypes,
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
 		}, err
@@ -84,6 +87,7 @@ func LoadConfig() (*Config, error) {
 		CustomTypes:        DefaultTypes,
 		CustomPriorities:   DefaultPriorities,
 		CustomStates:       DefaultStates,
+		WorkTypes:          DefaultWorkTypes,
 		FilteredStates:     append([]string{}, DefaultStates...),
 		FilteredPriorities: append([]string{}, DefaultPriorities...),
 	}
@@ -137,6 +141,10 @@ func LoadConfig() (*Config, error) {
 	}
 	if len(fileCfg.CustomStates) == 0 {
 		fileCfg.CustomStates = DefaultStates
+		needsWrite = true
+	}
+	if len(fileCfg.WorkTypes) == 0 {
+		fileCfg.WorkTypes = DefaultWorkTypes
 		needsWrite = true
 	}
 	if fileCfg.FilteredStates == nil {

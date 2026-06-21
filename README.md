@@ -158,6 +158,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `sort_column`         | String           | `""`                                                 | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
 | `sort_direction`      | String           | `""`                                                 | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
 | `favorite_view`       | String           | `""`                                                 | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                   |
+| `work_types`          | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                            |
 
 ---
 
@@ -230,6 +231,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   - `d`: Copy the task description to the clipboard.
   - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
   - Pressing any other key cancels the yanking motion.
+* `t`: Track time (opens a popup with an interactive calendar to select a date, duration input in `1w 1d 1h 1m` format, work type selection, and comment textarea).
 * `r`: Force refresh issue details, comments, links, and attachments.
 * `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
 

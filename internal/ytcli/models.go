@@ -278,3 +278,9 @@ func stringifyValue(v interface{}) string {
 	}
 	return fmt.Sprintf("%v", v)
 }
+
+// WorkItemType represents a YouTrack work item type (time tracking category).
+type WorkItemType struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

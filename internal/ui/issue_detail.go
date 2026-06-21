@@ -7,12 +7,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
@@ -28,6 +31,7 @@ const (
 	modeAssignInput
 	modeYank
 	modeYankUrlSelect
+	modeTrackTime
 )
 
 type linkedIssue struct {
@@ -46,6 +50,7 @@ func isStateClosed(state string) bool {
 
 type detailModel struct {
 	client              *ytcli.Client
+	cfg                 *config.Config
 	issueKey            string
 	issue               *ytcli.Issue
 	comments            []ytcli.Comment
@@ -84,9 +89,19 @@ type detailModel struct {
 	// URL Yanking
 	yankUrls      []string
 	yankUrlCursor int
+
+	// Track Time fields
+	trackTimeDate          time.Time
+	trackTimeDateInput     textinput.Model
+	trackTimeDurationInput textinput.Model
+	trackTimeTypeIndex     int
+	trackTimeCommentInput  textarea.Model
+	trackTimeActiveField   int
+	trackTimeTypes         []ytcli.WorkItemType
+	trackTimeError         string
 }
 
-func newDetailModel(client *ytcli.Client, states []string) detailModel {
+func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
@@ -94,24 +109,56 @@ func newDetailModel(client *ytcli.Client, states []string) detailModel {
 	ti := textinput.New()
 	ti.Prompt = " ✏️  "
 
+	dateIn := textinput.New()
+	dateIn.Prompt = "📅  "
+	dateIn.Placeholder = "YYYY-MM-DD"
+	dateIn.TextStyle = dateIn.TextStyle.Background(lipgloss.Color(ColorSurface))
+	dateIn.PlaceholderStyle = dateIn.PlaceholderStyle.Background(lipgloss.Color(ColorSurface))
+	dateIn.PromptStyle = dateIn.PromptStyle.Background(lipgloss.Color(ColorSurface))
+
+	durIn := textinput.New()
+	durIn.Prompt = "⏱️  "
+	durIn.Placeholder = "e.g. 1w 1d 1h 1m"
+	durIn.TextStyle = durIn.TextStyle.Background(lipgloss.Color(ColorSurface))
+	durIn.PlaceholderStyle = durIn.PlaceholderStyle.Background(lipgloss.Color(ColorSurface))
+	durIn.PromptStyle = durIn.PromptStyle.Background(lipgloss.Color(ColorSurface))
+
+	commIn := textarea.New()
+	commIn.Placeholder = "Add a comment..."
+	commIn.SetHeight(3)
+	commIn.FocusedStyle.Base = commIn.FocusedStyle.Base.Background(lipgloss.Color(ColorSurface))
+	commIn.BlurredStyle.Base = commIn.BlurredStyle.Base.Background(lipgloss.Color(ColorSurface))
+	commIn.FocusedStyle.Text = commIn.FocusedStyle.Text.Background(lipgloss.Color(ColorSurface))
+	commIn.BlurredStyle.Text = commIn.BlurredStyle.Text.Background(lipgloss.Color(ColorSurface))
+
+	var states []string
+	if cfg != nil {
+		states = cfg.CustomStates
+	}
+
 	return detailModel{
-		client:              client,
-		spinner:             s,
-		loading:             true,
-		mode:                modeNormal,
-		textInput:           ti,
-		stateOptions:        states,
-		descViewport:        viewport.New(0, 0),
-		commentsViewport:    viewport.New(0, 0),
-		linksViewport:       viewport.New(0, 0),
-		attachmentsViewport: viewport.New(0, 0),
+		client:                 client,
+		cfg:                    cfg,
+		spinner:                s,
+		loading:                true,
+		mode:                   modeNormal,
+		textInput:              ti,
+		stateOptions:           states,
+		descViewport:           viewport.New(0, 0),
+		commentsViewport:       viewport.New(0, 0),
+		linksViewport:          viewport.New(0, 0),
+		attachmentsViewport:    viewport.New(0, 0),
+		trackTimeDateInput:     dateIn,
+		trackTimeDurationInput: durIn,
+		trackTimeCommentInput:  commIn,
 	}
 }
 
 type detailDataMsg struct {
-	issue    *ytcli.Issue
-	comments []ytcli.Comment
-	err      error
+	issue          *ytcli.Issue
+	comments       []ytcli.Comment
+	trackTimeTypes []ytcli.WorkItemType
+	err            error
 }
 
 type detailActionFinishedMsg struct {
@@ -137,7 +184,11 @@ func (m detailModel) loadDetailCmd() tea.Cmd {
 
 		// Also fetch comments
 		comments, err2 := m.client.ListComments(issue.IDReadable)
-		return detailDataMsg{issue: issue, comments: comments, err: err2}
+
+		// Also fetch work item types
+		wTypes, _ := m.client.ListWorkItemTypes()
+
+		return detailDataMsg{issue: issue, comments: comments, trackTimeTypes: wTypes, err: err2}
 	}
 }
 
@@ -180,6 +231,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		}
 		m.issue = msg.issue
 		m.comments = msg.comments
+		m.trackTimeTypes = msg.trackTimeTypes
 
 		// Initialize viewports and set content
 		m.updateViewportSizes()
@@ -454,6 +506,148 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				// Ignore other keys inside URL select mode
 			}
 			return m, nil
+
+		case modeTrackTime:
+			// Reset error on keypresses so it disappears when they start typing
+			m.trackTimeError = ""
+			var cmd tea.Cmd
+			switch msg.String() {
+			case "esc":
+				m.mode = modeNormal
+				return m, nil
+
+			case "tab":
+				m.trackTimeActiveField = (m.trackTimeActiveField + 1) % 4
+				m.updateTrackTimeFocus()
+				return m, nil
+
+			case "shift+tab":
+				m.trackTimeActiveField = (m.trackTimeActiveField - 1 + 4) % 4
+				m.updateTrackTimeFocus()
+				return m, nil
+
+			case "ctrl+s":
+				// Submit
+				dateVal := m.trackTimeDateInput.Value()
+				t, err := time.Parse("2006-01-02", dateVal)
+				if err != nil {
+					m.trackTimeError = fmt.Sprintf("invalid date: %v", err)
+					return m, nil
+				}
+
+				durVal := m.trackTimeDurationInput.Value()
+				minutes, err := parseDurationToMinutes(durVal)
+				if err != nil {
+					m.trackTimeError = fmt.Sprintf("invalid duration: %v", err)
+					return m, nil
+				}
+
+				workTypes := []string{""}
+				if m.cfg != nil {
+					workTypes = append(workTypes, m.cfg.WorkTypes...)
+				} else {
+					workTypes = append(workTypes, "Development", "Documentation", "Implementation", "Investigation", "Testing")
+				}
+				typeName := ""
+				if m.trackTimeTypeIndex > 0 && m.trackTimeTypeIndex < len(workTypes) {
+					typeName = workTypes[m.trackTimeTypeIndex]
+				}
+
+				typeID := ""
+				if typeName != "" {
+					for _, wt := range m.trackTimeTypes {
+						if strings.EqualFold(wt.Name, typeName) {
+							typeID = wt.ID
+							break
+						}
+					}
+					if typeID == "" {
+						m.trackTimeError = fmt.Sprintf("type %q not enabled on YouTrack", typeName)
+						return m, nil
+					}
+				}
+
+				comment := m.trackTimeCommentInput.Value()
+
+				m.loading = true
+				m.loadingText = "Tracking time..."
+				return m, func() tea.Msg {
+					dateMs := t.UnixNano() / int64(time.Millisecond)
+					err := m.client.AddWorkItem(m.issue.IDReadable, dateMs, minutes, typeID, comment)
+					return detailActionFinishedMsg{err: err}
+				}
+
+			case "enter":
+				if m.trackTimeActiveField != 3 {
+					m.trackTimeActiveField = (m.trackTimeActiveField + 1) % 4
+					m.updateTrackTimeFocus()
+					return m, nil
+				}
+			}
+
+			// Pass keys to active field
+			switch m.trackTimeActiveField {
+			case 0: // Date
+				switch msg.String() {
+				case "left", "h":
+					m.trackTimeDate = m.trackTimeDate.AddDate(0, 0, -1)
+					m.trackTimeDateInput.SetValue(m.trackTimeDate.Format("2006-01-02"))
+					return m, nil
+				case "right", "l":
+					m.trackTimeDate = m.trackTimeDate.AddDate(0, 0, 1)
+					m.trackTimeDateInput.SetValue(m.trackTimeDate.Format("2006-01-02"))
+					return m, nil
+				case "up", "k":
+					m.trackTimeDate = m.trackTimeDate.AddDate(0, 0, -7)
+					m.trackTimeDateInput.SetValue(m.trackTimeDate.Format("2006-01-02"))
+					return m, nil
+				case "down", "j":
+					m.trackTimeDate = m.trackTimeDate.AddDate(0, 0, 7)
+					m.trackTimeDateInput.SetValue(m.trackTimeDate.Format("2006-01-02"))
+					return m, nil
+				}
+				m.trackTimeDateInput, cmd = m.trackTimeDateInput.Update(msg)
+				if parsed, err := time.Parse("2006-01-02", m.trackTimeDateInput.Value()); err == nil {
+					m.trackTimeDate = parsed
+				}
+				return m, cmd
+
+			case 1: // Time Spent
+				m.trackTimeDurationInput, cmd = m.trackTimeDurationInput.Update(msg)
+				return m, cmd
+
+			case 2: // Work Type dropdown
+				workTypes := []string{""}
+				if m.cfg != nil {
+					workTypes = append(workTypes, m.cfg.WorkTypes...)
+				} else {
+					workTypes = append(workTypes, "Development", "Documentation", "Implementation", "Investigation", "Testing")
+				}
+				switch msg.String() {
+				case "left", "h", "up", "k":
+					m.trackTimeTypeIndex = (m.trackTimeTypeIndex - 1 + len(workTypes)) % len(workTypes)
+					return m, nil
+				case "right", "l", "down", "j":
+					m.trackTimeTypeIndex = (m.trackTimeTypeIndex + 1) % len(workTypes)
+					return m, nil
+				default:
+					char := strings.ToLower(msg.String())
+					if len(char) == 1 && char[0] >= 'a' && char[0] <= 'z' {
+						for idx, wt := range workTypes {
+							if strings.HasPrefix(strings.ToLower(wt), char) {
+								m.trackTimeTypeIndex = idx
+								break
+							}
+						}
+					}
+					return m, nil
+				}
+
+			case 3: // Comment textarea
+				m.trackTimeCommentInput, cmd = m.trackTimeCommentInput.Update(msg)
+				return m, cmd
+			}
+			return m, nil
 		}
 
 		// Normal Mode Key Handling
@@ -558,6 +752,17 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				m.updateViewportContents()
 			}
+			return m, nil
+		case "t":
+			m.mode = modeTrackTime
+			m.trackTimeDate = time.Now()
+			m.trackTimeDateInput.SetValue(m.trackTimeDate.Format("2006-01-02"))
+			m.trackTimeDurationInput.SetValue("")
+			m.trackTimeTypeIndex = 0
+			m.trackTimeCommentInput.SetValue("")
+			m.trackTimeActiveField = 1 // Focus Time Spent first
+			m.trackTimeError = ""
+			m.updateTrackTimeFocus()
 			return m, nil
 		case "c":
 			m.mode = modeCommentInput
@@ -1102,7 +1307,7 @@ func (m detailModel) View() string {
 		if m.activeViewport == 3 {
 			enterAction = "Open Attachment"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Toggle Pane  [Enter] %s  [c] Comment  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] Edit  [C] Clone  [y] Yank  [r] Refresh  [q] Quit ", enterAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
@@ -1172,6 +1377,100 @@ func (m detailModel) View() string {
 		}
 		// Overlay starting at row 0 (aligned with title), col x
 		view = overlayLines(view, popup, x, 0)
+	}
+
+	if m.mode == modeTrackTime {
+		// Left column: Date, Time Spent, Type
+		var leftColParts []string
+
+		// Date field
+		leftColParts = append(leftColParts, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface)).Render("Date (YYYY-MM-DD):"))
+		leftColParts = append(leftColParts, renderTrackTimeField(m.trackTimeDateInput.View(), m.trackTimeActiveField == 0, 20))
+		leftColParts = append(leftColParts, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+
+		// Time Spent field
+		leftColParts = append(leftColParts, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface)).Render("Time Spent (e.g. 1w 1d 1h 1m):"))
+		leftColParts = append(leftColParts, renderTrackTimeField(m.trackTimeDurationInput.View(), m.trackTimeActiveField == 1, 20))
+		leftColParts = append(leftColParts, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+
+		// Work Type dropdown
+		leftColParts = append(leftColParts, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface)).Render("Work Type:"))
+		workTypes := []string{""}
+		if m.cfg != nil {
+			workTypes = append(workTypes, m.cfg.WorkTypes...)
+		} else {
+			workTypes = append(workTypes, "Development", "Documentation", "Implementation", "Investigation", "Testing")
+		}
+		workTypeVal := "◀  (None)  ▶"
+		if m.trackTimeTypeIndex > 0 && m.trackTimeTypeIndex < len(workTypes) {
+			workTypeVal = fmt.Sprintf("◀  %s  ▶", workTypes[m.trackTimeTypeIndex])
+		}
+		workTypeStyled := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Background(lipgloss.Color(ColorSurface)).Render(workTypeVal)
+		leftColParts = append(leftColParts, renderTrackTimeField(workTypeStyled, m.trackTimeActiveField == 2, 20))
+
+		leftCol := lipgloss.JoinVertical(lipgloss.Left, leftColParts...)
+
+		// Right column: Calendar
+		rightCol := renderCalendar(m.trackTimeDate)
+
+		// Side-by-side:
+		upperSide := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render("    "), rightCol)
+
+		typeOptsList := renderTrackTimeDropdownOptions(workTypes, m.trackTimeTypeIndex)
+
+		// Comment textarea
+		commentLabel := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface)).Render("Comment:")
+		m.trackTimeCommentInput.SetWidth(43)
+		commentBox := renderTrackTimeField(m.trackTimeCommentInput.View(), m.trackTimeActiveField == 3, 44)
+
+		dateHelp := lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(" ")
+		if m.trackTimeActiveField == 0 {
+			dateHelp = StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [←/→ or h/l] Day -/+1   [↑/↓ or k/j] Week -/+1 ")
+		}
+
+		var errLine string
+		if m.trackTimeError != "" {
+			errLine = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Background(lipgloss.Color(ColorSurface)).Bold(true).Render("⚠️  " + m.trackTimeError)
+		} else {
+			errLine = lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(" ")
+		}
+
+		popupBodyParts := []string{
+			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Render("⏱️  Track Time - " + m.issue.IDReadable),
+			lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""),
+			upperSide,
+			lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""),
+			typeOptsList,
+			lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""),
+			commentLabel,
+			commentBox,
+			lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""),
+			errLine,
+			lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""),
+			StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [Tab/Shift-Tab] Navigate   [Ctrl+s] Submit   [Esc] Cancel "),
+			dateHelp,
+		}
+
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, popupBodyParts...)
+
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := strings.Count(popup, "\n") + 1
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, popup, x, y)
 	}
 
 	return view
@@ -1254,6 +1553,14 @@ func overlayLines(base, overlay string, x, y int) string {
 
 		for j, oCell := range oCells {
 			pos := x + j
+			bgSeq := "\x1b[48;2;49;50;68m" // truecolor escape for ColorSurface (#313244)
+			if oCell.style == "" {
+				oCell.style = bgSeq
+			} else {
+				oCell.style = strings.ReplaceAll(oCell.style, "\x1b[0m", "\x1b[0m"+bgSeq)
+				oCell.style = bgSeq + oCell.style
+			}
+
 			if pos >= len(bCells) {
 				bCells = append(bCells, oCell)
 			} else {
@@ -1392,4 +1699,140 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func (m *detailModel) updateTrackTimeFocus() {
+	m.trackTimeDateInput.Blur()
+	m.trackTimeDurationInput.Blur()
+	m.trackTimeCommentInput.Blur()
+
+	switch m.trackTimeActiveField {
+	case 0:
+		m.trackTimeDateInput.Focus()
+	case 1:
+		m.trackTimeDurationInput.Focus()
+	case 3:
+		m.trackTimeCommentInput.Focus()
+	}
+}
+
+func parseDurationToMinutes(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("duration cannot be empty")
+	}
+
+	re := regexp.MustCompile(`(\d+)\s*([wdhmWDHM])`)
+	matches := re.FindAllStringSubmatch(s, -1)
+	if len(matches) == 0 {
+		return 0, fmt.Errorf("invalid format, use e.g. 1w 1d 1h 1m")
+	}
+
+	stripped := re.ReplaceAllString(s, "")
+	if strings.TrimSpace(stripped) != "" {
+		return 0, fmt.Errorf("unrecognized characters in duration: %q", strings.TrimSpace(stripped))
+	}
+
+	totalMinutes := 0
+	for _, match := range matches {
+		valStr := match[1]
+		unit := strings.ToLower(match[2])
+
+		val, err := strconv.Atoi(valStr)
+		if err != nil {
+			return 0, fmt.Errorf("invalid number: %s", valStr)
+		}
+
+		switch unit {
+		case "w":
+			totalMinutes += val * 5 * 8 * 60
+		case "d":
+			totalMinutes += val * 8 * 60
+		case "h":
+			totalMinutes += val * 60
+		case "m":
+			totalMinutes += val
+		}
+	}
+	return totalMinutes, nil
+}
+
+func renderCalendar(t time.Time) string {
+	year, month, selectedDay := t.Date()
+	firstDay := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+	startWeekday := int(firstDay.Weekday())
+	totalDays := time.Date(year, month+1, 0, 0, 0, 0, 0, time.Local).Day()
+
+	var sb strings.Builder
+	header := fmt.Sprintf("%s %d", month.String(), year)
+	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Bold(true).Width(20).Align(lipgloss.Center).Render(header) + "\n")
+	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Background(lipgloss.Color(ColorSurface)).Render("Su Mo Tu We Th Fr Sa") + "\n")
+
+	spacerStyle := lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface))
+	for i := 0; i < startWeekday; i++ {
+		sb.WriteString(spacerStyle.Render("   "))
+	}
+
+	for day := 1; day <= totalDays; day++ {
+		col := (startWeekday + day - 1) % 7
+
+		dayStr := fmt.Sprintf("%2d", day)
+		var dayStyle lipgloss.Style
+		if day == selectedDay {
+			dayStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorSurface)).
+				Background(lipgloss.Color(ColorViolet)).
+				Bold(true)
+		} else {
+			dayStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorText)).
+				Background(lipgloss.Color(ColorSurface))
+		}
+
+		sb.WriteString(dayStyle.Render(dayStr))
+		if col == 6 {
+			sb.WriteString("\n")
+		} else {
+			sb.WriteString(spacerStyle.Render(" "))
+		}
+	}
+	return sb.String()
+}
+
+func renderTrackTimeField(content string, focused bool, width int) string {
+	s := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Background(lipgloss.Color(ColorSurface)).
+		Width(width)
+
+	if focused {
+		s = s.BorderForeground(lipgloss.Color(ColorViolet))
+	} else {
+		s = s.BorderForeground(lipgloss.Color(ColorOverlay))
+	}
+	return s.Render(content)
+}
+
+func renderTrackTimeDropdownOptions(options []string, activeIndex int) string {
+	var formatted []string
+	for i, opt := range options {
+		displayOpt := opt
+		if opt == "" {
+			displayOpt = "(None)"
+		}
+		if i == activeIndex {
+			formatted = append(formatted, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorCyan)).
+				Background(lipgloss.Color(ColorSurface)).
+				Bold(true).
+				Render("• "+displayOpt+" •"))
+		} else {
+			formatted = append(formatted, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorSubtext)).
+				Background(lipgloss.Color(ColorSurface)).
+				Render(displayOpt))
+		}
+	}
+	row := "  " + strings.Join(formatted, "   ")
+	return lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(row)
 }

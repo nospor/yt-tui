@@ -940,6 +940,86 @@ func (c *Client) ListComments(id string) ([]Comment, error) {
 	return comments, nil
 }
 
+// AddWorkItem adds a work item (time tracking entry) to an issue.
+func (c *Client) AddWorkItem(issueID string, dateMs int64, durationMinutes int, workTypeID string, comment string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + issueID + "/timeTracking/workItems"
+
+	payload := map[string]interface{}{
+		"date": dateMs,
+		"duration": map[string]interface{}{
+			"minutes": durationMinutes,
+		},
+		"text": comment,
+	}
+
+	if workTypeID != "" {
+		payload["type"] = map[string]interface{}{
+			"id": workTypeID,
+		}
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusCreated {
+		return parseAPIError(statusCode, body)
+	}
+	return nil
+}
+
+// ListWorkItemTypes lists all work item types (time tracking categories) globally.
+func (c *Client) ListWorkItemTypes() ([]WorkItemType, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/admin/timeTrackingSettings/workItemTypes?fields=id,name"
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var types []WorkItemType
+	if err := json.Unmarshal(body, &types); err != nil {
+		return nil, err
+	}
+	return types, nil
+}
+
 // ListUsers lists YouTrack users.
 func (c *Client) ListUsers() ([]User, error) {
 	if c.baseURL == "" || c.token == "" {

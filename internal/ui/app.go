@@ -78,7 +78,7 @@ func NewAppModel() AppModel {
 		projects:  newProjectsModel(client),
 		boards:    newBoardsModel(client),
 		issues:    newIssuesModel(client, cfg),
-		detail:    newDetailModel(client, cfg.CustomStates),
+		detail:    newDetailModel(client, cfg),
 		form:      newFormModel(client, cfg),
 	}
 }

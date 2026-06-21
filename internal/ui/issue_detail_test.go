@@ -299,3 +299,39 @@ func TestDetailModel_YankUrls(t *testing.T) {
 		t.Errorf("expected 'Copied URL to clipboard!', got: %s", m.statusMessage)
 	}
 }
+
+func TestParseDurationToMinutes(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int
+		err      bool
+	}{
+		{"1m", 1, false},
+		{"1h", 60, false},
+		{"1d", 480, false},
+		{"1w", 2400, false},
+		{"1w 1d 1h 1m", 2400 + 480 + 60 + 1, false},
+		{"2w 3d 4h 5m", 2*2400 + 3*480 + 4*60 + 5, false},
+		{" 1h    30m ", 90, false},
+		{"1w1d1h1m", 2941, false},
+		{"", 0, true},
+		{"abc", 0, true},
+		{"1w 2z", 0, true},
+	}
+
+	for _, tc := range tests {
+		got, err := parseDurationToMinutes(tc.input)
+		if tc.err {
+			if err == nil {
+				t.Errorf("expected error for input %q, got nil", tc.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("expected no error for input %q, got: %v", tc.input, err)
+			}
+			if got != tc.expected {
+				t.Errorf("expected %d minutes for %q, got %d", tc.expected, tc.input, got)
+			}
+		}
+	}
+}
