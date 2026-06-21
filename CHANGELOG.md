@@ -1,4 +1,64 @@
 
+## [0.5.2] - 2026-06-21
+
+### Bug Fixes
+
+- *(ci)* Discard unstaged changes before rebase in release workflow ([3bb8103](https://github.com/nospor/yt-tui/commit/3bb81033d693225ceddb90393ab9c142408c1e33))
+
+## [0.5.1] - 2026-06-21
+
+### Features
+
+- *(ui)* Add support for navigating and editing comments in issue detail view ([a38a651](https://github.com/nospor/yt-tui/commit/a38a65191a0e3c3f41f72cccb7f6c5a8a030c027))
+
+### Testing
+
+- *(ui)* Mock clipboard in yank tests for headless CI compatibility ([9fca8b3](https://github.com/nospor/yt-tui/commit/9fca8b3386d047f32f92e6911569ccc4350f21f5))
+
+## [0.5.0] - 2026-06-21
+
+### Features
+
+- *(ui)* Add task yanking motion to details view ([2e428c3](https://github.com/nospor/yt-tui/commit/2e428c3a99c19d8d44b151e254d9a7679ffa636a))
+
+            - Pressing 'y' enters a yank mode, showing a sleek options popup in the
+            corner.
+            - Pressing 's' copies the issue ID and summary (one line,
+            space-separated) to the clipboard.
+            - Pressing 'd' copies the issue description to the clipboard.
+            - Copy success status messages temporarily replace the bottom help bar
+            for 5 seconds (or until the next keystroke) to prevent any layout
+            shifting or viewport jumping.
+- Add 'yu' shortcut to yank issue URLs ([1a53fca](https://github.com/nospor/yt-tui/commit/1a53fcabc891da205d18a95f724e1ddedaffd729))
+- *(ui)* Add "Issues created by me" special project to projects list ([99e2acb](https://github.com/nospor/yt-tui/commit/99e2acbc263cf4b6e03728eb9ffdb83786836e0f))
+- *(detail)* Add creator information to task detail metadata ([17674d9](https://github.com/nospor/yt-tui/commit/17674d93c883d7d09642f2e9779736f1495bf2cc))
+- *(ui)* Support unassigning tasks via "unassigned" keyword ([282d09e](https://github.com/nospor/yt-tui/commit/282d09e65fc13b10961afb70bf1d190465d16214))
+- Add favorite tasks view navigation and toggle mapping ([69ad1cc](https://github.com/nospor/yt-tui/commit/69ad1cc93acb198803d545360de2bcccb7827afc))
+
+            - Store favorite view configurations in `config.json` via a new
+            `favorite_view` setting.
+            - Use `f` on the dashboard to jump to the saved favorite tasks list.
+            - Use `f` on a tasks list (project, board/sprint, or "created by me") to
+            toggle favorite status.
+            - Remap issues list filter hotkey to `F` (Shift+f).
+            - Render a yellow star `★` indicator next to favorited views' headers.
+- Add attachments support and dynamic download/open via xdg-open in issue detail view ([b818da8](https://github.com/nospor/yt-tui/commit/b818da8b3310820ff10c9c9e7503bdce7b005000))
+- *(ui)* Add time tracking popup dialog to task details view ([594527d](https://github.com/nospor/yt-tui/commit/594527d0566d5d41edf897723c384e4b3d29a971))
+
+            - Implement keyboard shortcut `t` in task details view to open a time
+            tracking popup.
+            - Integrate interactive monthly calendar grid with arrow-key navigation
+            for date selection.
+            - Implement regex parser to convert `1w 1d 1h 1m` duration strings to
+            minutes (based on 5d workweeks and 8h workdays).
+            - Add `work_types` configuration parameter to config.json with fallback
+            defaults.
+- *(ui)* Support shift+tab to cycle panels backwards in issue details ([19ce18d](https://github.com/nospor/yt-tui/commit/19ce18d5dcde7d2139b5980d988a501e122c5705))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.4.0 [skip ci] ([a874acb](https://github.com/nospor/yt-tui/commit/a874acb7bda797770dc10e01981407daf8230455))
+
 ## [0.4.0] - 2026-06-21
 
 ### Features
