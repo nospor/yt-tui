@@ -160,3 +160,142 @@ func TestDetailModel_YankMotion(t *testing.T) {
 		t.Fatalf("expected mode to transition back to modeNormal after pressing 'esc', got %v", m.mode)
 	}
 }
+
+func TestDetailModel_YankUrls(t *testing.T) {
+	// 1. Test case: No URLs
+	m := newDetailModel(nil, nil)
+	issue := &ytcli.Issue{
+		ID:          "1",
+		IDReadable:  "DEMO-1",
+		Summary:     "Test issue summary",
+		Description: "No links here",
+	}
+	m, _ = m.Update(detailDataMsg{
+		issue:    issue,
+		comments: []ytcli.Comment{},
+	})
+
+	// Press 'y' then 'u'
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	if m.mode != modeYank {
+		t.Fatalf("expected modeYank, got %v", m.mode)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after no URLs, got %v", m.mode)
+	}
+	if m.statusMessage != "No URLs found to yank!" {
+		t.Errorf("expected status 'No URLs found to yank!', got: %s", m.statusMessage)
+	}
+
+	// 2. Test case: Single URL (should yank directly)
+	m = newDetailModel(nil, nil)
+	issueSingle := &ytcli.Issue{
+		ID:          "1",
+		IDReadable:  "DEMO-1",
+		Summary:     "Test issue single URL",
+		Description: "Check this: https://google.com/.",
+	}
+	m, _ = m.Update(detailDataMsg{
+		issue:    issueSingle,
+		comments: []ytcli.Comment{},
+	})
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after single URL yank, got %v", m.mode)
+	}
+	if m.statusMessage != "Copied URL to clipboard!" {
+		t.Errorf("expected 'Copied URL to clipboard!' status, got: %s", m.statusMessage)
+	}
+
+	// 3. Test case: Multiple URLs (should open selection menu, select second, press Enter)
+	client := ytcli.NewClient()
+	client.SetCredentials("https://my-youtrack.com", "dummy")
+	m = newDetailModel(client, nil)
+	m.width = 80
+	m.height = 24
+	issueMultiple := &ytcli.Issue{
+		ID:          "1",
+		IDReadable:  "DEMO-1",
+		Summary:     "Test issue multiple URLs",
+		Description: "Some desc with https://github.com",
+		Links: []ytcli.IssueLink{
+			{
+				LinkType: &ytcli.IssueLinkType{
+					Name: "Relates",
+				},
+				Issues: []ytcli.Issue{
+					{
+						IDReadable: "DEMO-2",
+					},
+				},
+			},
+		},
+	}
+	m, _ = m.Update(detailDataMsg{
+		issue:    issueMultiple,
+		comments: []ytcli.Comment{},
+	})
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	if m.mode != modeYankUrlSelect {
+		t.Fatalf("expected modeYankUrlSelect, got %v", m.mode)
+	}
+
+	// Should have 3 URLs: github.com (from desc), my-youtrack.com/issue/DEMO-1 (task), my-youtrack.com/issue/DEMO-2 (link)
+	if len(m.yankUrls) != 3 {
+		t.Fatalf("expected 3 urls, got %d: %v", len(m.yankUrls), m.yankUrls)
+	}
+
+	if m.yankUrlCursor != 0 {
+		t.Errorf("expected cursor to start at 0, got %d", m.yankUrlCursor)
+	}
+
+	// Press 'j' or down to go to second URL
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.yankUrlCursor != 1 {
+		t.Errorf("expected cursor to be 1, got %d", m.yankUrlCursor)
+	}
+
+	// Press 'k' or up to go back to first URL
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.yankUrlCursor != 0 {
+		t.Errorf("expected cursor to be 0, got %d", m.yankUrlCursor)
+	}
+
+	// Press 'k' again to wrap to last (index 2)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.yankUrlCursor != 2 {
+		t.Errorf("expected cursor to wrap to 2, got %d", m.yankUrlCursor)
+	}
+
+	// Press 'j' again to wrap to first (index 0)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.yankUrlCursor != 0 {
+		t.Errorf("expected cursor to wrap to 0, got %d", m.yankUrlCursor)
+	}
+
+	// Press 'down' arrow to test key name
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.yankUrlCursor != 1 {
+		t.Errorf("expected cursor 1, got %d", m.yankUrlCursor)
+	}
+
+	// Press 'up' arrow to test key name
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if m.yankUrlCursor != 0 {
+		t.Errorf("expected cursor 0, got %d", m.yankUrlCursor)
+	}
+
+	// Press Enter to select
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.mode != modeNormal {
+		t.Errorf("expected mode to return to modeNormal, got %v", m.mode)
+	}
+	if m.statusMessage != "Copied URL to clipboard!" {
+		t.Errorf("expected 'Copied URL to clipboard!', got: %s", m.statusMessage)
+	}
+}

@@ -24,6 +24,7 @@ const (
 	modeStateSelect
 	modeAssignInput
 	modeYank
+	modeYankUrlSelect
 )
 
 type linkedIssue struct {
@@ -69,6 +70,10 @@ type detailModel struct {
 	isModified      bool
 	statusMessage   string
 	statusMessageID int
+
+	// URL Yanking
+	yankUrls      []string
+	yankUrlCursor int
 }
 
 func newDetailModel(client *ytcli.Client, states []string) detailModel {
@@ -281,10 +286,122 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				m.mode = modeNormal
 				return m, copyCmd
+			case "u":
+				var copyCmd tea.Cmd
+				var urls []string
+				seen := make(map[string]bool)
+
+				var baseURL string
+				if m.client != nil {
+					baseURL = m.client.GetConfiguredBaseURL()
+				}
+				if baseURL != "" {
+					if !strings.HasSuffix(baseURL, "/") {
+						baseURL += "/"
+					}
+				}
+
+				// 1. Check description for any URL
+				if m.issue != nil && m.issue.Description != "" {
+					descUrls := extractURLs(m.issue.Description)
+					for _, u := range descUrls {
+						if !seen[u] {
+							seen[u] = true
+							urls = append(urls, u)
+						}
+					}
+				}
+
+				// 2. Add task URL
+				if m.issue != nil && baseURL != "" {
+					taskURL := baseURL + "issue/" + m.issue.IDReadable
+					if !seen[taskURL] {
+						seen[taskURL] = true
+						urls = append(urls, taskURL)
+					}
+				}
+
+				// 3. Add all tasks from Links section
+				if m.issue != nil && baseURL != "" {
+					for _, link := range m.issue.Links {
+						for _, linked := range link.Issues {
+							linkedURL := baseURL + "issue/" + linked.IDReadable
+							if !seen[linkedURL] {
+								seen[linkedURL] = true
+								urls = append(urls, linkedURL)
+							}
+						}
+					}
+				}
+
+				if len(urls) == 0 {
+					m.statusMessage = "No URLs found to yank!"
+					m.statusMessageID++
+					currentID := m.statusMessageID
+					copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+						return clearStatusMsg{id: currentID}
+					})
+					m.mode = modeNormal
+					return m, copyCmd
+				} else if len(urls) == 1 {
+					if err := clipboard.WriteAll(urls[0]); err != nil {
+						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+					} else {
+						m.statusMessage = "Copied URL to clipboard!"
+						m.statusMessageID++
+						currentID := m.statusMessageID
+						copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+							return clearStatusMsg{id: currentID}
+						})
+					}
+					m.mode = modeNormal
+					return m, copyCmd
+				} else {
+					m.yankUrls = urls
+					m.yankUrlCursor = 0
+					m.mode = modeYankUrlSelect
+					return m, nil
+				}
 			case "esc":
 				m.mode = modeNormal
 			default:
 				m.mode = modeNormal
+			}
+			return m, nil
+
+		case modeYankUrlSelect:
+			switch msg.String() {
+			case "up", "k":
+				m.yankUrlCursor--
+				if m.yankUrlCursor < 0 {
+					m.yankUrlCursor = len(m.yankUrls) - 1
+				}
+			case "down", "j":
+				m.yankUrlCursor++
+				if m.yankUrlCursor >= len(m.yankUrls) {
+					m.yankUrlCursor = 0
+				}
+			case "enter":
+				var copyCmd tea.Cmd
+				if len(m.yankUrls) > 0 && m.yankUrlCursor >= 0 && m.yankUrlCursor < len(m.yankUrls) {
+					text := m.yankUrls[m.yankUrlCursor]
+					if err := clipboard.WriteAll(text); err != nil {
+						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+					} else {
+						m.statusMessage = "Copied URL to clipboard!"
+						m.statusMessageID++
+						currentID := m.statusMessageID
+						copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+							return clearStatusMsg{id: currentID}
+						})
+					}
+				}
+				m.mode = modeNormal
+				return m, copyCmd
+			case "esc":
+				m.mode = modeNormal
+			default:
+				// Ignore other keys inside URL select mode
 			}
 			return m, nil
 		}
@@ -412,7 +529,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 
 func (m *detailModel) updateViewportSizes() {
 	var actionHeight int
-	if m.mode != modeNormal && m.mode != modeYank {
+	if m.mode != modeNormal && m.mode != modeYank && m.mode != modeYankUrlSelect {
 		actionHeight = 5
 	}
 	bottomHeight := m.height - 9 - actionHeight
@@ -820,7 +937,44 @@ func (m detailModel) View() string {
 			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Yank Options:"),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[s]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("ID & Summary")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[d]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("Description")),
+			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[u]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("URLs")),
 		)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(0, 1).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		x := (m.width - 4) - popupWidth
+		if x < 0 {
+			x = 0
+		}
+		// Overlay starting at row 0 (aligned with title), col x
+		view = overlayLines(view, popup, x, 0)
+	}
+
+	if m.mode == modeYankUrlSelect {
+		var lines []string
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select URL to yank:"))
+		maxLen := m.width - 10
+		if maxLen < 20 {
+			maxLen = 20
+		}
+		for idx, u := range m.yankUrls {
+			displayURL := u
+			if len(displayURL) > maxLen {
+				displayURL = displayURL[:maxLen-3] + "..."
+			}
+			// If it's the selected one, highlight it
+			if idx == m.yankUrlCursor {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayURL))
+			} else {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+displayURL))
+			}
+		}
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
 		popup := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorViolet)).
@@ -993,4 +1147,32 @@ func renderBoxWithTitle(style lipgloss.Style, title string, content string, acti
 
 	lines[0] = leftPart + titleRendered + rightPart
 	return strings.Join(lines, "\n")
+}
+
+var urlRegex = regexp.MustCompile(`https?://[a-zA-Z0-9-._~:/?#\[\]@!$&'\*+,;=%]+`)
+
+func extractURLs(text string) []string {
+	matches := urlRegex.FindAllString(text, -1)
+	var urls []string
+	seen := make(map[string]bool)
+	for _, u := range matches {
+		// Clean trailing punctuation commonly present in text surrounding URLs
+		for len(u) > 0 {
+			last := u[len(u)-1]
+			if last == '.' || last == ',' || last == ';' || last == '!' || last == '?' || last == ':' {
+				u = u[:len(u)-1]
+			} else if last == ')' && !strings.Contains(u, "(") {
+				u = u[:len(u)-1]
+			} else if last == ']' && !strings.Contains(u, "[") {
+				u = u[:len(u)-1]
+			} else {
+				break
+			}
+		}
+		if u != "" && !seen[u] {
+			seen[u] = true
+			urls = append(urls, u)
+		}
+	}
+	return urls
 }

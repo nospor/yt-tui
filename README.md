@@ -220,6 +220,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.
   - `d`: Copy the task description to the clipboard.
+  - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, and any linked issues; copies if only 1 is found, or shows a selection popup if multiple exist).
   - Pressing any other key cancels the yanking motion.
 * `r`: Force refresh issue details, comments, and links.
 * `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
