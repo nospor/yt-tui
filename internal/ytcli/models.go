@@ -90,9 +90,12 @@ type IssueLink struct {
 
 // IssueLinkType represents YouTrack link types.
 type IssueLinkType struct {
-	Name           string `json:"name"`
-	SourceToTarget string `json:"sourceToTarget"`
-	TargetToSource string `json:"targetToSource"`
+	Name                    string `json:"name"`
+	LocalizedName           string `json:"localizedName,omitempty"`
+	SourceToTarget          string `json:"sourceToTarget"`
+	LocalizedSourceToTarget string `json:"localizedSourceToTarget,omitempty"`
+	TargetToSource          string `json:"targetToSource"`
+	LocalizedTargetToSource string `json:"localizedTargetToSource,omitempty"`
 }
 
 // Issue represents a YouTrack issue.
@@ -115,8 +118,11 @@ func (i Issue) Parents() []Issue {
 			continue
 		}
 		isSubtask := strings.EqualFold(link.LinkType.Name, "Subtask") ||
+			strings.EqualFold(link.LinkType.LocalizedName, "Subtask") ||
 			strings.EqualFold(link.LinkType.SourceToTarget, "parent for") ||
-			strings.EqualFold(link.LinkType.TargetToSource, "subtask of")
+			strings.EqualFold(link.LinkType.LocalizedSourceToTarget, "parent for") ||
+			strings.EqualFold(link.LinkType.TargetToSource, "subtask of") ||
+			strings.EqualFold(link.LinkType.LocalizedTargetToSource, "subtask of")
 
 		if isSubtask && link.Direction == "INWARD" {
 			parents = append(parents, link.Issues...)
@@ -133,8 +139,11 @@ func (i Issue) Children() []Issue {
 			continue
 		}
 		isSubtask := strings.EqualFold(link.LinkType.Name, "Subtask") ||
+			strings.EqualFold(link.LinkType.LocalizedName, "Subtask") ||
 			strings.EqualFold(link.LinkType.SourceToTarget, "parent for") ||
-			strings.EqualFold(link.LinkType.TargetToSource, "subtask of")
+			strings.EqualFold(link.LinkType.LocalizedSourceToTarget, "parent for") ||
+			strings.EqualFold(link.LinkType.TargetToSource, "subtask of") ||
+			strings.EqualFold(link.LinkType.LocalizedTargetToSource, "subtask of")
 
 		if isSubtask && link.Direction == "OUTWARD" {
 			children = append(children, link.Issues...)

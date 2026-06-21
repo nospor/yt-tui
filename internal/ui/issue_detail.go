@@ -49,6 +49,7 @@ type detailModel struct {
 	linkedIssues     []linkedIssue
 	linksCursor      int
 	linksLineNumbers []int
+	linksHeights     []int
 
 	// Sub-modes fields
 	mode         detailMode
@@ -366,9 +367,9 @@ func (m *detailModel) updateViewportSizes() {
 		commentsViewportHeight = 1
 	}
 
-	linksViewportHeight := 4
-	if linksViewportHeight > commentsViewportHeight-4 {
-		linksViewportHeight = commentsViewportHeight - 4
+	linksViewportHeight := 6
+	if linksViewportHeight > commentsViewportHeight-6 {
+		linksViewportHeight = commentsViewportHeight - 6
 	}
 	if linksViewportHeight < 1 {
 		linksViewportHeight = 1
@@ -444,13 +445,23 @@ func (m *detailModel) updateViewportContents() {
 
 		relation := ""
 		if link.Direction == "INWARD" {
-			relation = link.LinkType.TargetToSource
+			relation = link.LinkType.LocalizedTargetToSource
+			if relation == "" {
+				relation = link.LinkType.TargetToSource
+			}
 		} else {
-			relation = link.LinkType.SourceToTarget
+			relation = link.LinkType.LocalizedSourceToTarget
+			if relation == "" {
+				relation = link.LinkType.SourceToTarget
+			}
 		}
 		if relation == "" {
-			relation = link.LinkType.Name
+			relation = link.LinkType.LocalizedName
+			if relation == "" {
+				relation = link.LinkType.Name
+			}
 		}
+		relation = strings.ToLower(strings.TrimSpace(relation))
 
 		for _, linked := range link.Issues {
 			m.linkedIssues = append(m.linkedIssues, linkedIssue{
@@ -474,6 +485,7 @@ func (m *detailModel) updateViewportContents() {
 	if len(m.linkedIssues) == 0 {
 		linksStr.WriteString("No linked issues.")
 		m.linksLineNumbers = nil
+		m.linksHeights = nil
 	} else {
 		// Ensure cursor is within bounds
 		if m.linksCursor < 0 {
@@ -484,6 +496,7 @@ func (m *detailModel) updateViewportContents() {
 		}
 
 		m.linksLineNumbers = make([]int, len(m.linkedIssues))
+		m.linksHeights = make([]int, len(m.linkedIssues))
 		currentLine := 0
 
 		// Find unique relations and sort them
@@ -551,10 +564,12 @@ func (m *detailModel) updateViewportContents() {
 					stateLabel,
 				)
 				wrapped := lipgloss.NewStyle().Width(m.linksViewport.Width).Render(row)
+				itemHeight := strings.Count(wrapped, "\n") + 1
 
 				m.linksLineNumbers[idx] = currentLine
+				m.linksHeights[idx] = itemHeight
 				linksStr.WriteString(wrapped + "\n")
-				currentLine += strings.Count(wrapped, "\n") + 1
+				currentLine += itemHeight
 			}
 		}
 	}
@@ -563,17 +578,34 @@ func (m *detailModel) updateViewportContents() {
 }
 
 func (m *detailModel) updateViewportScroll() {
-	if len(m.linkedIssues) == 0 || len(m.linksLineNumbers) != len(m.linkedIssues) {
+	if len(m.linkedIssues) == 0 || len(m.linksLineNumbers) != len(m.linkedIssues) || len(m.linksHeights) != len(m.linkedIssues) {
 		return
 	}
 
 	selectedLine := m.linksLineNumbers[m.linksCursor]
+	itemHeight := m.linksHeights[m.linksCursor]
 
-	// Ensure the selected line is visible within viewport height constraints
-	if selectedLine < m.linksViewport.YOffset {
-		m.linksViewport.SetYOffset(selectedLine)
-	} else if selectedLine >= m.linksViewport.YOffset+m.linksViewport.Height {
-		m.linksViewport.SetYOffset(selectedLine - m.linksViewport.Height + 1)
+	// When scrolling up, we want to make sure the header of the group is also visible if this is the first item in the group
+	targetScrollLine := selectedLine
+	if m.linksCursor > 0 {
+		if m.linkedIssues[m.linksCursor].relation != m.linkedIssues[m.linksCursor-1].relation {
+			// This is the first item in its group. Ensure its header (which is at selectedLine - 1) is visible.
+			targetScrollLine = selectedLine - 1
+			if targetScrollLine < 0 {
+				targetScrollLine = 0
+			}
+		}
+	} else {
+		// First item of the whole list. Ensure the very first header (at line 0) is visible.
+		targetScrollLine = 0
+	}
+
+	// Ensure the selected line (and its header when scrolling up, or its full height when scrolling down) is visible
+	if targetScrollLine < m.linksViewport.YOffset {
+		m.linksViewport.SetYOffset(targetScrollLine)
+	} else if selectedLine+itemHeight > m.linksViewport.YOffset+m.linksViewport.Height {
+		// Scroll down just enough to show the entire item
+		m.linksViewport.SetYOffset(selectedLine + itemHeight - m.linksViewport.Height)
 	}
 }
 
