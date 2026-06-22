@@ -1536,8 +1536,6 @@ func (m detailModel) View() string {
 	}
 
 	projPadded := fmt.Sprintf("%-30s", projectStr)
-	assigneePadded := fmt.Sprintf("%-20s", issue.Assignee())
-	creatorPadded := fmt.Sprintf("%-20s", creatorVal)
 
 	row1 := fmt.Sprintf("%s  %-30s  Priority: %-12s  Type: %-12s",
 		lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(issue.IDReadable),
@@ -1549,9 +1547,12 @@ func (m detailModel) View() string {
 		projPadded,
 		stateBadge,
 	)
-	row3 := fmt.Sprintf("Assignee: %s  Creator: %s",
-		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(assigneePadded),
-		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(creatorPadded),
+	row3 := fmt.Sprintf("Assignee: %s  Creator: %s (%s)  Updated by: %s (%s)",
+		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(issue.Assignee()),
+		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(creatorVal),
+		StyleSubtext.Render(issue.CreatedTime()),
+		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(issue.UpdaterName()),
+		StyleSubtext.Render(issue.UpdatedTime()),
 	)
 
 	metaView := metaStyle.Render(lipgloss.JoinVertical(lipgloss.Left, row1, row2, row3))

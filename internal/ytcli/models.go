@@ -118,6 +118,9 @@ type Issue struct {
 	Links        []IssueLink   `json:"links,omitempty"`
 	Reporter     *User         `json:"reporter,omitempty"`
 	Attachments  []Attachment  `json:"attachments,omitempty"`
+	Created      int64         `json:"created,omitempty"`
+	Updated      int64         `json:"updated,omitempty"`
+	Updater      *User         `json:"updater,omitempty"`
 }
 
 // Parents returns the parent issues linked to this issue.
@@ -231,6 +234,30 @@ func (i Issue) Assignee() string {
 		}
 	}
 	return "Unassigned"
+}
+
+// CreatedTime formats the Created field as a readable time string.
+func (i Issue) CreatedTime() string {
+	if i.Created == 0 {
+		return "Unknown time"
+	}
+	return time.UnixMilli(i.Created).Format("2006-01-02 15:04:05")
+}
+
+// UpdatedTime formats the Updated field as a readable time string.
+func (i Issue) UpdatedTime() string {
+	if i.Updated == 0 {
+		return "Unknown time"
+	}
+	return time.UnixMilli(i.Updated).Format("2006-01-02 15:04:05")
+}
+
+// UpdaterName returns the updater's display name or "N/A".
+func (i Issue) UpdaterName() string {
+	if i.Updater == nil {
+		return "N/A"
+	}
+	return i.Updater.DisplayName()
 }
 
 // stringifyValue safely converts YouTrack custom field values to a string.
