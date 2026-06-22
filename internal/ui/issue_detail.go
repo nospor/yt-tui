@@ -319,20 +319,32 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					_ = config.SaveConfig(m.cfg)
 				}
 				filename := fmt.Sprintf("file-%s-%s", time.Now().Format("20060102-150405"), filepath.Base(path))
-				m.pastedCommentImages = append(m.pastedCommentImages, SelectedFile{
-					Name: filename,
-					Path: path,
-				})
-				ext := strings.ToLower(filepath.Ext(path))
-				isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".webp"
-				var markdownRef string
-				if isImage {
-					markdownRef = fmt.Sprintf("![%s](%s)", filename, filename)
+				if m.mode == modeNormal {
+					m.loading = true
+					return m, func() tea.Msg {
+						content, readErr := os.ReadFile(path)
+						if readErr != nil {
+							return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", path, readErr)}
+						}
+						err := m.client.UploadAttachment(m.issue.IDReadable, filename, content)
+						return detailActionFinishedMsg{err: err}
+					}
 				} else {
-					markdownRef = fmt.Sprintf("[%s](%s)", filename, filename)
+					m.pastedCommentImages = append(m.pastedCommentImages, SelectedFile{
+						Name: filename,
+						Path: path,
+					})
+					ext := strings.ToLower(filepath.Ext(path))
+					isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".webp"
+					var markdownRef string
+					if isImage {
+						markdownRef = fmt.Sprintf("![%s](%s)", filename, filename)
+					} else {
+						markdownRef = fmt.Sprintf("[%s](%s)", filename, filename)
+					}
+					m.textInput = insertAtCursor(m.textInput, markdownRef)
+					return m, nil
 				}
-				m.textInput = insertAtCursor(m.textInput, markdownRef)
-				return m, nil
 			}
 			return m, fpCmd
 		default:
@@ -1115,6 +1127,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.trackTimeError = ""
 			m.updateTrackTimeFocus()
 			return m, nil
+		case "ctrl+f":
+			m.filepickerActive = true
+			h := m.height - 14
+			if h < 4 {
+				h = 4
+			}
+			m.filepicker.SetHeight(h)
+			return m, m.filepicker.Init()
 		case "c":
 			m.mode = modeCommentInput
 			m.textInput.Placeholder = "Add a comment..."
@@ -1879,7 +1899,7 @@ func (m detailModel) View() string {
 				mdAction = "  [m] Markdown"
 			}
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [R] Select Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,

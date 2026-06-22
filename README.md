@@ -227,6 +227,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Comments, Links, and Attachments viewports, this moves the selection cursor.
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
 * `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.
+* `Ctrl+f`: Open the file browser popup to pick and attach files from your computer to the issue immediately.
 * `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, or `Ctrl+f` to open the file browser popup to pick and attach files from your computer.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
