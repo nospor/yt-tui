@@ -1,4 +1,24 @@
 
+## [0.5.4] - 2026-06-22
+
+### Features
+
+- *(ui)* Add 'Repo' custom field update with project-specific config mapping ([cbfc803](https://github.com/nospor/yt-tui/commit/cbfc80364a58d5035673b53687a50a6710d69497))
+
+            - Implement capital 'R' shortcut in issue details view to select and
+            update a task's 'Repo' custom field.
+            - Implement map-based `repo_options` configuration
+            (`map[string][]string`) to allow project-specific repository options as
+            fallback definitions.
+            - Pre-pend a "No repo" option in the selection menu to clear/empty the
+            field in YouTrack.
+            - Support fallback resolution using project ShortName or project
+            database ID.
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.5.3 [skip ci] ([037ad26](https://github.com/nospor/yt-tui/commit/037ad263aab47d8067073763d3d14e0bf08f6b05))
+
 ## [0.5.3] - 2026-06-22
 
 ### Features
