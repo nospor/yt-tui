@@ -1,4 +1,15 @@
 
+## [0.6.1] - 2026-06-22
+
+### Features
+
+- *(ui)* Add shortcut to delete issue links in details view ([d05e580](https://github.com/nospor/yt-tui/commit/d05e58047cfc2b2379df63a316451ada476bb15f))
+- Link cloned issues and transition to detail view on clone ([b0f51dc](https://github.com/nospor/yt-tui/commit/b0f51dca21ab0c1f733c3cc7041988e734f4350f))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.0 [skip ci] ([1a18778](https://github.com/nospor/yt-tui/commit/1a18778a59f0138ca5be9fdda6fa1aa506f73c03))
+
 ## [0.6.0] - 2026-06-22
 
 ### Features
