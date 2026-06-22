@@ -1,4 +1,17 @@
 
+## [0.6.0] - 2026-06-22
+
+### Features
+
+- *(ui)* Add clipboard image pasting for issues and comments ([6c9c6a2](https://github.com/nospor/yt-tui/commit/6c9c6a2ca445cca34d7a42416c41d437d1cb0178))
+- *(ui)* Add local file picker ([8668e1d](https://github.com/nospor/yt-tui/commit/8668e1d390b0831ce295f9b1c680a090f5f5ef05))
+- Attach file in task detail view ([ddebcb8](https://github.com/nospor/yt-tui/commit/ddebcb8a1996816cc8e054f3492a894dc8120d55))
+- *(ui)* Support deleting issue attachments ([f15111d](https://github.com/nospor/yt-tui/commit/f15111d571f5b5b4d25895ca509865fa6db1bed6))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.5.5 [skip ci] ([fe6f201](https://github.com/nospor/yt-tui/commit/fe6f20170a119e393499e8af3f9838cd5fcc1eb7))
+
 ## [0.5.5] - 2026-06-22
 
 ### Features
