@@ -235,7 +235,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
 * `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Ctrl+v` image paste and `Ctrl+f` computer file attachment inside the comment editor).
-* `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
+* `C`: Clone this issue. Pre-populates the new issue form with this ticket's details, and automatically links the new issue back to the original under the "Is clone of" relationship.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `i`: Copy just the task ID to the clipboard.
   - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.

@@ -181,6 +181,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.switchState(msg.state, msg.data, false)
 		return m, cmd
 
+	case cloneSubmittedMsg:
+		if msg.projectCodeToInvalidate != "" {
+			m.issues.invalidateCache(msg.projectCodeToInvalidate)
+		}
+		cmd := m.switchState(stateDetail, msg.issueID, false)
+		return m, cmd
+
 	case popStateMsg:
 		if len(m.history) > 0 {
 			if msg.projectCodeToInvalidate != "" {

@@ -90,12 +90,14 @@ type IssueLink struct {
 
 // IssueLinkType represents YouTrack link types.
 type IssueLinkType struct {
+	ID                      string `json:"id"`
 	Name                    string `json:"name"`
 	LocalizedName           string `json:"localizedName,omitempty"`
 	SourceToTarget          string `json:"sourceToTarget"`
 	LocalizedSourceToTarget string `json:"localizedSourceToTarget,omitempty"`
 	TargetToSource          string `json:"targetToSource"`
 	LocalizedTargetToSource string `json:"localizedTargetToSource,omitempty"`
+	Directed                bool   `json:"directed"`
 }
 
 // Attachment represents an issue attachment in YouTrack.

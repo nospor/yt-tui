@@ -31,18 +31,19 @@ const (
 )
 
 type formModel struct {
-	client     *ytcli.Client
-	cfg        *config.Config
-	loading    bool
-	isClone    bool
-	cloneKey   string
-	isEdit     bool
-	editKey    string
-	err        error
-	spinner    spinner.Model
-	width      int
-	height     int
-	focusIndex formField
+	client       *ytcli.Client
+	cfg          *config.Config
+	loading      bool
+	isClone      bool
+	cloneKey     string
+	cloneIssueID string
+	isEdit       bool
+	editKey      string
+	err          error
+	spinner      spinner.Model
+	width        int
+	height       int
+	focusIndex   formField
 
 	// Inputs
 	summaryInput  textinput.Model
@@ -131,6 +132,11 @@ type formDataLoadedMsg struct {
 type formSubmittedMsg struct {
 	issueID string
 	err     error
+}
+
+type cloneSubmittedMsg struct {
+	issueID                 string
+	projectCodeToInvalidate string
 }
 
 type projectsLoadedMsg struct {
@@ -256,6 +262,7 @@ func (m formModel) getPriorities() []string {
 func (m *formModel) setupForm(data string) tea.Cmd {
 	m.isClone = false
 	m.cloneKey = ""
+	m.cloneIssueID = ""
 	m.isEdit = false
 	m.editKey = ""
 	m.loading = false
@@ -399,6 +406,9 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		issue := msg.issue
 		if m.isClone {
 			m.summaryInput.SetValue("Clone: " + issue.Summary)
+			if issue != nil {
+				m.cloneIssueID = issue.ID
+			}
 		} else { // edit mode
 			m.summaryInput.SetValue(issue.Summary)
 		}
@@ -430,6 +440,11 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			proj = m.projects[m.projectIndex].ShortName
 		} else {
 			proj = m.initialProjectCode
+		}
+		if m.isClone {
+			return m, func() tea.Msg {
+				return cloneSubmittedMsg{issueID: msg.issueID, projectCodeToInvalidate: proj}
+			}
 		}
 		return m, func() tea.Msg {
 			return popStateMsg{projectCodeToInvalidate: proj}
@@ -546,6 +561,8 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 					}
 				} else {
 					pasted := m.pastedImages
+					isClone := m.isClone
+					cloneIssueID := m.cloneIssueID
 					return m, func() tea.Msg {
 						id, err := m.client.CreateIssue(
 							proj,
@@ -557,6 +574,12 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 						)
 						if err != nil {
 							return formSubmittedMsg{issueID: id, err: err}
+						}
+						// If we are cloning, add a link pointing from the new issue to the original issue
+						if isClone && cloneIssueID != "" {
+							if linkErr := m.client.LinkClonedIssue(id, cloneIssueID); linkErr != nil {
+								return formSubmittedMsg{issueID: id, err: fmt.Errorf("failed to link cloned issue: %w", linkErr)}
+							}
 						}
 						// Upload files
 						for _, img := range pasted {

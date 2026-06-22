@@ -545,6 +545,147 @@ func (c *Client) DeleteIssueLink(issueID string, linkID string, targetIssueID st
 	return nil
 }
 
+// ListIssueLinkTypes lists all issue link types in YouTrack.
+func (c *Client) ListIssueLinkTypes() ([]IssueLinkType, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issueLinkTypes"
+
+	// Query parameters
+	params := url.Values{}
+	params.Set("fields", "id,name,localizedName,sourceToTarget,localizedSourceToTarget,targetToSource,localizedTargetToSource,directed")
+	apiURL += "?" + params.Encode()
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var linkTypes []IssueLinkType
+	if err := json.Unmarshal(body, &linkTypes); err != nil {
+		return nil, err
+	}
+
+	return linkTypes, nil
+}
+
+// AddIssueLink creates a link between two issues.
+func (c *Client) AddIssueLink(issueID string, linkTypeID string, targetIssueID string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + issueID + "/links/" + linkTypeID + "/issues"
+
+	requestBody, err := json.Marshal(map[string]string{"id": targetIssueID})
+	if err != nil {
+		return err
+	}
+
+	req, err := c.newRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent && statusCode != http.StatusAccepted && statusCode != http.StatusCreated {
+		return parseAPIError(statusCode, body)
+	}
+
+	return nil
+}
+
+// LinkClonedIssue automatically finds the 'clone'/'is clone of' link type and links the cloned issue to the original issue.
+func (c *Client) LinkClonedIssue(newIssueID string, originalIssueID string) error {
+	linkTypes, err := c.ListIssueLinkTypes()
+	if err != nil {
+		return err
+	}
+
+	var matchedLinkType *IssueLinkType
+	var matchedDirection string // "s" for outward, "t" for inward, "" for undirected
+
+	isMatch := func(val, target string) bool {
+		return strings.EqualFold(strings.TrimSpace(val), target)
+	}
+
+	// Pass 1: exact case-insensitive match for "is clone of" on directions
+	for i := range linkTypes {
+		lt := &linkTypes[i]
+		if isMatch(lt.SourceToTarget, "is clone of") || isMatch(lt.LocalizedSourceToTarget, "is clone of") {
+			matchedLinkType = lt
+			matchedDirection = "s"
+			break
+		}
+		if isMatch(lt.TargetToSource, "is clone of") || isMatch(lt.LocalizedTargetToSource, "is clone of") {
+			matchedLinkType = lt
+			matchedDirection = "t"
+			break
+		}
+	}
+
+	// Pass 2: if not found, look for name matching "clone" or "is clone of"
+	if matchedLinkType == nil {
+		for i := range linkTypes {
+			lt := &linkTypes[i]
+			if isMatch(lt.Name, "clone") || isMatch(lt.LocalizedName, "clone") ||
+				isMatch(lt.Name, "is clone of") || isMatch(lt.LocalizedName, "is clone of") {
+				matchedLinkType = lt
+				matchedDirection = "t"
+				break
+			}
+		}
+	}
+
+	// Pass 3: if still not found, try to find any link type whose name contains "clone" (case-insensitive substring)
+	if matchedLinkType == nil {
+		for i := range linkTypes {
+			lt := &linkTypes[i]
+			if strings.Contains(strings.ToLower(lt.Name), "clone") ||
+				strings.Contains(strings.ToLower(lt.LocalizedName), "clone") {
+				matchedLinkType = lt
+				matchedDirection = "t"
+				break
+			}
+		}
+	}
+
+	if matchedLinkType == nil {
+		return fmt.Errorf("could not find a link type for 'clone' or 'is clone of'")
+	}
+
+	linkTypeID := matchedLinkType.ID
+	if matchedLinkType.Directed && matchedDirection != "" {
+		linkTypeID += matchedDirection
+	}
+
+	return c.AddIssueLink(newIssueID, linkTypeID, originalIssueID)
+}
+
 // AddComment adds a comment to an issue.
 func (c *Client) AddComment(id string, text string) error {
 	if text == "" {
