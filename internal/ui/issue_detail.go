@@ -37,6 +37,7 @@ const (
 	modeYankUrlSelect
 	modeTrackTime
 	modeFilterSelect
+	modeRepoSelect
 )
 
 type linkedIssue struct {
@@ -94,6 +95,8 @@ type detailModel struct {
 	textInput       textinput.Model
 	stateOptions    []string
 	stateCursor     int
+	repoOptions     []string
+	repoCursor      int
 	isModified      bool
 	statusMessage   string
 	statusMessageID int
@@ -156,6 +159,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 		mode:                   modeNormal,
 		textInput:              ti,
 		stateOptions:           states,
+		repoOptions:            nil,
 		descViewport:           viewport.New(0, 0),
 		commentsViewport:       viewport.New(0, 0),
 		linksViewport:          viewport.New(0, 0),
@@ -170,6 +174,7 @@ type detailDataMsg struct {
 	issue          *ytcli.Issue
 	activities     []ytcli.ActivityItem
 	trackTimeTypes []ytcli.WorkItemType
+	repoOptions    []string
 	err            error
 }
 
@@ -206,7 +211,31 @@ func (m detailModel) loadDetailCmd() tea.Cmd {
 		// Also fetch work item types
 		wTypes, _ := m.client.ListWorkItemTypes()
 
-		return detailDataMsg{issue: issue, activities: activities, trackTimeTypes: wTypes, err: err2}
+		// Fetch Repo custom field options
+		var repoOpts []string
+		if issue.Project != nil {
+			if opts, err := m.client.GetProjectCustomFieldOptions(issue.Project.ID, "Repo"); err == nil {
+				repoOpts = opts
+			}
+		}
+		if len(repoOpts) == 0 && m.cfg != nil && m.cfg.RepoOptions != nil && issue.Project != nil {
+			if opts, ok := m.cfg.RepoOptions[issue.Project.ShortName]; ok && len(opts) > 0 {
+				repoOpts = opts
+			} else if opts, ok := m.cfg.RepoOptions[issue.Project.ID]; ok && len(opts) > 0 {
+				repoOpts = opts
+			}
+		}
+		if len(repoOpts) > 0 {
+			repoOpts = append([]string{"No repo"}, repoOpts...)
+		}
+
+		return detailDataMsg{
+			issue:          issue,
+			activities:     activities,
+			trackTimeTypes: wTypes,
+			repoOptions:    repoOpts,
+			err:            err2,
+		}
 	}
 }
 
@@ -251,6 +280,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.issue = msg.issue
 		m.activities = msg.activities
 		m.trackTimeTypes = msg.trackTimeTypes
+		m.repoOptions = msg.repoOptions
 
 		// Initialize viewports and set content
 		m.updateViewportSizes()
@@ -368,6 +398,33 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					err := m.client.UpdateIssueState(m.issue.IDReadable, selectedState)
 					return detailActionFinishedMsg{err: err}
 				}
+			case "esc":
+				m.mode = modeNormal
+			}
+			return m, nil
+
+		case modeRepoSelect:
+			switch msg.String() {
+			case "left", "h", "up", "k":
+				m.repoCursor--
+				if m.repoCursor < 0 {
+					m.repoCursor = len(m.repoOptions) - 1
+				}
+			case "right", "l", "down", "j":
+				m.repoCursor++
+				if m.repoCursor >= len(m.repoOptions) {
+					m.repoCursor = 0
+				}
+			case "enter":
+				if len(m.repoOptions) > 0 {
+					m.loading = true
+					selectedRepo := m.repoOptions[m.repoCursor]
+					return m, func() tea.Msg {
+						err := m.client.UpdateIssueCustomField(m.issue.IDReadable, "Repo", selectedRepo)
+						return detailActionFinishedMsg{err: err}
+					}
+				}
+				m.mode = modeNormal
 			case "esc":
 				m.mode = modeNormal
 			}
@@ -895,6 +952,29 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			for idx, opt := range m.stateOptions {
 				if opt == m.issue.State() {
 					m.stateCursor = idx
+					break
+				}
+			}
+			return m, nil
+		case "R":
+			if len(m.repoOptions) == 0 {
+				m.statusMessage = "No Repo options configured or available!"
+				m.statusMessageID++
+				currentID := m.statusMessageID
+				return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+					return clearStatusMsg{id: currentID}
+				})
+			}
+			m.mode = modeRepoSelect
+			m.repoCursor = 0
+			// Pre-select current repo if possible
+			currentRepoVal := m.issue.ExtractStringField("Repo")
+			if currentRepoVal == "" {
+				currentRepoVal = "No repo"
+			}
+			for idx, opt := range m.repoOptions {
+				if opt == currentRepoVal {
+					m.repoCursor = idx
 					break
 				}
 			}
@@ -1567,6 +1647,24 @@ func (m detailModel) View() string {
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
+	case modeRepoSelect:
+		var optsStr strings.Builder
+		for idx, opt := range m.repoOptions {
+			if idx > 0 {
+				optsStr.WriteString("  ")
+			}
+			if idx == m.repoCursor {
+				optsStr.WriteString(StyleSelected.Render(" " + opt + " "))
+			} else {
+				optsStr.WriteString(" " + opt + " ")
+			}
+		}
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Select Repo (Left/Right to choose, Enter to save, Esc to cancel) ")
+		actionView = "\n" + lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorCyan)).
+			Width(m.width-4).
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
 	}
 
 	var footer string
@@ -1591,7 +1689,7 @@ func (m detailModel) View() string {
 				mdAction = "  [m] Markdown"
 			}
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [R] Select Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,

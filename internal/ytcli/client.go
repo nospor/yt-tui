@@ -1238,3 +1238,205 @@ func getLegacyCredentials() (string, string, error) {
 
 	return baseURL, token, nil
 }
+
+// GetProjectCustomFieldOptions fetches available options for a custom field in a project.
+func (c *Client) GetProjectCustomFieldOptions(projectID, fieldName string) ([]string, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	// Fetch all project custom fields with bundle values
+	apiURL := baseURL + "api/admin/projects/" + projectID + "/customFields?fields=id,field(name),bundle(id,values(name))"
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	var fieldsData []struct {
+		ID    string `json:"id"`
+		Field struct {
+			Name string `json:"name"`
+		} `json:"field"`
+		Bundle *struct {
+			Values []struct {
+				Name string `json:"name"`
+			} `json:"values"`
+		} `json:"bundle"`
+	}
+
+	if err := json.Unmarshal(body, &fieldsData); err != nil {
+		return nil, err
+	}
+
+	for _, pcf := range fieldsData {
+		if strings.EqualFold(pcf.Field.Name, fieldName) {
+			if pcf.Bundle == nil {
+				return nil, nil
+			}
+			var options []string
+			for _, val := range pcf.Bundle.Values {
+				options = append(options, val.Name)
+			}
+			return options, nil
+		}
+	}
+
+	return nil, fmt.Errorf("custom field %q not configured in project %s", fieldName, projectID)
+}
+
+// UpdateIssueCustomField updates a single-value custom field on an issue.
+func (c *Client) UpdateIssueCustomField(id string, fieldName string, value string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	// 1. Fetch details to discover custom field type and bundle element type
+	apiURL := baseURL + "api/issues/" + id + "?fields=customFields(id,name,value($type,name),$type)"
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK {
+		return parseAPIError(statusCode, body)
+	}
+
+	var issueData struct {
+		CustomFields []struct {
+			ID    string      `json:"id"`
+			Name  string      `json:"name"`
+			Type  string      `json:"$type"`
+			Value interface{} `json:"value"`
+		} `json:"customFields"`
+	}
+
+	if err := json.Unmarshal(body, &issueData); err != nil {
+		return err
+	}
+
+	var targetField *struct {
+		ID    string
+		Name  string
+		Type  string
+		Value interface{}
+	}
+
+	for _, cf := range issueData.CustomFields {
+		if strings.EqualFold(cf.Name, fieldName) {
+			targetField = &struct {
+				ID    string
+				Name  string
+				Type  string
+				Value interface{}
+			}{
+				ID:    cf.ID,
+				Name:  cf.Name,
+				Type:  cf.Type,
+				Value: cf.Value,
+			}
+			break
+		}
+	}
+
+	if targetField == nil {
+		return fmt.Errorf("custom field %q not found on issue %s", fieldName, id)
+	}
+
+	// 2. Build the payload based on the custom field type
+	var payload map[string]interface{}
+
+	var fieldValue interface{}
+	if value != "" && value != "No repo" {
+		if targetField.Type == "SimpleIssueCustomField" {
+			fieldValue = value
+		} else {
+			bundleType := ""
+			switch targetField.Type {
+			case "SingleEnumIssueCustomField":
+				bundleType = "EnumBundleElement"
+			case "StateIssueCustomField":
+				bundleType = "StateBundleElement"
+			case "SingleOwnedIssueCustomField":
+				bundleType = "OwnedBundleElement"
+			case "SingleVersionIssueCustomField":
+				bundleType = "VersionBundleElement"
+			case "SingleBuildIssueCustomField":
+				bundleType = "BuildBundleElement"
+			default:
+				bundleType = "EnumBundleElement" // default fallback
+			}
+
+			if valMap, ok := targetField.Value.(map[string]interface{}); ok {
+				if t, ok := valMap["$type"].(string); ok && t != "" {
+					bundleType = t
+				}
+			}
+
+			fieldValue = map[string]interface{}{
+				"$type": bundleType,
+				"name":  value,
+			}
+		}
+	} else {
+		fieldValue = nil
+	}
+
+	payload = map[string]interface{}{
+		"$type": "Issue",
+		"customFields": []map[string]interface{}{
+			{
+				"$type": targetField.Type,
+				"name":  targetField.Name,
+				"value": fieldValue,
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	postURL := baseURL + "api/issues/" + id + "?fields=id"
+	postReq, err := c.newRequest("POST", postURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	postBody, postStatusCode, err := c.doRequest(postReq)
+	if err != nil {
+		return err
+	}
+
+	if postStatusCode != http.StatusOK && postStatusCode != http.StatusNoContent {
+		return parseAPIError(postStatusCode, postBody)
+	}
+
+	return nil
+}
