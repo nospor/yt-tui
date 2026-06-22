@@ -1543,9 +1543,16 @@ func (m detailModel) View() string {
 		StyleNormal.Foreground(lipgloss.Color(ColorYellow)).Render(issue.Priority()),
 		StyleNormal.Foreground(lipgloss.Color(ColorViolet)).Render(issue.Type()),
 	)
-	row2 := fmt.Sprintf("Project: %s  State: %s",
+	repoVal := issue.ExtractStringField("Repo")
+	if repoVal == "" {
+		repoVal = "No repo"
+	}
+	repoStr := StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(repoVal)
+
+	row2 := fmt.Sprintf("Project: %s  State: %s  Repo: %s",
 		projPadded,
 		stateBadge,
+		repoStr,
 	)
 	row3 := fmt.Sprintf("Assignee: %s  Creator: %s (%s)  Updated by: %s (%s)",
 		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(issue.Assignee()),
