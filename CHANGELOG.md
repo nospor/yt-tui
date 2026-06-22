@@ -1,4 +1,15 @@
 
+## [0.5.5] - 2026-06-22
+
+### Features
+
+- *(ui)* Display issue creation and last update info in task details ([6819b3a](https://github.com/nospor/yt-tui/commit/6819b3a553348302fdab9287e622b9380ba128e3))
+- *(ui)* Display Repo custom field in issue detail view ([9256d3a](https://github.com/nospor/yt-tui/commit/9256d3aa12614b787dcf519b8dde79945f478efe))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.5.4 [skip ci] ([78fe2b8](https://github.com/nospor/yt-tui/commit/78fe2b8d33eba110e699b80fe41833a8fd49ae79))
+
 ## [0.5.4] - 2026-06-22
 
 ### Features
