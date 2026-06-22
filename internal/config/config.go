@@ -24,6 +24,7 @@ type Config struct {
 	SortDirection      string         `json:"sort_direction"`
 	FavoriteView       string         `json:"favorite_view,omitempty"`
 	ActivityFilters    []string       `json:"activity_filters,omitempty"`
+	RenderMarkdown     bool           `json:"render_markdown"`
 }
 
 type ServerConfig struct {
@@ -61,6 +62,7 @@ func LoadConfig() (*Config, error) {
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
 			ActivityFilters:    []string{"Comments"},
+			RenderMarkdown:     true,
 		}, err
 	}
 
@@ -79,6 +81,7 @@ func LoadConfig() (*Config, error) {
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
 			ActivityFilters:    []string{"Comments"},
+			RenderMarkdown:     true,
 		}, err
 	}
 
@@ -94,6 +97,7 @@ func LoadConfig() (*Config, error) {
 		FilteredStates:     append([]string{}, DefaultStates...),
 		FilteredPriorities: append([]string{}, DefaultPriorities...),
 		ActivityFilters:    []string{"Comments"},
+		RenderMarkdown:     true,
 	}
 
 	// Check if file exists
@@ -115,7 +119,9 @@ func LoadConfig() (*Config, error) {
 		return cfg, err
 	}
 
-	var fileCfg Config
+	fileCfg := Config{
+		RenderMarkdown: true,
+	}
 	if err := json.Unmarshal(data, &fileCfg); err != nil {
 		// If JSON is malformed, return default config
 		return cfg, err

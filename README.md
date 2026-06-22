@@ -25,7 +25,7 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 - **📂 Global Project Browser**: View and browse all accessible YouTrack projects in a clean tabular view.
 - **⚡ Asynchronous Paginated Loading**: Loads issues in the background without blocking the UI, giving you an instantly responsive view even on large codebases.
 - **🔍 Filter & Search**: Instantly query and filter issues in lists by readable ID or summary text using local filtering.
-- **📝 Comprehensive Issue Detail**: Renders full markdown descriptions, assignees, priorities, states, and custom fields. Supports dedicated scrollable viewports for description, comments, linked issues, and attachments.
+- **📝 Comprehensive Issue Detail**: Renders descriptions (with a toggle `m` to switch between plain text and formatted markdown, saved in configuration), assignees, priorities, states, and custom fields. Supports dedicated scrollable viewports for description, comments, linked issues, and attachments.
 - **🔄 Complete Issue Lifecycle**:
   - **Create & Clone**: Instantly spawn new issues or clone existing ones (pre-populating description, type, priority, and assignee details).
   - **State Transitions**: Transition states (e.g. `Open` ➔ `In Progress` ➔ `Fixed`) dynamically.
@@ -136,29 +136,31 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "custom_states": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"],
   "sort_column": "ID",
   "sort_direction": "asc",
-  "favorite_view": ""
+  "favorite_view": "",
+  "render_markdown": true
 }
 ```
 
 ### Configuration Options
 
-| Option                | Type             | Default                                              | Description                                                                                                                                                                                 |
-| --------------------- | ---------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `url`                 | String           | `""`                                                 | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                             |
-| `token`               | String           | `""`                                                 | Your permanent YouTrack API token.                                                                                                                                                          |
-| `servers`             | Array of Objects | `[]` (empty)                                         | List of YouTrack server configurations (each containing `name`, `url`, and `token`) to choose from on startup. |
-| `page_size`           | Integer          | `20`                                                 | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
-| `max_issues`          | Integer          | `500`                                                | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
-| `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]` | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names.                 |
-| `custom_types`        | Array of Strings | `[]` (empty)                                         | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.).                                                        |
-| `custom_priorities`   | Array of Strings | `[]` (empty)                                         | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.).                                                  |
-| `custom_states`       | Array of Strings | `[]` (empty)                                         | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.).                               |
-| `filtered_states`     | Array of Strings | `[]` (empty)                                         | List of selected issue states to display on the tasks list. States not in this list will be filtered out.                                                                                   |
-| `filtered_priorities` | Array of Strings | `[]` (empty)                                         | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out.                                                                           |
-| `sort_column`         | String           | `""`                                                 | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
-| `sort_direction`      | String           | `""`                                                 | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
-| `favorite_view`       | String           | `""`                                                 | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                   |
-| `work_types`          | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                            |
+| Option                | Type             | Default                                                                          | Description                                                                                                                                                                                 |
+| --------------------- | ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`                 | String           | `""`                                                                             | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                             |
+| `token`               | String           | `""`                                                                             | Your permanent YouTrack API token.                                                                                                                                                          |
+| `servers`             | Array of Objects | `[]` (empty)                                                                     | List of YouTrack server configurations (each containing `name`, `url`, and `token`) to choose from on startup.                                                                              |
+| `page_size`           | Integer          | `20`                                                                             | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
+| `max_issues`          | Integer          | `500`                                                                            | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
+| `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]`                             | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`) as well as custom field names.                 |
+| `custom_types`        | Array of Strings | `[]` (empty)                                                                     | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.).                                                        |
+| `custom_priorities`   | Array of Strings | `[]` (empty)                                                                     | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.).                                                  |
+| `custom_states`       | Array of Strings | `[]` (empty)                                                                     | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.).                               |
+| `filtered_states`     | Array of Strings | `[]` (empty)                                                                     | List of selected issue states to display on the tasks list. States not in this list will be filtered out.                                                                                   |
+| `filtered_priorities` | Array of Strings | `[]` (empty)                                                                     | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out.                                                                           |
+| `sort_column`         | String           | `""`                                                                             | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
+| `sort_direction`      | String           | `""`                                                                             | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
+| `favorite_view`       | String           | `""`                                                                             | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                   |
+| `work_types`          | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                                                        |
+| `render_markdown`     | Boolean          | `true`                                                                           | Whether to format and render issue descriptions as markdown. Can be toggled inside the issue detail view by pressing `m`.                                                                   |
 
 ---
 
@@ -232,6 +234,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   - `d`: Copy the task description to the clipboard.
   - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
   - Pressing any other key cancels the yanking motion.
+* `m`: Toggle formatting the issue description between plain text and markdown (choice is remembered in configuration).
 * `t`: Track time (opens a popup with an interactive calendar to select a date, duration input in `1w 1d 1h 1m` format, work type selection, and comment textarea).
 * `F` (in Comments viewport): Open the Activity filter panel (Comments, Spent Time, VCS Changes, Change History). Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
 * `r`: Force refresh issue details, comments, links, and attachments.

@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -934,6 +935,13 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				return m, nil
 			}
+		case "m":
+			if m.cfg != nil {
+				m.cfg.RenderMarkdown = !m.cfg.RenderMarkdown
+				_ = config.SaveConfig(m.cfg)
+				m.updateViewportContents()
+				return m, nil
+			}
 		case "r":
 			m.loading = true
 			m.err = nil
@@ -1022,7 +1030,21 @@ func (m *detailModel) updateViewportContents() {
 	}
 
 	// Wrap description
-	descWrapped := lipgloss.NewStyle().Width(m.descViewport.Width).Render(m.issue.Description)
+	var descWrapped string
+	if m.cfg != nil && m.cfg.RenderMarkdown {
+		r, err := glamour.NewTermRenderer(
+			glamour.WithStandardStyle("dark"),
+			glamour.WithWordWrap(m.descViewport.Width),
+		)
+		if err == nil {
+			if out, err := r.Render(m.issue.Description); err == nil {
+				descWrapped = out
+			}
+		}
+	}
+	if descWrapped == "" {
+		descWrapped = lipgloss.NewStyle().Width(m.descViewport.Width).Render(m.issue.Description)
+	}
 	m.descViewport.SetContent(descWrapped)
 
 	// Format and wrap activities
@@ -1561,7 +1583,15 @@ func (m detailModel) View() string {
 			editAction = "Edit Comment"
 			filterAction = "  [F] Filter"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] %s  [C] Clone  [y] Yank%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction))
+		mdAction := ""
+		if m.cfg != nil {
+			if m.cfg.RenderMarkdown {
+				mdAction = "  [m] Plain"
+			} else {
+				mdAction = "  [m] Markdown"
+			}
+		}
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Toggle Pane  [Enter] %s  [c] Comment  [t] Track Time  [s] Transition State  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
