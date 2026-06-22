@@ -39,6 +39,7 @@ const (
 	modeTrackTime
 	modeFilterSelect
 	modeRepoSelect
+	modeDeleteAttachmentConfirm
 )
 
 type linkedIssue struct {
@@ -618,6 +619,24 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			}
 			return m, nil
 
+		case modeDeleteAttachmentConfirm:
+			switch msg.String() {
+			case "y", "Y":
+				if m.issue != nil && len(m.issue.Attachments) > 0 && m.attachmentsCursor >= 0 && m.attachmentsCursor < len(m.issue.Attachments) {
+					m.loading = true
+					m.loadingText = "Deleting attachment..."
+					att := m.issue.Attachments[m.attachmentsCursor]
+					return m, func() tea.Msg {
+						err := m.client.DeleteAttachment(m.issue.IDReadable, att.ID)
+						return detailActionFinishedMsg{err: err}
+					}
+				}
+				m.mode = modeNormal
+			case "n", "N", "esc":
+				m.mode = modeNormal
+			}
+			return m, nil
+
 		case modeYank:
 			switch msg.String() {
 			case "i":
@@ -997,6 +1016,11 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		case "y":
 			m.mode = modeYank
 			return m, nil
+		case "d":
+			if m.activeViewport == 3 && m.issue != nil && len(m.issue.Attachments) > 0 {
+				m.mode = modeDeleteAttachmentConfirm
+				return m, nil
+			}
 		case "esc", "backspace":
 			var proj string
 			if m.isModified && m.issue != nil && m.issue.Project != nil {
@@ -1871,6 +1895,18 @@ func (m detailModel) View() string {
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
+	case modeDeleteAttachmentConfirm:
+		var attName string
+		if m.issue != nil && len(m.issue.Attachments) > 0 && m.attachmentsCursor >= 0 && m.attachmentsCursor < len(m.issue.Attachments) {
+			attName = m.issue.Attachments[m.attachmentsCursor].Name
+		}
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(" Delete Attachment ")
+		prompt := fmt.Sprintf(" Are you sure you want to delete attachment %s? (y/n) ", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(attName))
+		actionView = "\n" + lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorRed)).
+			Width(m.width-4).
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", prompt))
 	}
 
 	var footer string
@@ -1880,6 +1916,8 @@ func (m detailModel) View() string {
 		footer = StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
 	} else if m.mode == modeCommentInput || m.mode == modeCommentEdit {
 		footer = StyleHelp.Render(" [Enter] Submit Comment  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
+	} else if m.mode == modeDeleteAttachmentConfirm {
+		footer = StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
 	} else {
 		enterAction := "Jump to Task"
 		if m.activeViewport == 3 {
@@ -1899,7 +1937,11 @@ func (m detailModel) View() string {
 				mdAction = "  [m] Markdown"
 			}
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction))
+		deleteAction := ""
+		if m.activeViewport == 3 && m.issue != nil && len(m.issue.Attachments) > 0 {
+			deleteAction = "  [d] Delete"
+		}
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,

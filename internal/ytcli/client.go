@@ -487,6 +487,35 @@ func (c *Client) UploadAttachment(issueID string, filename string, content []byt
 	return nil
 }
 
+// DeleteAttachment deletes an attachment from a YouTrack issue.
+func (c *Client) DeleteAttachment(issueID string, attachmentID string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + issueID + "/attachments/" + attachmentID
+
+	req, err := c.newRequest("DELETE", apiURL, nil)
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent && statusCode != http.StatusAccepted {
+		return parseAPIError(statusCode, body)
+	}
+
+	return nil
+}
+
 // AddComment adds a comment to an issue.
 func (c *Client) AddComment(id string, text string) error {
 	if text == "" {
