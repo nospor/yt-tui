@@ -114,6 +114,8 @@ type detailModel struct {
 	trackTimeActiveField   int
 	trackTimeTypes         []ytcli.WorkItemType
 	trackTimeError         string
+
+	pastedCommentImages []PastedImage
 }
 
 func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
@@ -326,37 +328,95 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		switch m.mode {
 		case modeCommentInput:
 			switch msg.String() {
+			case "ctrl+v", "ctrl+shift+v", "ctrl+V":
+				imgBytes, contentType, err := getClipboardImage()
+				if err == nil && len(imgBytes) > 0 {
+					ext := "png"
+					if contentType == "image/jpeg" {
+						ext = "jpg"
+					}
+					filename := fmt.Sprintf("pasted-image-%s-%d.%s", time.Now().Format("20060102-150405"), len(m.pastedCommentImages)+1, ext)
+					m.pastedCommentImages = append(m.pastedCommentImages, PastedImage{
+						Name:        filename,
+						Bytes:       imgBytes,
+						ContentType: contentType,
+					})
+					m.textInput = insertAtCursor(m.textInput, fmt.Sprintf("![%s](%s)", filename, filename))
+					return m, nil
+				} else if err != nil {
+					m.err = err
+				}
 			case "enter":
 				val := m.textInput.Value()
 				if val != "" {
 					m.loading = true
+					pasted := m.pastedCommentImages
+					m.pastedCommentImages = nil
 					return m, func() tea.Msg {
+						// 1. Upload attachments first
+						for _, img := range pasted {
+							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, img.Bytes); uploadErr != nil {
+								return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
+							}
+						}
+						// 2. Add comment
 						err := m.client.AddComment(m.issue.IDReadable, val)
 						return detailActionFinishedMsg{err: err}
 					}
 				}
 				m.mode = modeNormal
+				m.pastedCommentImages = nil
 			case "esc":
 				m.mode = modeNormal
+				m.pastedCommentImages = nil
 			}
 			m.textInput, cmd = m.textInput.Update(msg)
 			return m, cmd
 
 		case modeCommentEdit:
 			switch msg.String() {
+			case "ctrl+v", "ctrl+shift+v", "ctrl+V":
+				imgBytes, contentType, err := getClipboardImage()
+				if err == nil && len(imgBytes) > 0 {
+					ext := "png"
+					if contentType == "image/jpeg" {
+						ext = "jpg"
+					}
+					filename := fmt.Sprintf("pasted-image-%s-%d.%s", time.Now().Format("20060102-150405"), len(m.pastedCommentImages)+1, ext)
+					m.pastedCommentImages = append(m.pastedCommentImages, PastedImage{
+						Name:        filename,
+						Bytes:       imgBytes,
+						ContentType: contentType,
+					})
+					m.textInput = insertAtCursor(m.textInput, fmt.Sprintf("![%s](%s)", filename, filename))
+					return m, nil
+				} else if err != nil {
+					m.err = err
+				}
 			case "enter":
 				val := m.textInput.Value()
 				if val != "" && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
 					m.loading = true
 					commentID := m.activities[m.commentsCursor].GetCommentID()
+					pasted := m.pastedCommentImages
+					m.pastedCommentImages = nil
 					return m, func() tea.Msg {
+						// 1. Upload attachments first
+						for _, img := range pasted {
+							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, img.Bytes); uploadErr != nil {
+								return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
+							}
+						}
+						// 2. Update comment
 						err := m.client.UpdateComment(m.issue.IDReadable, commentID, val)
 						return detailActionFinishedMsg{err: err}
 					}
 				}
 				m.mode = modeNormal
+				m.pastedCommentImages = nil
 			case "esc":
 				m.mode = modeNormal
+				m.pastedCommentImages = nil
 			}
 			m.textInput, cmd = m.textInput.Update(msg)
 			return m, cmd
@@ -944,6 +1004,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.textInput.Placeholder = "Add a comment..."
 			m.textInput.SetValue("")
 			m.textInput.Focus()
+			m.pastedCommentImages = nil
 			return m, nil
 		case "s":
 			m.mode = modeStateSelect
@@ -998,6 +1059,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					m.textInput.Placeholder = "Edit comment..."
 					m.textInput.SetValue(act.GetCommentText())
 					m.textInput.Focus()
+					m.pastedCommentImages = nil
 					return m, nil
 				}
 			}
@@ -2296,4 +2358,20 @@ func mapFiltersToCategories(filters []string) []string {
 		}
 	}
 	return categories
+}
+
+func insertAtCursor(ti textinput.Model, text string) textinput.Model {
+	val := ti.Value()
+	pos := ti.Position()
+	runes := []rune(val)
+	if pos < 0 {
+		pos = 0
+	}
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+	newRunes := append(runes[:pos], append([]rune(text), runes[pos:]...)...)
+	ti.SetValue(string(newRunes))
+	ti.SetCursor(pos + len([]rune(text)))
+	return ti
 }

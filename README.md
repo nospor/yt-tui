@@ -224,11 +224,11 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Comments, Links, and Attachments viewports, this moves the selection cursor.
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
 * `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.
-* `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel.
+* `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
 * `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
-* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead.
+* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Ctrl+v` image paste inside the comment editor).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `i`: Copy just the task ID to the clipboard.
@@ -247,6 +247,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `←` / `→` (or `h` / `l`): Cycle options in dropdown fields (Project, Type, Priority).
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
 * `Ctrl+g` (on Description field): Open preferred external editor (using the `$EDITOR` environment variable) to write/edit the description.
+* `Ctrl+v` (on Description field): Paste an image directly from the system clipboard (Linux `xclip`/`wl-paste`, macOS, Windows). This injects standard Markdown image syntax and uploads the image to YouTrack on form submission.
 * `Ctrl+s` (or `Enter` on text inputs): Submit the form and save/create/clone the issue.
 * `Esc`: Cancel and discard changes.
 

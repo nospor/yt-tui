@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
@@ -56,6 +57,8 @@ type formModel struct {
 
 	priorityIndex    int
 	customPriorities []string
+
+	pastedImages []PastedImage
 }
 
 func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
@@ -232,6 +235,7 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 	m.priorityIndex = 0
 	m.customTypes = nil
 	m.customPriorities = nil
+	m.pastedImages = nil
 
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.loadProjectsCmd())
@@ -350,6 +354,26 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "ctrl+v", "ctrl+shift+v", "ctrl+V":
+			if !m.loading && m.focusIndex == fieldDescription {
+				imgBytes, contentType, err := getClipboardImage()
+				if err == nil && len(imgBytes) > 0 {
+					ext := "png"
+					if contentType == "image/jpeg" {
+						ext = "jpg"
+					}
+					filename := fmt.Sprintf("pasted-image-%s-%d.%s", time.Now().Format("20060102-150405"), len(m.pastedImages)+1, ext)
+					m.pastedImages = append(m.pastedImages, PastedImage{
+						Name:        filename,
+						Bytes:       imgBytes,
+						ContentType: contentType,
+					})
+					m.descTextArea.InsertString(fmt.Sprintf("![%s](%s)", filename, filename))
+					return m, nil
+				} else if err != nil {
+					m.err = err
+				}
+			}
 		case "ctrl+g":
 			if !m.loading && m.focusIndex == fieldDescription {
 				return m, m.openEditorCmd()
@@ -396,6 +420,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				m.loading = true
 				m.err = nil
 				if m.isEdit {
+					pasted := m.pastedImages
 					return m, func() tea.Msg {
 						err := m.client.UpdateIssue(
 							m.editKey,
@@ -405,9 +430,19 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 							issueType,
 							m.assigneeInput.Value(),
 						)
-						return formSubmittedMsg{issueID: m.editKey, err: err}
+						if err != nil {
+							return formSubmittedMsg{issueID: m.editKey, err: err}
+						}
+						// Upload images
+						for _, img := range pasted {
+							if uploadErr := m.client.UploadAttachment(m.editKey, img.Name, img.Bytes); uploadErr != nil {
+								return formSubmittedMsg{issueID: m.editKey, err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
+							}
+						}
+						return formSubmittedMsg{issueID: m.editKey, err: nil}
 					}
 				} else {
+					pasted := m.pastedImages
 					return m, func() tea.Msg {
 						id, err := m.client.CreateIssue(
 							proj,
@@ -417,7 +452,16 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 							issueType,
 							m.assigneeInput.Value(),
 						)
-						return formSubmittedMsg{issueID: id, err: err}
+						if err != nil {
+							return formSubmittedMsg{issueID: id, err: err}
+						}
+						// Upload images
+						for _, img := range pasted {
+							if uploadErr := m.client.UploadAttachment(id, img.Name, img.Bytes); uploadErr != nil {
+								return formSubmittedMsg{issueID: id, err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
+							}
+						}
+						return formSubmittedMsg{issueID: id, err: nil}
 					}
 				}
 			}

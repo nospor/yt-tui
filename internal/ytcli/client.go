@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -432,6 +433,58 @@ func (c *Client) DownloadAttachment(attachmentURL string, destPath string) error
 
 	_, err = io.Copy(out, resp.Body)
 	return err
+}
+
+// UploadAttachment uploads a file/image attachment to a YouTrack issue.
+func (c *Client) UploadAttachment(issueID string, filename string, content []byte) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + issueID + "/attachments"
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return err
+	}
+
+	if _, err := part.Write(content); err != nil {
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", apiURL, &body)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return parseAPIError(resp.StatusCode, respBody)
+	}
+
+	return nil
 }
 
 // AddComment adds a comment to an issue.
