@@ -374,6 +374,23 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 
 		case modeYank:
 			switch msg.String() {
+			case "i":
+				var copyCmd tea.Cmd
+				if m.issue != nil {
+					text := m.issue.IDReadable
+					if err := clipboardWriteAll(text); err != nil {
+						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+					} else {
+						m.statusMessage = "Copied issue ID to clipboard!"
+						m.statusMessageID++
+						currentID := m.statusMessageID
+						copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+							return clearStatusMsg{id: currentID}
+						})
+					}
+				}
+				m.mode = modeNormal
+				return m, copyCmd
 			case "s":
 				var copyCmd tea.Cmd
 				if m.issue != nil {
@@ -1560,6 +1577,7 @@ func (m detailModel) View() string {
 	if m.mode == modeYank {
 		popupContent := lipgloss.JoinVertical(lipgloss.Left,
 			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Yank Options:"),
+			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[i]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("ID")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[s]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("ID & Summary")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[d]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("Description")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[u]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("URLs")),

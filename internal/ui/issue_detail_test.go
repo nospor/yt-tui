@@ -146,6 +146,26 @@ func TestDetailModel_YankMotion(t *testing.T) {
 		t.Errorf("expected yanked text 'DEMO-1 Test issue summary', got: %q", yankedText)
 	}
 
+	// 3b. Press 'y' then 'i' to copy only ID (should go back to modeNormal)
+	m, _ = m.Update(yMsg)
+	if m.mode != modeYank {
+		t.Fatalf("expected mode to transition to modeYank after pressing 'y', got %v", m.mode)
+	}
+	iMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}
+	m, _ = m.Update(iMsg)
+	if m.mode != modeNormal {
+		t.Fatalf("expected mode to transition back to modeNormal after pressing 'i', got %v", m.mode)
+	}
+	if m.err != nil {
+		t.Errorf("expected no error, got: %v", m.err)
+	}
+	if m.statusMessage != "Copied issue ID to clipboard!" {
+		t.Errorf("expected statusMessage to be 'Copied issue ID to clipboard!', got: %s", m.statusMessage)
+	}
+	if yankedText != "DEMO-1" {
+		t.Errorf("expected yanked text 'DEMO-1', got: %q", yankedText)
+	}
+
 	// 4. Press 'y' again to enter yank mode
 	m, _ = m.Update(yMsg)
 	if m.mode != modeYank {

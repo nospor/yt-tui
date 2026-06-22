@@ -227,6 +227,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead.
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
+  - `i`: Copy just the task ID to the clipboard.
   - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.
   - `d`: Copy the task description to the clipboard.
   - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
