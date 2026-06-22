@@ -40,13 +40,16 @@ const (
 	modeFilterSelect
 	modeRepoSelect
 	modeDeleteAttachmentConfirm
+	modeDeleteLinkConfirm
 )
 
 type linkedIssue struct {
-	idReadable string
-	summary    string
-	relation   string
-	state      string
+	idReadable    string
+	summary       string
+	relation      string
+	state         string
+	linkID        string
+	targetIssueID string
 }
 
 func isStateClosed(state string) bool {
@@ -637,6 +640,24 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			}
 			return m, nil
 
+		case modeDeleteLinkConfirm:
+			switch msg.String() {
+			case "y", "Y":
+				if m.issue != nil && len(m.linkedIssues) > 0 && m.linksCursor >= 0 && m.linksCursor < len(m.linkedIssues) {
+					m.loading = true
+					m.loadingText = "Deleting link..."
+					link := m.linkedIssues[m.linksCursor]
+					return m, func() tea.Msg {
+						err := m.client.DeleteIssueLink(m.issue.IDReadable, link.linkID, link.targetIssueID)
+						return detailActionFinishedMsg{err: err}
+					}
+				}
+				m.mode = modeNormal
+			case "n", "N", "esc":
+				m.mode = modeNormal
+			}
+			return m, nil
+
 		case modeYank:
 			switch msg.String() {
 			case "i":
@@ -1019,6 +1040,10 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		case "d":
 			if m.activeViewport == 3 && m.issue != nil && len(m.issue.Attachments) > 0 {
 				m.mode = modeDeleteAttachmentConfirm
+				return m, nil
+			}
+			if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
+				m.mode = modeDeleteLinkConfirm
 				return m, nil
 			}
 		case "esc", "backspace":
@@ -1499,10 +1524,12 @@ func (m *detailModel) updateViewportContents() {
 
 		for _, linked := range link.Issues {
 			m.linkedIssues = append(m.linkedIssues, linkedIssue{
-				idReadable: linked.IDReadable,
-				summary:    linked.Summary,
-				relation:   relation,
-				state:      linked.State(),
+				idReadable:    linked.IDReadable,
+				summary:       linked.Summary,
+				relation:      relation,
+				state:         linked.State(),
+				linkID:        link.ID,
+				targetIssueID: linked.ID,
 			})
 		}
 	}
@@ -1907,6 +1934,18 @@ func (m detailModel) View() string {
 			BorderForeground(lipgloss.Color(ColorRed)).
 			Width(m.width-4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", prompt))
+	case modeDeleteLinkConfirm:
+		var linkTarget string
+		if m.issue != nil && len(m.linkedIssues) > 0 && m.linksCursor >= 0 && m.linksCursor < len(m.linkedIssues) {
+			linkTarget = m.linkedIssues[m.linksCursor].idReadable
+		}
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(" Delete Link ")
+		prompt := fmt.Sprintf(" Are you sure you want to delete link to %s? (y/n) ", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(linkTarget))
+		actionView = "\n" + lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorRed)).
+			Width(m.width-4).
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", prompt))
 	}
 
 	var footer string
@@ -1916,7 +1955,7 @@ func (m detailModel) View() string {
 		footer = StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
 	} else if m.mode == modeCommentInput || m.mode == modeCommentEdit {
 		footer = StyleHelp.Render(" [Enter] Submit Comment  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
-	} else if m.mode == modeDeleteAttachmentConfirm {
+	} else if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
 		footer = StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
 	} else {
 		enterAction := "Jump to Task"
@@ -1939,6 +1978,8 @@ func (m detailModel) View() string {
 		}
 		deleteAction := ""
 		if m.activeViewport == 3 && m.issue != nil && len(m.issue.Attachments) > 0 {
+			deleteAction = "  [d] Delete"
+		} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
 			deleteAction = "  [d] Delete"
 		}
 		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))

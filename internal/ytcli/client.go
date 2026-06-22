@@ -516,6 +516,35 @@ func (c *Client) DeleteAttachment(issueID string, attachmentID string) error {
 	return nil
 }
 
+// DeleteIssueLink deletes a link between two issues.
+func (c *Client) DeleteIssueLink(issueID string, linkID string, targetIssueID string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	apiURL := baseURL + "api/issues/" + issueID + "/links/" + linkID + "/issues/" + targetIssueID
+
+	req, err := c.newRequest("DELETE", apiURL, nil)
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return err
+	}
+
+	if statusCode != http.StatusOK && statusCode != http.StatusNoContent && statusCode != http.StatusAccepted {
+		return parseAPIError(statusCode, body)
+	}
+
+	return nil
+}
+
 // AddComment adds a comment to an issue.
 func (c *Client) AddComment(id string, text string) error {
 	if text == "" {
