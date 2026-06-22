@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"yt-tui/internal/config"
+	"yt-tui/internal/filepicker"
 	"yt-tui/internal/ytcli"
 
 	"github.com/atotto/clipboard"
@@ -116,6 +117,8 @@ type detailModel struct {
 	trackTimeError         string
 
 	pastedCommentImages []PastedImage
+	filepicker          filepicker.Model
+	filepickerActive    bool
 }
 
 func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
@@ -153,6 +156,34 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 		states = cfg.CustomStates
 	}
 
+	fp := filepicker.New()
+	fp.Styles.Cursor = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface))
+	fp.Styles.Selected = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Bold(true)
+	fp.Styles.Directory = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Background(lipgloss.Color(ColorSurface))
+	fp.Styles.File = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Background(lipgloss.Color(ColorSurface))
+	fp.Styles.Symlink = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Background(lipgloss.Color(ColorSurface))
+	fp.Styles.DisabledFile = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Background(lipgloss.Color(ColorSurface))
+	fp.Styles.Permission = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface))
+	fp.Styles.FileSize = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface)).Width(7).Align(lipgloss.Right)
+	fp.Styles.EmptyDirectory = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Background(lipgloss.Color(ColorSurface)).PaddingLeft(2).SetString("Bummer. No Files Found.")
+	if cfg != nil {
+		if cfg.FilepickerSortBy == "Datetime" {
+			fp.SortBy = filepicker.SortByDatetime
+		}
+		if cfg.FilepickerSortOrder == "desc" {
+			fp.SortOrder = filepicker.SortDescending
+		}
+		if cfg.FilepickerLastDir != "" {
+			if _, err := os.Stat(cfg.FilepickerLastDir); err == nil {
+				if abs, err := filepath.Abs(cfg.FilepickerLastDir); err == nil {
+					fp.CurrentDirectory = abs
+				} else {
+					fp.CurrentDirectory = cfg.FilepickerLastDir
+				}
+			}
+		}
+	}
+
 	return detailModel{
 		client:                 client,
 		cfg:                    cfg,
@@ -169,6 +200,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 		trackTimeDateInput:     dateIn,
 		trackTimeDurationInput: durIn,
 		trackTimeCommentInput:  commIn,
+		filepicker:             fp,
 	}
 }
 
@@ -262,6 +294,54 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 	defer func() {
 		res.updateViewportSizes()
 	}()
+
+	if m.filepickerActive {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			if msg.String() == "esc" || msg.String() == "q" {
+				m.filepickerActive = false
+				if m.cfg != nil {
+					m.cfg.FilepickerSortBy = m.filepicker.SortBy.String()
+					m.cfg.FilepickerSortOrder = m.filepicker.SortOrder.String()
+					m.cfg.FilepickerLastDir = m.filepicker.CurrentDirectory
+					_ = config.SaveConfig(m.cfg)
+				}
+				return m, nil
+			}
+			var fpCmd tea.Cmd
+			m.filepicker, fpCmd = m.filepicker.Update(msg)
+			if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
+				m.filepickerActive = false
+				if m.cfg != nil {
+					m.cfg.FilepickerSortBy = m.filepicker.SortBy.String()
+					m.cfg.FilepickerSortOrder = m.filepicker.SortOrder.String()
+					m.cfg.FilepickerLastDir = m.filepicker.CurrentDirectory
+					_ = config.SaveConfig(m.cfg)
+				}
+				filename := fmt.Sprintf("file-%s-%s", time.Now().Format("20060102-150405"), filepath.Base(path))
+				m.pastedCommentImages = append(m.pastedCommentImages, SelectedFile{
+					Name: filename,
+					Path: path,
+				})
+				ext := strings.ToLower(filepath.Ext(path))
+				isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".webp"
+				var markdownRef string
+				if isImage {
+					markdownRef = fmt.Sprintf("![%s](%s)", filename, filename)
+				} else {
+					markdownRef = fmt.Sprintf("[%s](%s)", filename, filename)
+				}
+				m.textInput = insertAtCursor(m.textInput, markdownRef)
+				return m, nil
+			}
+			return m, fpCmd
+		default:
+			var fpCmd tea.Cmd
+			m.filepicker, fpCmd = m.filepicker.Update(msg)
+			return m, fpCmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case clearStatusMsg:
 		if msg.id == m.statusMessageID {
@@ -346,6 +426,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				} else if err != nil {
 					m.err = err
 				}
+			case "ctrl+f":
+				m.filepickerActive = true
+				h := m.height - 14
+				if h < 4 {
+					h = 4
+				}
+				m.filepicker.SetHeight(h)
+				return m, m.filepicker.Init()
 			case "enter":
 				val := m.textInput.Value()
 				if val != "" {
@@ -355,7 +443,17 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					return m, func() tea.Msg {
 						// 1. Upload attachments first
 						for _, img := range pasted {
-							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, img.Bytes); uploadErr != nil {
+							var content []byte
+							var readErr error
+							if img.Path != "" {
+								content, readErr = os.ReadFile(img.Path)
+								if readErr != nil {
+									return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", img.Path, readErr)}
+								}
+							} else {
+								content = img.Bytes
+							}
+							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, content); uploadErr != nil {
 								return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
 							}
 						}
@@ -393,6 +491,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				} else if err != nil {
 					m.err = err
 				}
+			case "ctrl+f":
+				m.filepickerActive = true
+				h := m.height - 14
+				if h < 4 {
+					h = 4
+				}
+				m.filepicker.SetHeight(h)
+				return m, m.filepicker.Init()
 			case "enter":
 				val := m.textInput.Value()
 				if val != "" && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
@@ -403,7 +509,17 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					return m, func() tea.Msg {
 						// 1. Upload attachments first
 						for _, img := range pasted {
-							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, img.Bytes); uploadErr != nil {
+							var content []byte
+							var readErr error
+							if img.Path != "" {
+								content, readErr = os.ReadFile(img.Path)
+								if readErr != nil {
+									return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", img.Path, readErr)}
+								}
+							} else {
+								content = img.Bytes
+							}
+							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, content); uploadErr != nil {
 								return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
 							}
 						}
@@ -1740,6 +1856,10 @@ func (m detailModel) View() string {
 	var footer string
 	if m.statusMessage != "" {
 		footer = StyleStatusMessage.Render(" " + m.statusMessage + " ")
+	} else if m.filepickerActive {
+		footer = StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
+	} else if m.mode == modeCommentInput || m.mode == modeCommentEdit {
+		footer = StyleHelp.Render(" [Enter] Submit Comment  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
 	} else {
 		enterAction := "Jump to Task"
 		if m.activeViewport == 3 {
@@ -1977,7 +2097,67 @@ func (m detailModel) View() string {
 		view = overlayLines(view, popup, x, y)
 	}
 
+	if m.filepickerActive {
+		// Clip or pad base view to m.height lines to prevent terminal scrolling
+		lines := strings.Split(view, "\n")
+		if len(lines) > m.height {
+			lines = lines[:m.height]
+			view = strings.Join(lines, "\n")
+		} else if len(lines) < m.height {
+			for len(lines) < m.height {
+				lines = append(lines, "")
+			}
+			view = strings.Join(lines, "\n")
+		}
+
+		popup := m.renderFilePickerPopup()
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := strings.Count(popup, "\n") + 1
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, popup, x, y)
+	}
+
 	return view
+}
+
+func (m detailModel) renderFilePickerPopup() string {
+	var fpView strings.Builder
+	fpView.WriteString(lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(ColorViolet)).
+		Background(lipgloss.Color(ColorSurface)).
+		Render("📂  Select File to Attach") + "\n\n")
+
+	fpView.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorSubtext)).
+		Background(lipgloss.Color(ColorSurface)).
+		Render("Dir: "+m.filepicker.CurrentDirectory) + "\n\n")
+
+	fpView.WriteString(m.filepicker.View())
+
+	sortInfo := fmt.Sprintf("Sort: %s (%s)  [s] Toggle Type  [o] Toggle Order", m.filepicker.SortBy.String(), m.filepicker.SortOrder.String())
+	fpView.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorCyan)).
+		Background(lipgloss.Color(ColorSurface)).
+		Render(sortInfo) + "\n")
+
+	popupContent := fpView.String()
+
+	popup := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorViolet)).
+		Background(lipgloss.Color(ColorSurface)).
+		Padding(1, 2).
+		Render(popupContent)
+
+	return popup
 }
 
 var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)

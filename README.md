@@ -162,6 +162,9 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `work_types`          | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                                                        |
 | `render_markdown`     | Boolean          | `true`                                                                           | Whether to format and render issue descriptions as markdown. Can be toggled inside the issue detail view by pressing `m`.                                                                   |
 | `repo_options`        | Object           | `{}` (empty)                                                                     | Custom list of repository options per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["repo1", "repo2"]}`) for updating the custom `Repo` field. Used as a fallback if options cannot be retrieved from YouTrack directly. |
+| `filepicker_sort_by`  | String           | `""`                                                                             | The criteria by which files in the file picker are sorted (`Name` or `Datetime`).                                                                                           |
+| `filepicker_sort_order`| String          | `""`                                                                             | The sorting direction of the file picker (`asc` or `desc`).                                                                                                                                 |
+| `filepicker_last_dir` | String           | `""`                                                                             | The last directory visited by the file picker.                                                                                                                                             |
 
 ---
 
@@ -224,11 +227,11 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `↑` / `↓` (or `k` / `j`): Scroll/navigate within the active viewport. In the Comments, Links, and Attachments viewports, this moves the selection cursor.
 * `Enter` (in Links viewport): Jump directly to the highlighted parent/child task.
 * `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.
-* `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard.
+* `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, or `Ctrl+f` to open the file browser popup to pick and attach files from your computer.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
 * `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
-* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Ctrl+v` image paste inside the comment editor).
+* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Ctrl+v` image paste and `Ctrl+f` computer file attachment inside the comment editor).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `i`: Copy just the task ID to the clipboard.
@@ -248,6 +251,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
 * `Ctrl+g` (on Description field): Open preferred external editor (using the `$EDITOR` environment variable) to write/edit the description.
 * `Ctrl+v` (on Description field): Paste an image directly from the system clipboard (Linux `xclip`/`wl-paste`, macOS, Windows). This injects standard Markdown image syntax and uploads the image to YouTrack on form submission.
+* `Ctrl+f` (on Description field): Open the file browser popup to pick and attach files from your computer. Supports sorting results by name/datetime (pressing `s`) and order asc/desc (pressing `o`). Last directory and sorting options are persisted in your config file.
 * `Ctrl+s` (or `Enter` on text inputs): Submit the form and save/create/clone the issue.
 * `Esc`: Cancel and discard changes.
 

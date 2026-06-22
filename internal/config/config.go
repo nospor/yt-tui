@@ -8,24 +8,27 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	URL                string              `json:"url"`
-	Token              string              `json:"token"`
-	Servers            []ServerConfig      `json:"servers,omitempty"`
-	PageSize           int                 `json:"page_size"`
-	MaxIssues          int                 `json:"max_issues"`
-	Fields             []string            `json:"fields"`
-	CustomTypes        []string            `json:"custom_types"`
-	CustomPriorities   []string            `json:"custom_priorities"`
-	CustomStates       []string            `json:"custom_states"`
-	WorkTypes          []string            `json:"work_types"`
-	FilteredStates     []string            `json:"filtered_states"`
-	FilteredPriorities []string            `json:"filtered_priorities"`
-	SortColumn         string              `json:"sort_column"`
-	SortDirection      string              `json:"sort_direction"`
-	FavoriteView       string              `json:"favorite_view,omitempty"`
-	ActivityFilters    []string            `json:"activity_filters,omitempty"`
-	RenderMarkdown     bool                `json:"render_markdown"`
-	RepoOptions        map[string][]string `json:"repo_options,omitempty"`
+	URL                 string              `json:"url"`
+	Token               string              `json:"token"`
+	Servers             []ServerConfig      `json:"servers,omitempty"`
+	PageSize            int                 `json:"page_size"`
+	MaxIssues           int                 `json:"max_issues"`
+	Fields              []string            `json:"fields"`
+	CustomTypes         []string            `json:"custom_types"`
+	CustomPriorities    []string            `json:"custom_priorities"`
+	CustomStates        []string            `json:"custom_states"`
+	WorkTypes           []string            `json:"work_types"`
+	FilteredStates      []string            `json:"filtered_states"`
+	FilteredPriorities  []string            `json:"filtered_priorities"`
+	SortColumn          string              `json:"sort_column"`
+	SortDirection       string              `json:"sort_direction"`
+	FavoriteView        string              `json:"favorite_view,omitempty"`
+	ActivityFilters     []string            `json:"activity_filters,omitempty"`
+	RenderMarkdown      bool                `json:"render_markdown"`
+	RepoOptions         map[string][]string `json:"repo_options,omitempty"`
+	FilepickerSortBy    string              `json:"filepicker_sort_by,omitempty"`
+	FilepickerSortOrder string              `json:"filepicker_sort_order,omitempty"`
+	FilepickerLastDir   string              `json:"filepicker_last_dir,omitempty"`
 }
 
 type ServerConfig struct {

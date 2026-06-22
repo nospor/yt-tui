@@ -10,12 +10,16 @@ import (
 	"strings"
 )
 
-// PastedImage represents an image retrieved from the clipboard.
-type PastedImage struct {
+// SelectedFile represents a file selected for upload (pasted from clipboard or picked from disk).
+type SelectedFile struct {
 	Name        string
-	Bytes       []byte
+	Path        string // Local file path, if selected from disk
+	Bytes       []byte // Binary content, if pasted from clipboard
 	ContentType string // e.g. "image/png", "image/jpeg"
 }
+
+// PastedImage is an alias to SelectedFile for backwards compatibility
+type PastedImage = SelectedFile
 
 var getClipboardImage = GetClipboardImage
 
