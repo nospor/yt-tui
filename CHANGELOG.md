@@ -1,4 +1,20 @@
 
+## [0.5.3] - 2026-06-22
+
+### Features
+
+- *(ui)* Add comments and activity stream filtering in issue details ([b858ed2](https://github.com/nospor/yt-tui/commit/b858ed2f102115f16484aa7a3c2749914df586f8))
+- *(ui)* Add 'yi' shortcut to yank issue ID to clipboard ([7a6f580](https://github.com/nospor/yt-tui/commit/7a6f5809edc4bd52f31ba2e5a100b9ea0a19b423))
+- Add markdown rendering for task descriptions with 'm' toggle ([00386ad](https://github.com/nospor/yt-tui/commit/00386ad7f3b7ba236cc94f12611cf699111d8463))
+
+### Bug Fixes
+
+- *(ui)* Align box styles with viewport widths to fix double-wrapping and layout jumping ([ffb9041](https://github.com/nospor/yt-tui/commit/ffb9041e3db2ab3d62277213a8796ed150d562a9))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.5.2 [skip ci] ([029428a](https://github.com/nospor/yt-tui/commit/029428a2ef7804edddeca1b8e962ff04b0d87d90))
+
 ## [0.5.2] - 2026-06-21
 
 ### Bug Fixes
