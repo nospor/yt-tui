@@ -232,7 +232,7 @@ Supported action command types:
 * `Space` (when focusing My Open Issues): Open the custom quick Actions popup to quickly update the selected issue using a templated sequence (either select via list or hit shortcut number).
 * `Enter`: Open the highlighted item:
   - Selecting an issue opens the **Issue Detail** view.
-  - Selecting a project opens the **Issues List** filtered to that project.
+  - Selecting a project opens the **Issues List** filtered to that project (selecting **Issues created by me** displays all issues created/reported by you).
 * `n`: Create a new issue (pre-selects the highlighted project if focused).
 * `p`: View the full **Projects List** screen.
 * `b`: View the full **Agile Boards** screen.

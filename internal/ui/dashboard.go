@@ -100,12 +100,25 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 			return m, nil
 		}
 		m.issues = msg.issues
-		m.projects = msg.projects
+		// Prepend the special "ME" project and a blank separator
+		m.projects = append([]ytcli.Project{
+			{
+				ShortName: "ME",
+				Name:      "Issues created by me",
+			},
+			{
+				ShortName: "",
+				Name:      "",
+			},
+		}, msg.projects...)
 		// Clamp cursors
 		if m.issueCursor >= len(m.issues) {
 			m.issueCursor = 0
 		}
 		if m.projectCursor >= len(m.projects) {
+			m.projectCursor = 0
+		}
+		if len(m.projects) > m.projectCursor && m.projects[m.projectCursor].ShortName == "" {
 			m.projectCursor = 0
 		}
 		return m, nil
@@ -219,6 +232,13 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 				if m.projectCursor < 0 {
 					m.projectCursor = len(m.projects) - 1
 				}
+				// Skip separator line if selected
+				if m.projects[m.projectCursor].ShortName == "" {
+					m.projectCursor--
+					if m.projectCursor < 0 {
+						m.projectCursor = len(m.projects) - 1
+					}
+				}
 			}
 		case "down", "j":
 			if m.active == panelIssues && len(m.issues) > 0 {
@@ -230,6 +250,13 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 				m.projectCursor++
 				if m.projectCursor >= len(m.projects) {
 					m.projectCursor = 0
+				}
+				// Skip separator line if selected
+				if m.projects[m.projectCursor].ShortName == "" {
+					m.projectCursor++
+					if m.projectCursor >= len(m.projects) {
+						m.projectCursor = 0
+					}
 				}
 			}
 		case "enter":
@@ -356,6 +383,12 @@ func (m dashboardModel) View() string {
 			availWidth := panelWidth - 8 - 4
 			if availWidth < 10 {
 				availWidth = 10
+			}
+
+			// Render a blank line for separator
+			if proj.ShortName == "" {
+				lines = append(lines, "")
+				continue
 			}
 
 			nameTrunc := truncateString(proj.Name, availWidth)
