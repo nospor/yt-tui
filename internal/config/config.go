@@ -29,6 +29,19 @@ type Config struct {
 	FilepickerSortBy    string              `json:"filepicker_sort_by,omitempty"`
 	FilepickerSortOrder string              `json:"filepicker_sort_order,omitempty"`
 	FilepickerLastDir   string              `json:"filepicker_last_dir,omitempty"`
+	Actions             []ActionConfig      `json:"actions,omitempty"`
+}
+
+type ActionCommand struct {
+	Type  string `json:"type"`
+	Field string `json:"field,omitempty"`
+	Value string `json:"value"`
+}
+
+type ActionConfig struct {
+	Name     string          `json:"name"`
+	Shortcut string          `json:"shortcut"`
+	Commands []ActionCommand `json:"commands"`
 }
 
 type ServerConfig struct {

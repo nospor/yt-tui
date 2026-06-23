@@ -165,6 +165,48 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `filepicker_sort_by`  | String           | `""`                                                                             | The criteria by which files in the file picker are sorted (`Name` or `Datetime`).                                                                                           |
 | `filepicker_sort_order`| String          | `""`                                                                             | The sorting direction of the file picker (`asc` or `desc`).                                                                                                                                 |
 | `filepicker_last_dir` | String           | `""`                                                                             | The last directory visited by the file picker.                                                                                                                                             |
+| `actions`             | Array of Objects | `[]` (empty)                                                                     | Custom templated action sequences triggered by `Space`. See [Custom Quick Actions](#-custom-quick-actions) below.                                                                             |
+
+### ⚡ Custom Quick Actions
+
+You can configure custom templates to quickly update issues with predefined command sequences. Pressing `Space` inside either the **Issues List** (on the selected issue) or **Issue Detail** view will open a popup listing these actions. You can navigate the list with arrow keys and hit `Enter` to apply, or directly hit the shortcut key (e.g. `1`-`9`) to apply the template instantly.
+
+Each action template is configured under the `actions` array in `config.json`. Below is an example structure:
+
+```json
+  "actions": [
+    {
+      "name": "In progress",
+      "shortcut": "1",
+      "commands": [
+        {
+          "type": "update_field",
+          "field": "State",
+          "value": "In Progress"
+        }
+      ]
+    },
+    {
+      "name": "Assign to me & Add Comment",
+      "shortcut": "2",
+      "commands": [
+        {
+          "type": "assign",
+          "value": "me"
+        },
+        {
+          "type": "comment",
+          "value": "Starting work on this task."
+        }
+      ]
+    }
+  ]
+```
+
+Supported action command types:
+- `update_field`: Updates any single-value custom field (e.g., `State`, `Repo`, `Priority`). Requires `field` and `value`.
+- `comment`: Adds a comment to the issue. Requires `value` containing the comment text.
+- `assign`: Assigns the issue to a user (use `"me"`, `"unassigned"`, or any valid username). Requires `value`.
 
 ---
 
@@ -187,6 +229,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 ### 🏠 Dashboard View (Home Screen)
 * `Tab` / `Shift+Tab`: Switch active focus panel (**My Open Issues** vs **Projects**).
 * `↑` / `↓` (or `k` / `j`): Scroll items inside the active focus panel.
+* `Space` (when focusing My Open Issues): Open the custom quick Actions popup to quickly update the selected issue using a templated sequence (either select via list or hit shortcut number).
 * `Enter`: Open the highlighted item:
   - Selecting an issue opens the **Issue Detail** view.
   - Selecting a project opens the **Issues List** filtered to that project.
@@ -215,6 +258,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `↑` / `↓` (or `k` / `j`): Scroll issues table.
 * `Enter`: View details of the selected issue.
 * `/`: Activate search/filter mode. Type keywords to filter issues by summary/ID. Press `Esc` or `Enter` to close search mode.
+* `Space`: Open the custom quick Actions popup to quickly update the selected issue using a templated sequence (either select via list or hit shortcut number).
 * `f`: Toggle the current tasks list view as your favorite view (adds/removes a yellow star `★` in the header and saves to config).
 * `F`: Open the State & Priority filter panel. Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.
 * `s`: Open the Column & Direction sort panel. Use arrow keys/hjkl to navigate, Space to select choices, Enter to save, and Esc to cancel.
@@ -230,6 +274,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 * `d` (in Links viewport): Delete the highlighted link (with confirmation).
 * `d` (in Attachments viewport): Delete the highlighted attachment (with confirmation).
 * `Ctrl+f`: Open the file browser popup to pick and attach files from your computer to the issue immediately.
+* `Space`: Open the custom quick Actions popup to quickly update the issue using a templated sequence (either select via list or hit shortcut number).
 * `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, or `Ctrl+f` to open the file browser popup to pick and attach files from your computer.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).

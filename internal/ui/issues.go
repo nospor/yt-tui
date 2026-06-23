@@ -62,6 +62,9 @@ type issuesModel struct {
 	sortDirCursor       int
 	tempSortCol         string
 	tempSortDir         string
+	actionMode          bool
+	actionCursor        int
+	loadingText         string
 }
 
 func newIssuesModel(client *ytcli.Client, cfg *config.Config) issuesModel {
@@ -592,7 +595,83 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case actionFinishedMsg:
+		m.loading = false
+		m.loadingText = ""
+		m.actionMode = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		// Refresh issues list
+		m.loading = true
+		m.err = nil
+		m.skip = 0
+		m.loadedAll = false
+		m.issues = nil
+		delete(m.cache, m.cacheKey())
+		return m, m.loadIssuesCmd()
+
 	case tea.KeyMsg:
+		if m.actionMode && m.cfg != nil {
+			switch msg.String() {
+			case "esc", " ":
+				m.actionMode = false
+				return m, nil
+			case "up", "k":
+				m.actionCursor--
+				if m.actionCursor < 0 {
+					m.actionCursor = len(m.cfg.Actions) - 1
+				}
+				return m, nil
+			case "down", "j":
+				m.actionCursor++
+				if m.actionCursor >= len(m.cfg.Actions) {
+					m.actionCursor = 0
+				}
+				return m, nil
+			case "enter":
+				if len(m.cfg.Actions) > 0 && len(m.table.Rows()) > 0 {
+					cursor := m.table.Cursor()
+					if cursor >= 0 && cursor < len(m.visibleIssueIDs) {
+						issueID := m.visibleIssueIDs[cursor]
+						act := m.cfg.Actions[m.actionCursor]
+						m.loading = true
+						m.loadingText = "Running action..."
+						client := m.client
+						return m, func() tea.Msg {
+							err := executeAction(client, issueID, act)
+							return actionFinishedMsg{err: err}
+						}
+					}
+				}
+				m.actionMode = false
+				return m, nil
+			default:
+				// Check shortcuts
+				for _, act := range m.cfg.Actions {
+					if msg.String() == act.Shortcut {
+						if len(m.table.Rows()) > 0 {
+							cursor := m.table.Cursor()
+							if cursor >= 0 && cursor < len(m.visibleIssueIDs) {
+								issueID := m.visibleIssueIDs[cursor]
+								m.loading = true
+								m.loadingText = "Running action..."
+								client := m.client
+								return m, func() tea.Msg {
+									err := executeAction(client, issueID, act)
+									return actionFinishedMsg{err: err}
+								}
+							}
+						}
+						m.actionMode = false
+						return m, nil
+					}
+				}
+			}
+			return m, nil
+		}
+
 		if m.sortMode {
 			numCols := len(m.fields)
 			switch msg.String() {
@@ -792,6 +871,15 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case " ":
+			if len(m.table.Rows()) > 0 {
+				cursor := m.table.Cursor()
+				if cursor >= 0 && cursor < len(m.visibleIssueIDs) && m.cfg != nil && len(m.cfg.Actions) > 0 {
+					m.actionMode = true
+					m.actionCursor = 0
+				}
+			}
+			return m, nil
 		case "esc", "backspace":
 			return m, func() tea.Msg {
 				return popStateMsg{}
@@ -893,8 +981,12 @@ func (m issuesModel) View() string {
 	}
 
 	if m.loading {
+		loadingMsg := " Loading issues..."
+		if m.loadingText != "" {
+			loadingMsg = " " + m.loadingText
+		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading issues..."))
+			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), loadingMsg))
 	}
 
 	if m.sortMode && m.cfg != nil {
@@ -1107,7 +1199,38 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] Detail  [/] Search  [F] Filter  [f] Favorite  [s] Sort  [n] New  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Space] Action  [Enter] Detail  [/] Search  [F] Filter  [f] Favorite  [s] Sort  [n] New  [r] Refresh  [q] Quit ")
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
+	view := lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
+
+	if m.actionMode && m.cfg != nil && len(m.cfg.Actions) > 0 {
+		var lines []string
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select Action (or press shortcut):"))
+		lines = append(lines, "")
+		for idx, act := range m.cfg.Actions {
+			displayStr := fmt.Sprintf("[%s] %s", act.Shortcut, act.Name)
+			if idx == m.actionCursor {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayStr))
+			} else {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+displayStr))
+			}
+		}
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		x := (m.width - 4) - popupWidth
+		if x < 0 {
+			x = 0
+		}
+		// Overlay starting at row 2 (just under title), col x
+		view = overlayLines(view, popup, x, 2)
+	}
+
+	return view
 }

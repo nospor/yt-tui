@@ -74,7 +74,7 @@ func NewAppModel() AppModel {
 		cfg:       cfg,
 		state:     stateWelcome,
 		welcome:   newWelcomeModel(client, cfg, err),
-		dashboard: newDashboardModel(client),
+		dashboard: newDashboardModel(client, cfg),
 		projects:  newProjectsModel(client),
 		boards:    newBoardsModel(client),
 		issues:    newIssuesModel(client, cfg),

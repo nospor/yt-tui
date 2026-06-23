@@ -41,6 +41,7 @@ const (
 	modeRepoSelect
 	modeDeleteAttachmentConfirm
 	modeDeleteLinkConfirm
+	modeActionSelect
 )
 
 type linkedIssue struct {
@@ -102,6 +103,7 @@ type detailModel struct {
 	stateCursor     int
 	repoOptions     []string
 	repoCursor      int
+	actionCursor    int
 	isModified      bool
 	statusMessage   string
 	statusMessageID int
@@ -619,6 +621,54 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 			case "esc":
 				m.mode = modeNormal
+			}
+			return m, nil
+
+		case modeActionSelect:
+			switch msg.String() {
+			case "esc", " ":
+				m.mode = modeNormal
+				return m, nil
+			case "up", "k":
+				m.actionCursor--
+				if m.actionCursor < 0 {
+					m.actionCursor = len(m.cfg.Actions) - 1
+				}
+				return m, nil
+			case "down", "j":
+				m.actionCursor++
+				if m.actionCursor >= len(m.cfg.Actions) {
+					m.actionCursor = 0
+				}
+				return m, nil
+			case "enter":
+				if len(m.cfg.Actions) > 0 {
+					m.loading = true
+					m.loadingText = "Running action..."
+					act := m.cfg.Actions[m.actionCursor]
+					issueID := m.issue.IDReadable
+					client := m.client
+					return m, func() tea.Msg {
+						err := executeAction(client, issueID, act)
+						return detailActionFinishedMsg{err: err}
+					}
+				}
+				m.mode = modeNormal
+				return m, nil
+			default:
+				// Check shortcuts
+				for _, act := range m.cfg.Actions {
+					if msg.String() == act.Shortcut {
+						m.loading = true
+						m.loadingText = "Running action..."
+						issueID := m.issue.IDReadable
+						client := m.client
+						return m, func() tea.Msg {
+							err := executeAction(client, issueID, act)
+							return detailActionFinishedMsg{err: err}
+						}
+					}
+				}
 			}
 			return m, nil
 
@@ -1190,6 +1240,12 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.textInput.SetValue("")
 			m.textInput.Focus()
 			m.pastedCommentImages = nil
+			return m, nil
+		case " ":
+			if m.cfg != nil && len(m.cfg.Actions) > 0 {
+				m.mode = modeActionSelect
+				m.actionCursor = 0
+			}
 			return m, nil
 		case "s":
 			m.mode = modeStateSelect
@@ -1957,6 +2013,8 @@ func (m detailModel) View() string {
 		footer = StyleHelp.Render(" [Enter] Submit Comment  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
 	} else if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
 		footer = StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
+	} else if m.mode == modeActionSelect {
+		footer = StyleHelp.Render(" [↑/↓/j/k] Navigate  [Enter] Select Action  [0-9/Shortcut] Apply Action  [Esc/Space] Cancel ")
 	} else {
 		enterAction := "Jump to Task"
 		if m.activeViewport == 3 {
@@ -1982,7 +2040,7 @@ func (m detailModel) View() string {
 		} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
 			deleteAction = "  [d] Delete"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
@@ -1994,6 +2052,35 @@ func (m detailModel) View() string {
 		" ",
 		footer,
 	)
+
+	if m.mode == modeActionSelect && m.cfg != nil && len(m.cfg.Actions) > 0 {
+		var lines []string
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select Action (or press shortcut):"))
+		lines = append(lines, "")
+		for idx, act := range m.cfg.Actions {
+			displayStr := fmt.Sprintf("[%s] %s", act.Shortcut, act.Name)
+			if idx == m.actionCursor {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayStr))
+			} else {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+displayStr))
+			}
+		}
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		x := (m.width - 4) - popupWidth
+		if x < 0 {
+			x = 0
+		}
+		// Overlay starting at row 0 (aligned with title), col x
+		view = overlayLines(view, popup, x, 0)
+	}
 
 	if m.mode == modeYank {
 		popupContent := lipgloss.JoinVertical(lipgloss.Left,
@@ -2261,104 +2348,6 @@ func (m detailModel) renderFilePickerPopup() string {
 		Render(popupContent)
 
 	return popup
-}
-
-var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-func stripAnsi(s string) string {
-	return ansiRegexp.ReplaceAllString(s, "")
-}
-
-type cell struct {
-	char  rune
-	style string
-}
-
-func parseANSILine(line string) []cell {
-	var cells []cell
-	var currentStyle strings.Builder
-	runes := []rune(line)
-	inEscape := false
-
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-		if r == '\x1b' {
-			inEscape = true
-			currentStyle.WriteRune(r)
-			continue
-		}
-		if inEscape {
-			currentStyle.WriteRune(r)
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEscape = false
-			}
-			continue
-		}
-		cells = append(cells, cell{
-			char:  r,
-			style: currentStyle.String(),
-		})
-	}
-	return cells
-}
-
-func cellsToString(cells []cell) string {
-	var sb strings.Builder
-	var lastStyle string
-	for _, c := range cells {
-		if c.style != lastStyle {
-			sb.WriteString(c.style)
-			lastStyle = c.style
-		}
-		sb.WriteRune(c.char)
-	}
-	sb.WriteString("\x1b[0m")
-	return sb.String()
-}
-
-func overlayLines(base, overlay string, x, y int) string {
-	baseLines := strings.Split(base, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	for i, oLine := range overlayLines {
-		targetY := y + i
-		if targetY < 0 || targetY >= len(baseLines) {
-			continue
-		}
-
-		bLine := baseLines[targetY]
-		bCells := parseANSILine(bLine)
-		oCells := parseANSILine(oLine)
-
-		if len(bCells) < x {
-			padding := make([]cell, x-len(bCells))
-			for p := range padding {
-				padding[p] = cell{char: ' '}
-			}
-			bCells = append(bCells, padding...)
-		}
-
-		for j, oCell := range oCells {
-			pos := x + j
-			bgSeq := "\x1b[48;2;49;50;68m" // truecolor escape for ColorSurface (#313244)
-			if oCell.style == "" {
-				oCell.style = bgSeq
-			} else {
-				oCell.style = strings.ReplaceAll(oCell.style, "\x1b[0m", "\x1b[0m"+bgSeq)
-				oCell.style = bgSeq + oCell.style
-			}
-
-			if pos >= len(bCells) {
-				bCells = append(bCells, oCell)
-			} else {
-				bCells[pos] = oCell
-			}
-		}
-
-		baseLines[targetY] = cellsToString(bCells)
-	}
-
-	return strings.Join(baseLines, "\n")
 }
 
 func renderBoxWithTitle(style lipgloss.Style, title string, content string, active bool) string {

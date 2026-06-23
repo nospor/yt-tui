@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -18,6 +19,7 @@ const (
 
 type dashboardModel struct {
 	client        *ytcli.Client
+	cfg           *config.Config
 	issues        []ytcli.Issue
 	projects      []ytcli.Project
 	active        activePanel
@@ -29,14 +31,18 @@ type dashboardModel struct {
 	spinner       spinner.Model
 	width         int
 	height        int
+	actionMode    bool
+	actionCursor  int
+	loadingText   string
 }
 
-func newDashboardModel(client *ytcli.Client) dashboardModel {
+func newDashboardModel(client *ytcli.Client, cfg *config.Config) dashboardModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
 	return dashboardModel{
 		client:        client,
+		cfg:           cfg,
 		active:        panelIssues,
 		loadingIssues: true,
 		loadingProj:   true,
@@ -48,6 +54,10 @@ type dashboardDataMsg struct {
 	issues   []ytcli.Issue
 	projects []ytcli.Project
 	err      error
+}
+
+type dashboardActionFinishedMsg struct {
+	err error
 }
 
 func (m dashboardModel) loadDataCmd() tea.Cmd {
@@ -100,7 +110,76 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case dashboardActionFinishedMsg:
+		m.loadingIssues = false
+		m.loadingProj = false
+		m.loadingText = ""
+		m.actionMode = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.loadingIssues = true
+		m.loadingProj = true
+		m.err = nil
+		return m, m.loadDataCmd()
+
 	case tea.KeyMsg:
+		if m.actionMode && m.cfg != nil {
+			switch msg.String() {
+			case "esc", " ":
+				m.actionMode = false
+				return m, nil
+			case "up", "k":
+				m.actionCursor--
+				if m.actionCursor < 0 {
+					m.actionCursor = len(m.cfg.Actions) - 1
+				}
+				return m, nil
+			case "down", "j":
+				m.actionCursor++
+				if m.actionCursor >= len(m.cfg.Actions) {
+					m.actionCursor = 0
+				}
+				return m, nil
+			case "enter":
+				if len(m.cfg.Actions) > 0 && len(m.issues) > 0 && m.active == panelIssues {
+					issueID := m.issues[m.issueCursor].IDReadable
+					act := m.cfg.Actions[m.actionCursor]
+					m.loadingIssues = true
+					m.loadingProj = true
+					m.loadingText = "Running action..."
+					client := m.client
+					return m, func() tea.Msg {
+						err := executeAction(client, issueID, act)
+						return dashboardActionFinishedMsg{err: err}
+					}
+				}
+				m.actionMode = false
+				return m, nil
+			default:
+				// Check shortcuts
+				for _, act := range m.cfg.Actions {
+					if msg.String() == act.Shortcut {
+						if len(m.issues) > 0 && m.active == panelIssues {
+							issueID := m.issues[m.issueCursor].IDReadable
+							m.loadingIssues = true
+							m.loadingProj = true
+							m.loadingText = "Running action..."
+							client := m.client
+							return m, func() tea.Msg {
+								err := executeAction(client, issueID, act)
+								return dashboardActionFinishedMsg{err: err}
+							}
+						}
+						m.actionMode = false
+						return m, nil
+					}
+				}
+			}
+			return m, nil
+		}
+
 		if m.err != nil {
 			switch msg.String() {
 			case "q", "ctrl+c":
@@ -167,6 +246,12 @@ func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
 					return pushStateMsg{state: stateIssues, data: selectedProj.ShortName}
 				}
 			}
+		case " ":
+			if m.active == panelIssues && len(m.issues) > 0 && m.cfg != nil && len(m.cfg.Actions) > 0 {
+				m.actionMode = true
+				m.actionCursor = 0
+			}
+			return m, nil
 		case "r":
 			m.loadingIssues = true
 			m.loadingProj = true
@@ -202,8 +287,12 @@ func (m dashboardModel) View() string {
 	}
 
 	if m.loadingIssues || m.loadingProj {
+		loadingMsg := " Loading dashboard data..."
+		if m.loadingText != "" {
+			loadingMsg = " " + m.loadingText
+		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), " Loading dashboard data..."))
+			lipgloss.JoinHorizontal(lipgloss.Center, m.spinner.View(), loadingMsg))
 	}
 
 	// Calculate size
@@ -295,9 +384,40 @@ func (m dashboardModel) View() string {
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, issuesPanel, "  ", projectsPanel)
 
 	title := StyleTitle.Render(" YouTrack Dashboard ")
-	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Enter] Select  [n] New Issue  [p] Projects  [b] Agile Boards  [f] Favorite View  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Space] Action  [Enter] Select  [n] New Issue  [p] Projects  [b] Agile Boards  [f] Favorite View  [r] Refresh  [q] Quit ")
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, panels, "", help)
+	view := lipgloss.JoinVertical(lipgloss.Left, title, panels, "", help)
+
+	if m.actionMode && m.cfg != nil && len(m.cfg.Actions) > 0 {
+		var lines []string
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select Action (or press shortcut):"))
+		lines = append(lines, "")
+		for idx, act := range m.cfg.Actions {
+			displayStr := fmt.Sprintf("[%s] %s", act.Shortcut, act.Name)
+			if idx == m.actionCursor {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayStr))
+			} else {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+displayStr))
+			}
+		}
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		x := (m.width - 4) - popupWidth
+		if x < 0 {
+			x = 0
+		}
+		// Overlay starting at row 2, col x
+		view = overlayLines(view, popup, x, 2)
+	}
+
+	return view
 }
 
 func truncateString(s string, maxLen int) string {
