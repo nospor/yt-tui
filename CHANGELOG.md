@@ -1,4 +1,26 @@
 
+## [0.6.2] - 2026-06-23
+
+### Features
+
+- *(ui)* Add custom quick action templates triggered by space ([46dabd9](https://github.com/nospor/yt-tui/commit/46dabd980b8219c4dff4421959392feec4de6bc1))
+
+            - Implement spacebar shortcut in issues list and issue details views
+            - Support configuring multi-command sequences in config.json under
+            `actions`
+            - Allow quick execution of actions via selection list or direct shortcut
+            keys
+            - Support update_field, comment, and assign command actions
+- *(ui)* Add "Issues created by me" special project to dashboard ([d016d47](https://github.com/nospor/yt-tui/commit/d016d476a70f30e2c5b78c52a77bab54f28d5b80))
+
+### Bug Fixes
+
+- *(ui)* Resolve layout height overflow in task details view ([cf0266c](https://github.com/nospor/yt-tui/commit/cf0266cdc94c65372e56a1e14dc468725a48e049))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.1 [skip ci] ([dff30ce](https://github.com/nospor/yt-tui/commit/dff30ce6c99fa1e393b8b313d52c5630e610054a))
+
 ## [0.6.1] - 2026-06-22
 
 ### Features
