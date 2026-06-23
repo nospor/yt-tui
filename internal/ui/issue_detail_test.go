@@ -510,6 +510,19 @@ func TestDetailModel_ReproduceLayoutBug(t *testing.T) {
 	t.Logf("commentsView:\n%s", commentsView)
 
 	viewStr := m.View()
-	t.Logf("Rendered view height: %d lines", len(strings.Split(viewStr, "\n")))
-	t.Logf("Rendered View:\n%s", viewStr)
+	normalHeight := len(strings.Split(viewStr, "\n"))
+	t.Logf("Rendered normal view height: %d lines", normalHeight)
+	if normalHeight != m.height {
+		t.Errorf("expected normal height %d, got %d", m.height, normalHeight)
+	}
+
+	// Test in action mode (e.g., comment input)
+	m.mode = modeCommentInput
+	m.updateViewportSizes()
+	actionViewStr := m.View()
+	actionHeight := len(strings.Split(actionViewStr, "\n"))
+	t.Logf("Rendered action view height: %d lines", actionHeight)
+	if actionHeight != m.height {
+		t.Errorf("expected action height %d, got %d", m.height, actionHeight)
+	}
 }

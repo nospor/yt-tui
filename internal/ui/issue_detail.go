@@ -1346,10 +1346,19 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 	return m, nil
 }
 
+func (m detailModel) hasActionView() bool {
+	switch m.mode {
+	case modeCommentInput, modeCommentEdit, modeAssignInput, modeStateSelect, modeRepoSelect, modeDeleteAttachmentConfirm, modeDeleteLinkConfirm:
+		return true
+	default:
+		return false
+	}
+}
+
 func (m *detailModel) updateViewportSizes() {
 	var actionHeight int
-	if m.mode != modeNormal && m.mode != modeYank && m.mode != modeYankUrlSelect {
-		actionHeight = 5
+	if m.hasActionView() {
+		actionHeight = 6
 	}
 	bottomHeight := m.height - 10 - actionHeight
 	if bottomHeight < 3 {
@@ -1923,24 +1932,24 @@ func (m detailModel) View() string {
 	switch m.mode {
 	case modeCommentInput:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Add Comment (Press Enter to submit, Esc to cancel) ")
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeCommentEdit:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Edit Comment (Press Enter to submit, Esc to cancel) ")
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeAssignInput:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username, 'me', or 'unassigned', Esc to cancel) ")
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
 	case modeStateSelect:
 		var optsStr strings.Builder
@@ -1955,10 +1964,10 @@ func (m detailModel) View() string {
 			}
 		}
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Select State (Left/Right to choose, Enter to save, Esc to cancel) ")
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
 	case modeRepoSelect:
 		var optsStr strings.Builder
@@ -1973,10 +1982,10 @@ func (m detailModel) View() string {
 			}
 		}
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Select Repo (Left/Right to choose, Enter to save, Esc to cancel) ")
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", optsStr.String()))
 	case modeDeleteAttachmentConfirm:
 		var attName string
@@ -1985,10 +1994,10 @@ func (m detailModel) View() string {
 		}
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(" Delete Attachment ")
 		prompt := fmt.Sprintf(" Are you sure you want to delete attachment %s? (y/n) ", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(attName))
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorRed)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", prompt))
 	case modeDeleteLinkConfirm:
 		var linkTarget string
@@ -1997,10 +2006,10 @@ func (m detailModel) View() string {
 		}
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(" Delete Link ")
 		prompt := fmt.Sprintf(" Are you sure you want to delete link to %s? (y/n) ", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render(linkTarget))
-		actionView = "\n" + lipgloss.NewStyle().
+		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorRed)).
-			Width(m.width-4).
+			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", prompt))
 	}
 
@@ -2040,18 +2049,22 @@ func (m detailModel) View() string {
 		} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
 			deleteAction = "  [d] Delete"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab/Shift+Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Track Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [(Shift)Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
 	}
 
-	view := lipgloss.JoinVertical(lipgloss.Left,
-		StyleTitle.Render(" Issue Detail "),
-		metaView,
-		" ",
-		splitView,
-		actionView,
-		" ",
-		footer,
-	)
+	var parts []string
+	parts = append(parts, StyleTitle.Render(" Issue Detail "))
+	parts = append(parts, metaView)
+	parts = append(parts, " ")
+	parts = append(parts, splitView)
+	if actionView != "" {
+		parts = append(parts, " ")
+		parts = append(parts, actionView)
+	}
+	parts = append(parts, " ")
+	parts = append(parts, footer)
+
+	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	if m.mode == modeActionSelect && m.cfg != nil && len(m.cfg.Actions) > 0 {
 		var lines []string
