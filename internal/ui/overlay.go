@@ -49,6 +49,9 @@ func cellsToString(cells []cell) string {
 	var lastStyle string
 	for _, c := range cells {
 		if c.style != lastStyle {
+			if lastStyle != "" {
+				sb.WriteString("\x1b[0m")
+			}
 			sb.WriteString(c.style)
 			lastStyle = c.style
 		}
