@@ -1,4 +1,30 @@
 
+## [0.6.4] - 2026-06-24
+
+### Features
+
+- Add global search popup with YouTrack URL parsing ([66a595b](https://github.com/nospor/yt-tui/commit/66a595b5fc19ecdb34ac26d29990f8a55b37cdbe))
+
+            - Add a global search popup overlay accessible from any screen by
+            pressing capital `S` (except when an input field/textarea is focused).
+            - Implement a two-mode interaction: "Input Mode" to type/paste queries
+            and "Results Mode" to navigate matches using arrows or j/k/Ctrl+N/Ctrl+P
+            keys.
+            - Add automatic task ID extraction (e.g. 'PRJ-21797') when pasting full
+            YouTrack ticket URLs into the search input.
+            - Optimize YouTrack API queries by querying `issue id` only for valid ID
+            formats, removing invalid state query keywords, and using multi-word
+            prefix wildcards.
+- Add interactive help popup triggered by '?' ([014ee82](https://github.com/nospor/yt-tui/commit/014ee82f10d3931480fd277497333a030c81caf0))
+
+### Other
+
+- Fix popup background style leakage in overlay views ([7661ab0](https://github.com/nospor/yt-tui/commit/7661ab0edbfa3451bbf67940505da0db02d22bd5))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.3 [skip ci] ([859b458](https://github.com/nospor/yt-tui/commit/859b4586795eeb51fa1a8a78a277496c01519c18))
+
 ## [0.6.3] - 2026-06-24
 
 ### Features
