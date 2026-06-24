@@ -1,4 +1,14 @@
 
+## [0.6.3] - 2026-06-24
+
+### Features
+
+- Add support for created, updated, updater, and reporter columns in issues list ([e2e1f22](https://github.com/nospor/yt-tui/commit/e2e1f22b57454ffa2f3862d0d8bade41a28a23ba))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.2 [skip ci] ([f56ddf4](https://github.com/nospor/yt-tui/commit/f56ddf4c11de28d40059e8726da8427698798e95))
+
 ## [0.6.2] - 2026-06-23
 
 ### Features
