@@ -72,6 +72,9 @@ type AppModel struct {
 	searchErr         error
 	searchCursor      int
 
+	// Help Popup fields
+	helpShow bool
+
 	// Sub-models
 	welcome   welcomeModel
 	dashboard dashboardModel
@@ -122,6 +125,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
+
+		if m.helpShow {
+			switch msg.String() {
+			case "esc", "?":
+				m.helpShow = false
+				return m, nil
+			}
+			return m, nil
 		}
 
 		if m.searchShow {
@@ -195,6 +207,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchLoading = false
 				m.searchErr = nil
 				m.searchCursor = 0
+				return m, nil
+			}
+		}
+
+		if msg.String() == "?" {
+			if m.state != stateWelcome && !m.isAnyInputFocused() {
+				m.helpShow = true
 				return m, nil
 			}
 		}
@@ -479,6 +498,23 @@ func (m AppModel) View() string {
 		baseView = overlayLines(baseView, popup, x, y)
 	}
 
+	if m.helpShow {
+		popup := m.renderHelpPopup()
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := lipgloss.Height(popup)
+
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+
+		baseView = overlayLines(baseView, popup, x, y)
+	}
+
 	return baseView
 }
 
@@ -639,4 +675,136 @@ func (m AppModel) isAnyInputFocused() bool {
 	default:
 		return false
 	}
+}
+
+func (m AppModel) renderHelpPopup() string {
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true)
+	title := titleStyle.Render("ℹ️  Keyboard Shortcuts")
+
+	// Divider line
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Render(strings.Repeat("─", 104))
+
+	// Helper to format a section
+	formatSection := func(sectionTitle string, items [][2]string) string {
+		var sb strings.Builder
+		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render("["+sectionTitle+"]") + "\n")
+		for _, item := range items {
+			k := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(fmt.Sprintf("%-10s", item[0]))
+			d := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render(item[1])
+			sb.WriteString(fmt.Sprintf("%s %s\n", k, d))
+		}
+		return sb.String()
+	}
+
+	col1Content := lipgloss.JoinVertical(lipgloss.Left,
+		formatSection("Global & Search", [][2]string{
+			{"S", "Global search"},
+			{"?", "Toggle help popup"},
+			{"ctrl+c", "Quit application"},
+		}),
+		"",
+		formatSection("Dashboard", [][2]string{
+			{"Tab", "Switch panels"},
+			{"↑/↓ (j/k)", "Move selection"},
+			{"Enter", "Select panel item"},
+			{"Space", "Custom actions"},
+			{"r", "Refresh dashboard"},
+			{"n", "Create new issue"},
+			{"p", "Open Projects view"},
+			{"b", "Open Boards view"},
+			{"f", "Open Favorite view"},
+		}),
+		"",
+		formatSection("Projects", [][2]string{
+			{"↑/↓ (j/k)", "Move selection"},
+			{"Enter", "View project issues"},
+			{"n", "New issue in project"},
+			{"r", "Refresh projects"},
+			{"Esc/Bksp", "Go back"},
+		}),
+		"",
+		formatSection("Agile Boards", [][2]string{
+			{"↑/↓ (j/k)", "Move selection"},
+			{"Space/Ent", "Expand/collapse board"},
+			{"Enter", "View sprint issues"},
+			{"r", "Refresh boards"},
+			{"Esc/Bksp", "Go back"},
+		}),
+	)
+
+	col2Content := lipgloss.JoinVertical(lipgloss.Left,
+		formatSection("Issues List", [][2]string{
+			{"↑/↓ (j/k)", "Move selection"},
+			{"Space", "Custom actions"},
+			{"Enter", "View issue details"},
+			{"/", "Search/filter phrase"},
+			{"F", "Filter state/priority"},
+			{"f", "Toggle view favorite"},
+			{"s", "Sort issues list"},
+			{"n", "Create new issue"},
+			{"r", "Refresh issues list"},
+			{"Esc/Bksp", "Go back"},
+		}),
+		"",
+		formatSection("Issue Form", [][2]string{
+			{"Tab/S-Tab", "Next/prev field"},
+			{"←/→ (h/l)", "Select dropdown option"},
+			{"Ctrl+s", "Save & submit issue"},
+			{"Ctrl+v", "Paste clipboard image"},
+			{"Ctrl+f", "Attach file from PC"},
+			{"Ctrl+g", "Edit in $EDITOR"},
+			{"Esc", "Cancel and go back"},
+		}),
+	)
+
+	col3Content := lipgloss.JoinVertical(lipgloss.Left,
+		formatSection("Issue Detail", [][2]string{
+			{"Tab", "Switch active pane"},
+			{"Space", "Custom actions"},
+			{"Enter", "Jump task/Open attach"},
+			{"c", "Add comment"},
+			{"Ctrl+f", "Attach file from PC"},
+			{"t", "Log work time"},
+			{"s", "Change issue state"},
+			{"R", "Assign repository"},
+			{"a", "Assign user"},
+			{"e", "Edit desc/comment"},
+			{"C", "Clone issue"},
+			{"y", "Yank options list"},
+			{"d", "Delete link/attach"},
+			{"r", "Refresh details"},
+			{"Esc", "Go back"},
+		}),
+	)
+
+	// Combine columns with space between them
+	columns := lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(34).Render(col1Content),
+		"   ",
+		lipgloss.NewStyle().Width(34).Render(col2Content),
+		"   ",
+		lipgloss.NewStyle().Width(34).Render(col3Content),
+	)
+
+	footer := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Italic(true).Render("Press [?] or [Esc] to close help")
+
+	popupContent := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		divider,
+		"",
+		columns,
+		"",
+		divider,
+		"",
+		footer,
+	)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorViolet)).
+		Background(lipgloss.Color(ColorSurface)).
+		Padding(1, 2).
+		Width(110).
+		Render(popupContent)
 }

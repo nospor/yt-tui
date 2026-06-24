@@ -214,6 +214,7 @@ Supported action command types:
 
 ### 🌐 Global Controls
 * `Ctrl+C`: Force quit the application at any time.
+* `?`: Toggle the help popup from any screen (except when welcome screen is shown or a text input/textarea is active), showing all keyboard shortcuts split by views.
 * `S`: Open the global search popup from any screen (except when a text input or textarea is active).
   - Type or paste a phrase in the input field, then press `Enter` to search.
   - **Note**: YouTrack matches full words/phrases 

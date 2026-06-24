@@ -933,8 +933,10 @@ func (m formModel) View() string {
 		helpText = " [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker "
 	} else if m.focusIndex == fieldDescription {
 		helpText = " [Tab/Shift-Tab] Navigate  [Ctrl+v] Paste Img  [Ctrl+f] Attach File  [Ctrl+g] External Editor  [Ctrl+s] Submit  [Esc] Back "
+	} else if m.focusIndex == fieldSummary || m.focusIndex == fieldAssignee {
+		helpText = " [Tab/Shift-Tab] Navigate Fields  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
 	} else {
-		helpText = " [Tab/Shift-Tab] Navigate Fields  [<- / -> or h/l] Select Dropdown Option  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
+		helpText = " [Tab/Shift-Tab] Navigate Fields  [<- / -> or h/l] Select Dropdown Option  [Ctrl+s] Save & Submit  [?] Help  [Esc] Cancel/Back "
 	}
 	help := StyleHelp.Render(helpText)
 

@@ -1220,7 +1220,7 @@ func (m issuesModel) View() string {
 	}
 
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Space] Action  [Enter] Detail  [/] Search  [F] Filter  [f] Favorite  [s] Sort  [n] New  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Space] Action  [Enter] Detail  [/] Search  [F] Filter  [f] Favorite  [s] Sort  [n] New  [r] Refresh  [?] Help  [q] Quit ")
 
 	view := lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 

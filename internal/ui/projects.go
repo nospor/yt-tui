@@ -183,7 +183,7 @@ func (m projectsModel) View() string {
 
 	title := StyleTitle.Render(" YouTrack Projects ")
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] View Issues  [n] New Issue in Project  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Enter] View Issues  [n] New Issue in Project  [r] Refresh  [?] Help  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, "", help)
 }

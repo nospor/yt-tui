@@ -2049,7 +2049,7 @@ func (m detailModel) View() string {
 		} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
 			deleteAction = "  [d] Delete"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [(Shift)Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [r] Refresh  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
 	}
 
 	var parts []string

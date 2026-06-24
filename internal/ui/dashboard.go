@@ -417,7 +417,7 @@ func (m dashboardModel) View() string {
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, issuesPanel, "  ", projectsPanel)
 
 	title := StyleTitle.Render(" YouTrack Dashboard ")
-	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Space] Action  [Enter] Select  [n] New Issue  [p] Projects  [b] Agile Boards  [f] Favorite View  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Tab] Switch Panels  [↑↓] Move  [Space] Action  [Enter] Select  [n] New Issue  [p] Projects  [b] Agile Boards  [f] Favorite View  [r] Refresh  [?] Help  [q] Quit ")
 
 	view := lipgloss.JoinVertical(lipgloss.Left, title, panels, "", help)
 

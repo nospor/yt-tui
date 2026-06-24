@@ -404,7 +404,7 @@ func (m boardsModel) View() string {
 
 	title := StyleTitle.Render(" YouTrack Agile Boards ")
 	tableStr := m.table.View()
-	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Space/Enter] Expand Board  [Enter on Sprint] View Sprint Issues  [r] Refresh  [q] Quit ")
+	help := StyleHelp.Render(" [Esc] Back  [↑↓] Navigate  [Space/Enter] Expand Board  [Enter on Sprint] View Sprint Issues  [r] Refresh  [?] Help  [q] Quit ")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, tableStr, "", help)
 }
