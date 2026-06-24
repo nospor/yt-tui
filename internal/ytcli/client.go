@@ -260,7 +260,7 @@ func (c *Client) ListSprintIssues(agileID string, sprintID string) ([]Issue, err
 		baseURL += "/"
 	}
 
-	fields := "issues(id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)))"
+	fields := "issues(id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)),reporter(login,fullName,email),created,updated,updater(login,fullName,email))"
 	apiURL := baseURL + fmt.Sprintf("api/agiles/%s/sprints/%s?fields=%s", agileID, sprintID, fields)
 
 	req, err := c.newRequest("GET", apiURL, nil)
@@ -307,7 +307,7 @@ func (c *Client) ListIssues(projectID string, query string, limit int, skip int)
 	fullQuery := strings.Join(parts, " ")
 
 	params := url.Values{}
-	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)),reporter(login,fullName,email)")
+	params.Set("fields", "id,idReadable,summary,description,project(id,name,shortName),customFields(id,name,value(id,name,fullName,login,presentation,text),$type),comments(id,text,created,author(login,fullName,email)),reporter(login,fullName,email),created,updated,updater(login,fullName,email)")
 	if fullQuery != "" {
 		params.Set("query", fullQuery)
 	}

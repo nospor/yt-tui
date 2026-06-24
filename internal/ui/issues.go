@@ -119,6 +119,27 @@ func newIssuesModel(client *ytcli.Client, cfg *config.Config) issuesModel {
 			title = "Type"
 			width = 12
 			valueFn = func(i ytcli.Issue) string { return i.Type() }
+		case "updated":
+			title = "Updated"
+			width = 20
+			valueFn = func(i ytcli.Issue) string { return i.UpdatedTime() }
+		case "updater":
+			title = "Updater"
+			width = 20
+			valueFn = func(i ytcli.Issue) string { return i.UpdaterName() }
+		case "created":
+			title = "Created"
+			width = 20
+			valueFn = func(i ytcli.Issue) string { return i.CreatedTime() }
+		case "creator", "reporter":
+			title = "Creator"
+			width = 20
+			valueFn = func(i ytcli.Issue) string {
+				if i.Reporter != nil {
+					return i.Reporter.DisplayName()
+				}
+				return "N/A"
+			}
 		default:
 			// Custom field
 			valueFn = func(i ytcli.Issue) string { return i.ExtractStringField(name) }
