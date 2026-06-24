@@ -2,10 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -43,6 +45,12 @@ type popStateMsg struct {
 	projectCodeToInvalidate string
 }
 
+type globalSearchResultMsg struct {
+	issues []ytcli.Issue
+	err    error
+	query  string
+}
+
 // AppModel is the root Bubble Tea model.
 type AppModel struct {
 	client      *ytcli.Client
@@ -54,6 +62,15 @@ type AppModel struct {
 	height      int
 	status      string
 	isStatusErr bool
+
+	// Global Search Popup fields
+	searchShow        bool
+	searchInInputMode bool
+	searchInput       textinput.Model
+	searchResults     []ytcli.Issue
+	searchLoading     bool
+	searchErr         error
+	searchCursor      int
 
 	// Sub-models
 	welcome   welcomeModel
@@ -106,6 +123,82 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+
+		if m.searchShow {
+			if m.searchInInputMode {
+				switch msg.String() {
+				case "esc":
+					m.searchShow = false
+					return m, nil
+				case "enter":
+					val := m.searchInput.Value()
+					if val != "" {
+						val = extractIssueIDFromURL(val)
+						m.searchInput.SetValue(val)
+						m.searchLoading = true
+						m.searchErr = nil
+						m.searchCursor = 0
+						m.searchInInputMode = false
+						m.searchInput.Blur()
+						return m, m.globalSearchCmd(val)
+					}
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.searchInput, cmd = m.searchInput.Update(msg)
+				return m, cmd
+			} else {
+				switch msg.String() {
+				case "esc":
+					m.searchShow = false
+					return m, nil
+				case "up", "ctrl+p", "k":
+					if m.searchCursor > 0 {
+						m.searchCursor--
+					}
+					return m, nil
+				case "down", "ctrl+n", "j":
+					if m.searchCursor < len(m.searchResults)-1 {
+						m.searchCursor++
+					}
+					return m, nil
+				case "enter":
+					if len(m.searchResults) > 0 && m.searchCursor >= 0 && m.searchCursor < len(m.searchResults) {
+						selected := m.searchResults[m.searchCursor]
+						m.history = append(m.history, navEntry{state: m.state, data: m.stateData})
+						cmd := m.switchState(stateDetail, selected.IDReadable, false)
+						m.searchShow = false
+						return m, cmd
+					}
+					return m, nil
+				case "S", "s":
+					m.searchInInputMode = true
+					m.searchInput.Focus()
+					m.searchResults = nil
+					return m, nil
+				}
+				return m, nil
+			}
+		}
+
+		if msg.String() == "S" {
+			if m.state != stateWelcome && !m.isAnyInputFocused() {
+				m.searchShow = true
+				m.searchInInputMode = true
+				ti := textinput.New()
+				ti.Placeholder = "Search task ID or summary..."
+				ti.Prompt = " 🔍 "
+				ti.Focus()
+				ti.SetValue("")
+				m.searchInput = ti
+				m.searchResults = nil
+				m.searchLoading = false
+				m.searchErr = nil
+				m.searchCursor = 0
+				return m, nil
+			}
+		}
+
 		if msg.String() == "f" && m.state == stateDashboard {
 			if cfg, err := config.LoadConfig(); err == nil {
 				*m.cfg = *cfg
@@ -170,6 +263,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == stateDetail {
 			m.detail.updateViewportSizes()
 		}
+
+	case globalSearchResultMsg:
+		if m.searchShow && msg.query == m.searchInput.Value() {
+			m.searchLoading = false
+			m.searchResults = msg.issues
+			m.searchErr = msg.err
+			m.searchCursor = 0
+		}
+		return m, nil
 
 	case switchStateMsg:
 		cmd := m.switchState(msg.state, msg.data, false)
@@ -352,11 +454,189 @@ func (m AppModel) View() string {
 		Render(statusBarText)
 
 	// Combine top header, the main view padded, and status bar
-	return lipgloss.JoinVertical(lipgloss.Left,
+	baseView := lipgloss.JoinVertical(lipgloss.Left,
 		topHeader,
 		"",
 		lipgloss.NewStyle().Padding(0, 2).Render(childView),
 		"",
 		statusBar,
 	)
+
+	if m.searchShow {
+		popup := m.renderSearchPopup()
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := lipgloss.Height(popup)
+
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+
+		baseView = overlayLines(baseView, popup, x, y)
+	}
+
+	return baseView
+}
+
+var issueIDRegex = regexp.MustCompile(`(?i)^[a-z0-9]+-\d+$`)
+var issueURLRegex = regexp.MustCompile(`(?i)/issue/([a-z0-9]+-\d+)`)
+
+func extractIssueIDFromURL(val string) string {
+	matches := issueURLRegex.FindStringSubmatch(val)
+	if len(matches) > 1 {
+		return strings.ToUpper(matches[1])
+	}
+	return val
+}
+
+func (m AppModel) globalSearchCmd(query string) tea.Cmd {
+	return func() tea.Msg {
+		clean := strings.TrimSpace(strings.ReplaceAll(query, "\"", ""))
+		if clean == "" {
+			return globalSearchResultMsg{issues: nil, err: nil, query: query}
+		}
+
+		var ytQuery string
+		if issueIDRegex.MatchString(clean) {
+			ytQuery = fmt.Sprintf("summary: \"%s\" or issue id: %s", clean, clean)
+		} else {
+			words := strings.Fields(clean)
+			var wordQueries []string
+			for _, w := range words {
+				escapedW := strings.ReplaceAll(w, ")", "\\)")
+				escapedW = strings.ReplaceAll(escapedW, "(", "\\(")
+				wordQueries = append(wordQueries, escapedW+"*")
+			}
+			ytQuery = fmt.Sprintf("summary: (%s)", strings.Join(wordQueries, " "))
+		}
+
+		issues, err := m.client.ListIssues("", ytQuery, 50, 0)
+
+		if err != nil && strings.Contains(strings.ToLower(err.Error()), "invalid_query") {
+			ytQuery = fmt.Sprintf("\"%s\"", clean)
+			issues, err = m.client.ListIssues("", ytQuery, 50, 0)
+		}
+
+		return globalSearchResultMsg{issues: issues, err: err, query: query}
+	}
+}
+
+func (m AppModel) renderSearchPopup() string {
+	var listLines []string
+	if m.searchLoading {
+		listLines = append(listLines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Render("  Searching..."))
+	} else if m.searchErr != nil {
+		listLines = append(listLines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true).Render("  Error: "+m.searchErr.Error()))
+	} else if len(m.searchResults) == 0 {
+		if m.searchInInputMode {
+			listLines = append(listLines,
+				lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Render("  Search YouTrack for full words or phrases."),
+				"",
+				lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Render("  Press Enter to search..."),
+			)
+		} else {
+			listLines = append(listLines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Render("  No issues found matching phrase."))
+		}
+	} else {
+		// Show results with scroll window
+		const maxResults = 8
+		startIdx := 0
+		if m.searchCursor >= maxResults {
+			startIdx = m.searchCursor - maxResults + 1
+		}
+		endIdx := startIdx + maxResults
+		if endIdx > len(m.searchResults) {
+			endIdx = len(m.searchResults)
+			startIdx = endIdx - maxResults
+			if startIdx < 0 {
+				startIdx = 0
+			}
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			issue := m.searchResults[i]
+
+			// Build id text and summary text
+			idStr := issue.IDReadable
+			summaryStr := truncateString(issue.Summary, 48)
+
+			displayStr := fmt.Sprintf("%-12s  %s", idStr, summaryStr)
+
+			if i == m.searchCursor && !m.searchInInputMode {
+				listLines = append(listLines, lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorBg)).
+					Background(lipgloss.Color(ColorCyan)).
+					Bold(true).
+					Render("> "+displayStr))
+			} else {
+				listLines = append(listLines, lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorText)).
+					Render("  "+displayStr))
+			}
+		}
+
+		// Fill remaining space up to maxResults with blank lines so popup height doesn't jump
+		for len(listLines) < maxResults {
+			listLines = append(listLines, "")
+		}
+	}
+
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true)
+	title := titleStyle.Render("🔍 Search Issues")
+
+	// Divider line
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Render(strings.Repeat("─", 66))
+
+	var footer string
+	if m.searchInInputMode {
+		footer = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Italic(true).Render("  [Enter] Search  [Esc] Close")
+	} else {
+		footer = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Italic(true).Render("  [up/down or j/k] Navigate  [Enter] View Detail  [s] Edit Query  [Esc] Close")
+	}
+
+	popupContent := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		"  "+m.searchInput.View(),
+		"",
+		divider,
+		"",
+		lipgloss.JoinVertical(lipgloss.Left, listLines...),
+		"",
+		divider,
+		"",
+		footer,
+	)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorViolet)).
+		Background(lipgloss.Color(ColorSurface)).
+		Padding(1, 2).
+		Width(70).
+		Render(popupContent)
+}
+
+func (m AppModel) isAnyInputFocused() bool {
+	switch m.state {
+	case stateWelcome:
+		return m.welcome.urlInput.Focused() || m.welcome.tokenInput.Focused()
+	case stateIssues:
+		return m.issues.searchMode
+	case stateDetail:
+		return m.detail.textInput.Focused() ||
+			m.detail.trackTimeDateInput.Focused() ||
+			m.detail.trackTimeDurationInput.Focused() ||
+			m.detail.trackTimeCommentInput.Focused()
+	case stateForm:
+		return m.form.summaryInput.Focused() ||
+			m.form.descTextArea.Focused() ||
+			m.form.assigneeInput.Focused()
+	default:
+		return false
+	}
 }

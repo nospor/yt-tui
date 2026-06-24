@@ -214,6 +214,13 @@ Supported action command types:
 
 ### 🌐 Global Controls
 * `Ctrl+C`: Force quit the application at any time.
+* `S`: Open the global search popup from any screen (except when a text input or textarea is active).
+  - Type or paste a phrase in the input field, then press `Enter` to search.
+  - **Note**: YouTrack matches full words/phrases 
+  - Once search completes, use `↑` / `↓` (or `k` / `j`, `Ctrl+P` / `Ctrl+N`) to navigate the results.
+  - Press `Enter` to open the details view for the selected task.
+  - Press `s` or `S` while navigating the list to focus back on the input field to search again.
+  - Press `Esc` to close the popup.
 
 ### 🚪 Welcome / Login View
 * **Server Selection Mode** (when `servers` is configured):
