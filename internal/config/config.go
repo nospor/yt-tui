@@ -31,6 +31,30 @@ func (c *CustomStatesMap) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("custom_states must be either a list of strings or a map of list of strings")
 }
 
+// CustomPrioritiesMap represents custom priorities configured per project, or a default fallback.
+type CustomPrioritiesMap map[string][]string
+
+// UnmarshalJSON handles loading custom_priorities either as a list of strings (legacy/fallback) or a map of list of strings.
+func (c *CustomPrioritiesMap) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as map first
+	var m map[string][]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		*c = m
+		return nil
+	}
+
+	// If that fails, try unmarshaling as a slice of strings
+	var s []string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*c = map[string][]string{
+			"default": s,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("custom_priorities must be either a list of strings or a map of list of strings")
+}
+
 // Config represents the application configuration.
 type Config struct {
 	URL                 string              `json:"url"`
@@ -40,7 +64,7 @@ type Config struct {
 	MaxIssues           int                 `json:"max_issues"`
 	Fields              []string            `json:"fields"`
 	CustomTypes         []string            `json:"custom_types"`
-	CustomPriorities    []string            `json:"custom_priorities"`
+	CustomPriorities    CustomPrioritiesMap `json:"custom_priorities"`
 	CustomStates        CustomStatesMap     `json:"custom_states"`
 	WorkTypes           []string            `json:"work_types"`
 	FilteredStates      []string            `json:"filtered_states"`
@@ -74,6 +98,24 @@ func (cfg *Config) GetCustomStates(projectCode string) []string {
 		return states
 	}
 	return DefaultStates
+}
+
+// GetCustomPriorities returns the list of custom priorities for the given project.
+// If projectCode is empty or not found, it falls back to the "default" key,
+// and finally to config.DefaultPriorities.
+func (cfg *Config) GetCustomPriorities(projectCode string) []string {
+	if cfg == nil || len(cfg.CustomPriorities) == 0 {
+		return DefaultPriorities
+	}
+	if projectCode != "" {
+		if priorities, ok := cfg.CustomPriorities[projectCode]; ok && len(priorities) > 0 {
+			return priorities
+		}
+	}
+	if priorities, ok := cfg.CustomPriorities["default"]; ok && len(priorities) > 0 {
+		return priorities
+	}
+	return DefaultPriorities
 }
 
 // GetFavoriteView returns the favorite view for the given server URL.
@@ -155,7 +197,7 @@ func LoadConfig() (*Config, error) {
 			MaxIssues:          DefaultMaxIssues,
 			Fields:             DefaultFields,
 			CustomTypes:        DefaultTypes,
-			CustomPriorities:   DefaultPriorities,
+			CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 			CustomStates:       map[string][]string{"default": DefaultStates},
 			WorkTypes:          DefaultWorkTypes,
 			FilteredStates:     append([]string{}, DefaultStates...),
@@ -175,7 +217,7 @@ func LoadConfig() (*Config, error) {
 			MaxIssues:          DefaultMaxIssues,
 			Fields:             DefaultFields,
 			CustomTypes:        DefaultTypes,
-			CustomPriorities:   DefaultPriorities,
+			CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 			CustomStates:       map[string][]string{"default": DefaultStates},
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
@@ -190,7 +232,7 @@ func LoadConfig() (*Config, error) {
 		MaxIssues:          DefaultMaxIssues,
 		Fields:             DefaultFields,
 		CustomTypes:        DefaultTypes,
-		CustomPriorities:   DefaultPriorities,
+		CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 		CustomStates:       map[string][]string{"default": DefaultStates},
 		WorkTypes:          DefaultWorkTypes,
 		FilteredStates:     append([]string{}, DefaultStates...),
@@ -245,7 +287,7 @@ func LoadConfig() (*Config, error) {
 		needsWrite = true
 	}
 	if len(fileCfg.CustomPriorities) == 0 {
-		fileCfg.CustomPriorities = DefaultPriorities
+		fileCfg.CustomPriorities = map[string][]string{"default": DefaultPriorities}
 		needsWrite = true
 	}
 	if len(fileCfg.CustomStates) == 0 {
@@ -276,7 +318,22 @@ func LoadConfig() (*Config, error) {
 		needsWrite = true
 	}
 	if fileCfg.FilteredPriorities == nil {
-		fileCfg.FilteredPriorities = append([]string{}, fileCfg.CustomPriorities...)
+		// Gather all unique priorities from the map
+		uniquePriorities := make(map[string]bool)
+		for _, priorities := range fileCfg.CustomPriorities {
+			for _, p := range priorities {
+				uniquePriorities[p] = true
+			}
+		}
+		if len(uniquePriorities) == 0 {
+			for _, p := range DefaultPriorities {
+				uniquePriorities[p] = true
+			}
+		}
+		fileCfg.FilteredPriorities = make([]string, 0, len(uniquePriorities))
+		for p := range uniquePriorities {
+			fileCfg.FilteredPriorities = append(fileCfg.FilteredPriorities, p)
+		}
 		needsWrite = true
 	}
 	if fileCfg.ActivityFilters == nil {

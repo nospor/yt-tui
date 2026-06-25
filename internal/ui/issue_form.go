@@ -247,11 +247,20 @@ func (m formModel) getTypes() []string {
 	return opts
 }
 
+func (m formModel) getSelectedProjectCode() string {
+	if len(m.projects) > 0 && m.projectIndex >= 0 && m.projectIndex < len(m.projects) {
+		return m.projects[m.projectIndex].ShortName
+	}
+	return m.initialProjectCode
+}
+
 func (m formModel) getPriorities() []string {
 	var opts []string
 	opts = append(opts, "(Default)")
-	if m.cfg != nil && len(m.cfg.CustomPriorities) > 0 {
-		opts = append(opts, m.cfg.CustomPriorities...)
+	projectCode := m.getSelectedProjectCode()
+	if m.cfg != nil {
+		custom := m.cfg.GetCustomPriorities(projectCode)
+		opts = append(opts, custom...)
 	} else {
 		opts = append(opts, "Minor", "Normal", "Major", "Critical", "Show-stopper")
 	}

@@ -81,7 +81,7 @@ func TestIssuesModel_MaxIssuesLimit(t *testing.T) {
 
 func TestIssuesModel_Sort(t *testing.T) {
 	cfg := &config.Config{
-		CustomPriorities: []string{"Minor", "Normal", "Major", "Critical", "Show-stopper"},
+		CustomPriorities: config.CustomPrioritiesMap{"default": {"Minor", "Normal", "Major", "Critical", "Show-stopper"}},
 		CustomStates:     config.CustomStatesMap{"default": {"Open", "In Progress", "Verified", "Done"}},
 		SortColumn:       "ID",
 		SortDirection:    "asc",

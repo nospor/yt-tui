@@ -288,7 +288,7 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 	priority := issue.Priority()
 	// Check if priority is in CustomPriorities
 	inCustomPriorities := false
-	for _, cp := range m.cfg.CustomPriorities {
+	for _, cp := range m.cfg.GetCustomPriorities(projectCode) {
 		if strings.EqualFold(cp, priority) {
 			inCustomPriorities = true
 			break
@@ -352,6 +352,122 @@ func stateIndex(s string, states []string) int {
 	return -1
 }
 
+func (m *issuesModel) getAvailableStates() []string {
+	if m.cfg == nil {
+		return config.DefaultStates
+	}
+	projects := make(map[string]bool)
+	if m.projectCode != "" {
+		projects[m.projectCode] = true
+	}
+	for _, issue := range m.issues {
+		if issue.Project != nil {
+			code := issue.Project.ShortName
+			if code == "" {
+				code = issue.Project.ID
+			}
+			if code != "" {
+				projects[code] = true
+			}
+		}
+	}
+
+	if len(projects) == 0 {
+		return m.cfg.GetCustomStates("")
+	}
+
+	seen := make(map[string]bool)
+	var merged []string
+
+	if m.projectCode != "" {
+		primaryStates := m.cfg.GetCustomStates(m.projectCode)
+		for _, s := range primaryStates {
+			if !seen[s] {
+				seen[s] = true
+				merged = append(merged, s)
+			}
+		}
+	}
+
+	var codes []string
+	for code := range projects {
+		if code != m.projectCode {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+
+	for _, code := range codes {
+		states := m.cfg.GetCustomStates(code)
+		for _, s := range states {
+			if !seen[s] {
+				seen[s] = true
+				merged = append(merged, s)
+			}
+		}
+	}
+
+	return merged
+}
+
+func (m *issuesModel) getAvailablePriorities() []string {
+	if m.cfg == nil {
+		return config.DefaultPriorities
+	}
+	projects := make(map[string]bool)
+	if m.projectCode != "" {
+		projects[m.projectCode] = true
+	}
+	for _, issue := range m.issues {
+		if issue.Project != nil {
+			code := issue.Project.ShortName
+			if code == "" {
+				code = issue.Project.ID
+			}
+			if code != "" {
+				projects[code] = true
+			}
+		}
+	}
+
+	if len(projects) == 0 {
+		return m.cfg.GetCustomPriorities("")
+	}
+
+	seen := make(map[string]bool)
+	var merged []string
+
+	if m.projectCode != "" {
+		primaryPriorities := m.cfg.GetCustomPriorities(m.projectCode)
+		for _, p := range primaryPriorities {
+			if !seen[p] {
+				seen[p] = true
+				merged = append(merged, p)
+			}
+		}
+	}
+
+	var codes []string
+	for code := range projects {
+		if code != m.projectCode {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+
+	for _, code := range codes {
+		priorities := m.cfg.GetCustomPriorities(code)
+		for _, p := range priorities {
+			if !seen[p] {
+				seen[p] = true
+				merged = append(merged, p)
+			}
+		}
+	}
+
+	return merged
+}
+
 func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 	var valA, valB string
 	var valueFn func(ytcli.Issue) string
@@ -373,8 +489,16 @@ func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 	}
 
 	if titleLower == "priority" && m.cfg != nil {
-		idxA := priorityIndex(valA, m.cfg.CustomPriorities)
-		idxB := priorityIndex(valB, m.cfg.CustomPriorities)
+		projectCode := m.projectCode
+		if projectCode == "" && a.Project != nil {
+			projectCode = a.Project.ShortName
+			if projectCode == "" {
+				projectCode = a.Project.ID
+			}
+		}
+		priorities := m.cfg.GetCustomPriorities(projectCode)
+		idxA := priorityIndex(valA, priorities)
+		idxB := priorityIndex(valB, priorities)
 		if idxA != -1 && idxB != -1 {
 			if idxA < idxB {
 				return -1
@@ -790,8 +914,8 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			numStates := 0
 			numPriorities := 0
 			if m.cfg != nil {
-				numStates = len(m.cfg.GetCustomStates(m.projectCode))
-				numPriorities = len(m.cfg.CustomPriorities)
+				numStates = len(m.getAvailableStates())
+				numPriorities = len(m.getAvailablePriorities())
 			}
 			totalOptions := numStates + numPriorities
 
@@ -851,30 +975,93 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				return m, nil
 			case " ":
 				if m.cfg != nil {
-					states := m.cfg.GetCustomStates(m.projectCode)
+					states := m.getAvailableStates()
 					if m.filterCursor < numStates {
 						stateName := states[m.filterCursor]
 						m.tempStates[stateName] = !m.tempStates[stateName]
 					} else {
-						priorityName := m.cfg.CustomPriorities[m.filterCursor-numStates]
+						priorities := m.getAvailablePriorities()
+						priorityName := priorities[m.filterCursor-numStates]
 						m.tempPriorities[priorityName] = !m.tempPriorities[priorityName]
 					}
 				}
 				return m, nil
 			case "enter":
 				if m.cfg != nil {
+					// Build a map of current filtered states to preserve those not displayed
+					currentFiltered := make(map[string]bool)
+					for _, fs := range m.cfg.FilteredStates {
+						currentFiltered[fs] = true
+					}
+
+					// Update visibility for displayed states
+					displayedStates := m.getAvailableStates()
+					for _, s := range displayedStates {
+						currentFiltered[s] = m.tempStates[s]
+					}
+
+					// Rebuild FilteredStates preserving order
 					newStates := []string{}
-					for _, s := range m.cfg.GetCustomStates(m.projectCode) {
-						if m.tempStates[s] {
+					// Go through configured custom states to keep order
+					for _, statesList := range m.cfg.CustomStates {
+						for _, s := range statesList {
+							if currentFiltered[s] {
+								newStates = append(newStates, s)
+								delete(currentFiltered, s)
+							}
+						}
+					}
+					// Then default states
+					for _, s := range config.DefaultStates {
+						if currentFiltered[s] {
+							newStates = append(newStates, s)
+							delete(currentFiltered, s)
+						}
+					}
+					// Any remaining states
+					for s, val := range currentFiltered {
+						if val {
 							newStates = append(newStates, s)
 						}
 					}
+
+					// Build a map of current filtered priorities to preserve those not displayed
+					currentFilteredP := make(map[string]bool)
+					for _, fp := range m.cfg.FilteredPriorities {
+						currentFilteredP[fp] = true
+					}
+
+					// Update visibility for displayed priorities
+					displayedPriorities := m.getAvailablePriorities()
+					for _, p := range displayedPriorities {
+						currentFilteredP[p] = m.tempPriorities[p]
+					}
+
+					// Rebuild FilteredPriorities preserving order
 					newPriorities := []string{}
-					for _, p := range m.cfg.CustomPriorities {
-						if m.tempPriorities[p] {
+					// Go through configured custom priorities to keep order
+					for _, prioritiesList := range m.cfg.CustomPriorities {
+						for _, p := range prioritiesList {
+							if currentFilteredP[p] {
+								newPriorities = append(newPriorities, p)
+								delete(currentFilteredP, p)
+							}
+						}
+					}
+					// Then default priorities
+					for _, p := range config.DefaultPriorities {
+						if currentFilteredP[p] {
+							newPriorities = append(newPriorities, p)
+							delete(currentFilteredP, p)
+						}
+					}
+					// Any remaining priorities
+					for p, val := range currentFilteredP {
+						if val {
 							newPriorities = append(newPriorities, p)
 						}
 					}
+
 					m.cfg.FilteredStates = newStates
 					m.cfg.FilteredPriorities = newPriorities
 					_ = config.SaveConfig(m.cfg)
@@ -1098,7 +1285,7 @@ func (m issuesModel) View() string {
 		// Build states column
 		var statesCol strings.Builder
 		statesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" STATES") + "\n\n")
-		states := m.cfg.GetCustomStates(m.projectCode)
+		states := m.getAvailableStates()
 		for i, s := range states {
 			checked := "[ ]"
 			if m.tempStates[s] {
@@ -1116,7 +1303,8 @@ func (m issuesModel) View() string {
 		var prioritiesCol strings.Builder
 		prioritiesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" PRIORITIES") + "\n\n")
 		numStates := len(states)
-		for i, p := range m.cfg.CustomPriorities {
+		priorities := m.getAvailablePriorities()
+		for i, p := range priorities {
 			checked := "[ ]"
 			if m.tempPriorities[p] {
 				checked = "[x]"
