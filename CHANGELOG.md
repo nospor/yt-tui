@@ -1,4 +1,16 @@
 
+## [0.6.5] - 2026-06-25
+
+### Features
+
+- Make custom_states configurable per-project ([7db7958](https://github.com/nospor/yt-tui/commit/7db79586da66408b594c730e3dcd847b2212ac63))
+- Storefeat: store and retrieve favorite view per connection/server ([68e2c13](https://github.com/nospor/yt-tui/commit/68e2c133b192a02e9923a2a5b3f0fe621835cf62))
+- Make custom_priorities configurable per-project and merge list filters ([b5dcd70](https://github.com/nospor/yt-tui/commit/b5dcd70b88911a31970c008d1c8d2f47ab02f598))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.4 [skip ci] ([78b7e4e](https://github.com/nospor/yt-tui/commit/78b7e4e854dfb5b3f6722cb607c19bfb97705174))
+
 ## [0.6.4] - 2026-06-24
 
 ### Features
