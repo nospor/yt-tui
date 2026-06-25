@@ -931,10 +931,11 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		case "f":
 			if m.cfg != nil {
 				currentView := m.currentViewData()
-				if m.cfg.FavoriteView == currentView {
-					m.cfg.FavoriteView = ""
+				url := m.client.GetConfiguredBaseURL()
+				if m.cfg.GetFavoriteView(url) == currentView {
+					m.cfg.SetFavoriteView(url, "")
 				} else {
-					m.cfg.FavoriteView = currentView
+					m.cfg.SetFavoriteView(url, currentView)
 				}
 				_ = config.SaveConfig(m.cfg)
 			}
@@ -1217,7 +1218,8 @@ func (m issuesModel) View() string {
 	} else {
 		titleText = fmt.Sprintf(" Issues%s ", statusSuffix)
 	}
-	isFavorite := m.cfg != nil && m.cfg.FavoriteView != "" && m.cfg.FavoriteView == m.currentViewData()
+	url := m.client.GetConfiguredBaseURL()
+	isFavorite := m.cfg != nil && m.cfg.GetFavoriteView(url) != "" && m.cfg.GetFavoriteView(url) == m.currentViewData()
 	var starStr string
 	if isFavorite {
 		starStr = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorYellow)).Bold(true).Render("★ ")

@@ -140,6 +140,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "sort_column": "ID",
   "sort_direction": "asc",
   "favorite_view": "",
+  "favorite_views": {},
   "render_markdown": true
 }
 ```
@@ -162,6 +163,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `sort_column`         | String           | `""`                                                                             | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
 | `sort_direction`      | String           | `""`                                                                             | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
 | `favorite_view`       | String           | `""`                                                                             | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                   |
+| `favorite_views`      | Object           | `{}` (empty)                                                                     | A map of server/connection URLs to their respective favorite views (automatically updated when toggled via keyboard).                                                                       |
 | `work_types`          | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                                                        |
 | `render_markdown`     | Boolean          | `true`                                                                           | Whether to format and render issue descriptions as markdown. Can be toggled inside the issue detail view by pressing `m`.                                                                   |
 | `repo_options`        | Object           | `{}` (empty)                                                                     | Custom list of repository options per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["repo1", "repo2"]}`) for updating the custom `Repo` field. Used as a fallback if options cannot be retrieved from YouTrack directly. |

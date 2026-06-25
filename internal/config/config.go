@@ -48,6 +48,7 @@ type Config struct {
 	SortColumn          string              `json:"sort_column"`
 	SortDirection       string              `json:"sort_direction"`
 	FavoriteView        string              `json:"favorite_view,omitempty"`
+	FavoriteViews       map[string]string   `json:"favorite_views,omitempty"`
 	ActivityFilters     []string            `json:"activity_filters,omitempty"`
 	RenderMarkdown      bool                `json:"render_markdown"`
 	RepoOptions         map[string][]string `json:"repo_options,omitempty"`
@@ -73,6 +74,44 @@ func (cfg *Config) GetCustomStates(projectCode string) []string {
 		return states
 	}
 	return DefaultStates
+}
+
+// GetFavoriteView returns the favorite view for the given server URL.
+// If the server URL is not in the map, it falls back to the top-level FavoriteView
+// only if no other per-server favorites have been configured yet (migration fallback).
+func (cfg *Config) GetFavoriteView(url string) string {
+	if cfg == nil {
+		return ""
+	}
+	if cfg.FavoriteViews != nil {
+		if fav, ok := cfg.FavoriteViews[url]; ok {
+			return fav
+		}
+		if len(cfg.FavoriteViews) > 0 {
+			// Per-server favorites are being used, do not fall back to the global one
+			return ""
+		}
+	}
+	return cfg.FavoriteView
+}
+
+// SetFavoriteView sets the favorite view for the given server URL.
+func (cfg *Config) SetFavoriteView(url string, view string) {
+	if cfg == nil {
+		return
+	}
+	if cfg.FavoriteViews == nil {
+		cfg.FavoriteViews = make(map[string]string)
+	}
+	if view == "" {
+		delete(cfg.FavoriteViews, url)
+		if cfg.FavoriteView != "" && len(cfg.FavoriteViews) == 0 {
+			cfg.FavoriteView = ""
+		}
+	} else {
+		cfg.FavoriteViews[url] = view
+		cfg.FavoriteView = view
+	}
 }
 
 type ActionCommand struct {

@@ -222,13 +222,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cfg, err := config.LoadConfig(); err == nil {
 				*m.cfg = *cfg
 			}
-			if m.cfg.FavoriteView == "" {
+			favView := m.cfg.GetFavoriteView(m.client.GetConfiguredBaseURL())
+			if favView == "" {
 				m.status = "No favourite view set yet."
 				m.isStatusErr = true
 				return m, nil
 			}
 			m.history = append(m.history, navEntry{state: m.state, data: m.stateData})
-			cmd := m.switchState(stateIssues, m.cfg.FavoriteView, false)
+			cmd := m.switchState(stateIssues, favView, false)
 			return m, cmd
 		}
 		if msg.String() == "q" {
