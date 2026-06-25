@@ -133,7 +133,10 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "fields": ["ID", "Summary", "State", "Priority", "Assignee"],
   "custom_types": ["Bug", "Task", "Ops", "Initiative", "Epic"],
   "custom_priorities": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"],
-  "custom_states": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"],
+  "custom_states": {
+    "default": ["Open", "In Progress", "Verified", "Done", "Duplicate", "Won't fix", "Incomplete"],
+    "MTEL": ["In Development", "Testing", "Closed"]
+  },
   "sort_column": "ID",
   "sort_direction": "asc",
   "favorite_view": "",
@@ -153,7 +156,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]`                             | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`, `Updated`, `Updater`, `Created`, `Creator`/`Reporter`) as well as custom field names.                 |
 | `custom_types`        | Array of Strings | `[]` (empty)                                                                     | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.).                                                        |
 | `custom_priorities`   | Array of Strings | `[]` (empty)                                                                     | Custom list of issue priority options to populate the creation dropdown instead of the standard default list (Minor, Normal, Major, etc.).                                                  |
-| `custom_states`       | Array of Strings | `[]` (empty)                                                                     | Custom list of issue state transition options to populate the state selection modal instead of the standard default list (Open, In Progress, Verified, etc.).                               |
+| `custom_states`       | Object           | `{}` (empty)                                                                     | Custom list of issue state transition options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["New", "In Dev"], "default": ["Open", "Closed"]}`) to populate the state selection modal. Supports legacy array format as a fallback. |
 | `filtered_states`     | Array of Strings | `[]` (empty)                                                                     | List of selected issue states to display on the tasks list. States not in this list will be filtered out.                                                                                   |
 | `filtered_priorities` | Array of Strings | `[]` (empty)                                                                     | List of selected issue priorities to display on the tasks list. Priorities not in this list will be filtered out.                                                                           |
 | `sort_column`         | String           | `""`                                                                             | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |

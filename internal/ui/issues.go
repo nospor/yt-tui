@@ -258,7 +258,14 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 	state := issue.State()
 	// Check if state is in CustomStates
 	inCustomStates := false
-	for _, cs := range m.cfg.CustomStates {
+	projectCode := m.projectCode
+	if projectCode == "" && issue.Project != nil {
+		projectCode = issue.Project.ShortName
+		if projectCode == "" {
+			projectCode = issue.Project.ID
+		}
+	}
+	for _, cs := range m.cfg.GetCustomStates(projectCode) {
 		if strings.EqualFold(cs, state) {
 			inCustomStates = true
 			break
@@ -380,8 +387,16 @@ func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 	}
 
 	if titleLower == "state" && m.cfg != nil {
-		idxA := stateIndex(valA, m.cfg.CustomStates)
-		idxB := stateIndex(valB, m.cfg.CustomStates)
+		projectCode := m.projectCode
+		if projectCode == "" && a.Project != nil {
+			projectCode = a.Project.ShortName
+			if projectCode == "" {
+				projectCode = a.Project.ID
+			}
+		}
+		states := m.cfg.GetCustomStates(projectCode)
+		idxA := stateIndex(valA, states)
+		idxB := stateIndex(valB, states)
 		if idxA != -1 && idxB != -1 {
 			if idxA < idxB {
 				return -1
@@ -775,7 +790,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			numStates := 0
 			numPriorities := 0
 			if m.cfg != nil {
-				numStates = len(m.cfg.CustomStates)
+				numStates = len(m.cfg.GetCustomStates(m.projectCode))
 				numPriorities = len(m.cfg.CustomPriorities)
 			}
 			totalOptions := numStates + numPriorities
@@ -836,8 +851,9 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				return m, nil
 			case " ":
 				if m.cfg != nil {
+					states := m.cfg.GetCustomStates(m.projectCode)
 					if m.filterCursor < numStates {
-						stateName := m.cfg.CustomStates[m.filterCursor]
+						stateName := states[m.filterCursor]
 						m.tempStates[stateName] = !m.tempStates[stateName]
 					} else {
 						priorityName := m.cfg.CustomPriorities[m.filterCursor-numStates]
@@ -848,7 +864,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			case "enter":
 				if m.cfg != nil {
 					newStates := []string{}
-					for _, s := range m.cfg.CustomStates {
+					for _, s := range m.cfg.GetCustomStates(m.projectCode) {
 						if m.tempStates[s] {
 							newStates = append(newStates, s)
 						}
@@ -1081,7 +1097,8 @@ func (m issuesModel) View() string {
 		// Build states column
 		var statesCol strings.Builder
 		statesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" STATES") + "\n\n")
-		for i, s := range m.cfg.CustomStates {
+		states := m.cfg.GetCustomStates(m.projectCode)
+		for i, s := range states {
 			checked := "[ ]"
 			if m.tempStates[s] {
 				checked = "[x]"
@@ -1097,7 +1114,7 @@ func (m issuesModel) View() string {
 		// Build priorities column
 		var prioritiesCol strings.Builder
 		prioritiesCol.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(" PRIORITIES") + "\n\n")
-		numStates := len(m.cfg.CustomStates)
+		numStates := len(states)
 		for i, p := range m.cfg.CustomPriorities {
 			checked := "[ ]"
 			if m.tempPriorities[p] {

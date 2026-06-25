@@ -159,7 +159,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 
 	var states []string
 	if cfg != nil {
-		states = cfg.CustomStates
+		states = cfg.GetCustomStates("")
 	}
 
 	fp := filepicker.New()
@@ -381,6 +381,18 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.activities = msg.activities
 		m.trackTimeTypes = msg.trackTimeTypes
 		m.repoOptions = msg.repoOptions
+
+		// Load custom states for the issue's project
+		var projectCode string
+		if m.issue != nil && m.issue.Project != nil {
+			projectCode = m.issue.Project.ShortName
+			if projectCode == "" {
+				projectCode = m.issue.Project.ID
+			}
+		}
+		if m.cfg != nil {
+			m.stateOptions = m.cfg.GetCustomStates(projectCode)
+		}
 
 		// Initialize viewports and set content
 		m.updateViewportSizes()

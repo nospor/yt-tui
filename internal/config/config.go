@@ -2,9 +2,34 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
+
+// CustomStatesMap represents custom states configured per project, or a default fallback.
+type CustomStatesMap map[string][]string
+
+// UnmarshalJSON handles loading custom_states either as a list of strings (legacy/fallback) or a map of list of strings.
+func (c *CustomStatesMap) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as map first
+	var m map[string][]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		*c = m
+		return nil
+	}
+
+	// If that fails, try unmarshaling as a slice of strings
+	var s []string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*c = map[string][]string{
+			"default": s,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("custom_states must be either a list of strings or a map of list of strings")
+}
 
 // Config represents the application configuration.
 type Config struct {
@@ -16,7 +41,7 @@ type Config struct {
 	Fields              []string            `json:"fields"`
 	CustomTypes         []string            `json:"custom_types"`
 	CustomPriorities    []string            `json:"custom_priorities"`
-	CustomStates        []string            `json:"custom_states"`
+	CustomStates        CustomStatesMap     `json:"custom_states"`
 	WorkTypes           []string            `json:"work_types"`
 	FilteredStates      []string            `json:"filtered_states"`
 	FilteredPriorities  []string            `json:"filtered_priorities"`
@@ -30,6 +55,24 @@ type Config struct {
 	FilepickerSortOrder string              `json:"filepicker_sort_order,omitempty"`
 	FilepickerLastDir   string              `json:"filepicker_last_dir,omitempty"`
 	Actions             []ActionConfig      `json:"actions,omitempty"`
+}
+
+// GetCustomStates returns the list of custom states for the given project.
+// If projectCode is empty or not found, it falls back to the "default" key,
+// and finally to config.DefaultStates.
+func (cfg *Config) GetCustomStates(projectCode string) []string {
+	if cfg == nil || len(cfg.CustomStates) == 0 {
+		return DefaultStates
+	}
+	if projectCode != "" {
+		if states, ok := cfg.CustomStates[projectCode]; ok && len(states) > 0 {
+			return states
+		}
+	}
+	if states, ok := cfg.CustomStates["default"]; ok && len(states) > 0 {
+		return states
+	}
+	return DefaultStates
 }
 
 type ActionCommand struct {
@@ -74,7 +117,7 @@ func LoadConfig() (*Config, error) {
 			Fields:             DefaultFields,
 			CustomTypes:        DefaultTypes,
 			CustomPriorities:   DefaultPriorities,
-			CustomStates:       DefaultStates,
+			CustomStates:       map[string][]string{"default": DefaultStates},
 			WorkTypes:          DefaultWorkTypes,
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
@@ -94,7 +137,7 @@ func LoadConfig() (*Config, error) {
 			Fields:             DefaultFields,
 			CustomTypes:        DefaultTypes,
 			CustomPriorities:   DefaultPriorities,
-			CustomStates:       DefaultStates,
+			CustomStates:       map[string][]string{"default": DefaultStates},
 			FilteredStates:     append([]string{}, DefaultStates...),
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
 			ActivityFilters:    []string{"Comments"},
@@ -109,7 +152,7 @@ func LoadConfig() (*Config, error) {
 		Fields:             DefaultFields,
 		CustomTypes:        DefaultTypes,
 		CustomPriorities:   DefaultPriorities,
-		CustomStates:       DefaultStates,
+		CustomStates:       map[string][]string{"default": DefaultStates},
 		WorkTypes:          DefaultWorkTypes,
 		FilteredStates:     append([]string{}, DefaultStates...),
 		FilteredPriorities: append([]string{}, DefaultPriorities...),
@@ -167,7 +210,7 @@ func LoadConfig() (*Config, error) {
 		needsWrite = true
 	}
 	if len(fileCfg.CustomStates) == 0 {
-		fileCfg.CustomStates = DefaultStates
+		fileCfg.CustomStates = map[string][]string{"default": DefaultStates}
 		needsWrite = true
 	}
 	if len(fileCfg.WorkTypes) == 0 {
@@ -175,7 +218,22 @@ func LoadConfig() (*Config, error) {
 		needsWrite = true
 	}
 	if fileCfg.FilteredStates == nil {
-		fileCfg.FilteredStates = append([]string{}, fileCfg.CustomStates...)
+		// Gather all unique states from the map
+		uniqueStates := make(map[string]bool)
+		for _, states := range fileCfg.CustomStates {
+			for _, s := range states {
+				uniqueStates[s] = true
+			}
+		}
+		if len(uniqueStates) == 0 {
+			for _, s := range DefaultStates {
+				uniqueStates[s] = true
+			}
+		}
+		fileCfg.FilteredStates = make([]string, 0, len(uniqueStates))
+		for s := range uniqueStates {
+			fileCfg.FilteredStates = append(fileCfg.FilteredStates, s)
+		}
 		needsWrite = true
 	}
 	if fileCfg.FilteredPriorities == nil {
