@@ -1,4 +1,14 @@
 
+## [0.6.6] - 2026-06-25
+
+### Features
+
+- *(form)* Show errors as dismissable popup overlay ([7d82f79](https://github.com/nospor/yt-tui/commit/7d82f798d4a27c0c30eb6906828d7fbc04b471ba))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.5 [skip ci] ([a1d1d6e](https://github.com/nospor/yt-tui/commit/a1d1d6e4cc3584766f0022a34493b965f24fd218))
+
 ## [0.6.5] - 2026-06-25
 
 ### Features
