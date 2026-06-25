@@ -11,6 +11,7 @@ import (
 	"yt-tui/internal/filepicker"
 	"yt-tui/internal/ytcli"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -40,6 +41,7 @@ type formModel struct {
 	isEdit       bool
 	editKey      string
 	err          error
+	errPopupShow bool
 	spinner      spinner.Model
 	width        int
 	height       int
@@ -397,6 +399,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 	case projectsLoadedMsg:
 		if msg.err != nil {
 			m.err = msg.err
+			m.errPopupShow = true
 			return m, nil
 		}
 		m.projects = msg.projects
@@ -409,6 +412,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.errPopupShow = true
 			return m, nil
 		}
 
@@ -442,6 +446,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.errPopupShow = true
 			return m, nil
 		}
 		var proj string
@@ -460,6 +465,15 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		// Handle error popup keys
+		if m.errPopupShow {
+			if msg.String() == "y" && m.err != nil {
+				_ = clipboard.WriteAll(m.err.Error())
+			}
+			m.errPopupShow = false
+			m.err = nil
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+v", "ctrl+shift+v", "ctrl+V":
 			if !m.loading && m.focusIndex == fieldDescription {
@@ -479,6 +493,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 					return m, nil
 				} else if err != nil {
 					m.err = err
+					m.errPopupShow = true
 				}
 			}
 		case "ctrl+f":
@@ -513,6 +528,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				sum := m.summaryInput.Value()
 				if proj == "" || sum == "" {
 					m.err = fmt.Errorf("Project and Summary fields are required")
+					m.errPopupShow = true
 					return m, nil
 				}
 
@@ -785,9 +801,9 @@ func (m *formModel) focusCurrent() {
 }
 
 func (m formModel) View() string {
-	if m.err != nil {
-		return StyleErrorMessage.Render(fmt.Sprintf("Error: %v", m.err))
-	}
+	// Non-popup errors (e.g. load failures before form is shown) fall through to
+	// the spinner/loading path or are shown inline. Popup errors are rendered as
+	// an overlay after building the full form view below.
 
 	if m.loading {
 		statusText := "Creating issue..."
@@ -976,7 +992,72 @@ func (m formModel) View() string {
 		}
 		view = overlayLines(view, popup, x, y)
 	}
+
+	if m.errPopupShow && m.err != nil {
+		errorPopup := m.renderErrorPopup()
+		popupWidth := lipgloss.Width(errorPopup)
+		popupHeight := lipgloss.Height(errorPopup)
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, errorPopup, x, y)
+	}
+
 	return view
+}
+
+func (m formModel) renderErrorPopup() string {
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true)
+	title := titleStyle.Render("⚠  Error")
+
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Render(strings.Repeat("─", 56))
+
+	errMsg := ""
+	if m.err != nil {
+		errMsg = m.err.Error()
+	}
+
+	// Wrap long error messages
+	const maxLineLen = 56
+	var wrappedLines []string
+	for len(errMsg) > maxLineLen {
+		wrappedLines = append(wrappedLines, errMsg[:maxLineLen])
+		errMsg = errMsg[maxLineLen:]
+	}
+	wrappedLines = append(wrappedLines, errMsg)
+
+	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText))
+	var errLines []string
+	for _, l := range wrappedLines {
+		errLines = append(errLines, errStyle.Render(l))
+	}
+
+	footer := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Italic(true).Render("[y] Copy to clipboard  [any] Dismiss")
+
+	popupContent := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		divider,
+		"",
+		lipgloss.JoinVertical(lipgloss.Left, errLines...),
+		"",
+		divider,
+		"",
+		footer,
+	)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorRed)).
+		Background(lipgloss.Color(ColorSurface)).
+		Padding(1, 2).
+		Width(60).
+		Render(popupContent)
 }
 
 func (m formModel) renderFilePickerPopup() string {
