@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"yt-tui/internal/config"
 	"yt-tui/internal/ytcli"
 
@@ -18,22 +19,24 @@ const (
 )
 
 type dashboardModel struct {
-	client        *ytcli.Client
-	cfg           *config.Config
-	issues        []ytcli.Issue
-	projects      []ytcli.Project
-	active        activePanel
-	issueCursor   int
-	projectCursor int
-	loadingIssues bool
-	loadingProj   bool
-	err           error
-	spinner       spinner.Model
-	width         int
-	height        int
-	actionMode    bool
-	actionCursor  int
-	loadingText   string
+	client              *ytcli.Client
+	cfg                 *config.Config
+	issues              []ytcli.Issue
+	projects            []ytcli.Project
+	active              activePanel
+	issueCursor         int
+	projectCursor       int
+	issueScrollOffset   int
+	projectScrollOffset int
+	loadingIssues       bool
+	loadingProj         bool
+	err                 error
+	spinner             spinner.Model
+	width               int
+	height              int
+	actionMode          bool
+	actionCursor        int
+	loadingText         string
 }
 
 func newDashboardModel(client *ytcli.Client, cfg *config.Config) dashboardModel {
@@ -85,7 +88,10 @@ func (m dashboardModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, m.loadDataCmd())
 }
 
-func (m dashboardModel) Update(msg tea.Msg) (dashboardModel, tea.Cmd) {
+func (m dashboardModel) Update(msg tea.Msg) (res dashboardModel, retCmd tea.Cmd) {
+	defer func() {
+		res.updateScrollOffsets()
+	}()
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
@@ -326,19 +332,46 @@ func (m dashboardModel) View() string {
 	panelWidth := (m.width - 6) / 2
 	panelHeight := m.height - 4
 
+	maxVisibleIssues := panelHeight - 4
+	if maxVisibleIssues < 1 {
+		maxVisibleIssues = 1
+	}
+
 	// Issues Panel
 	var issuesContent string
 	if len(m.issues) == 0 {
 		issuesContent = StyleSubtext.Render("No open assigned issues!")
 	} else {
 		lines := []string{}
-		for i, issue := range m.issues {
+		start := m.issueScrollOffset
+		end := start + maxVisibleIssues
+		if start > len(m.issues) {
+			start = 0
+		}
+		if end > len(m.issues) {
+			end = len(m.issues)
+		}
+		if start > end {
+			start = end
+		}
+		for i := start; i < end; i++ {
+			issue := m.issues[i]
 			var line string
-			badge := GetStateBadge(issue.State())
-			badgeWidth := lipgloss.Width(badge)
 
-			// Calculate remaining width for summary (padding safety margin of 6)
-			availWidth := panelWidth - 10 - badgeWidth - 6
+			stateWidth := 15
+			stateStr := issue.State()
+			if len(stateStr) > stateWidth {
+				stateStr = stateStr[:stateWidth]
+			}
+			badge := GetStateBadge(stateStr)
+			spacesNeeded := stateWidth - len(stateStr)
+			badgePadded := badge
+			if spacesNeeded > 0 {
+				badgePadded += strings.Repeat(" ", spacesNeeded)
+			}
+
+			// Calculate remaining width for summary (padding safety margin of 4)
+			availWidth := panelWidth - 10 - stateWidth - 4
 			if availWidth < 10 {
 				availWidth = 10
 			}
@@ -348,12 +381,18 @@ func (m dashboardModel) View() string {
 			if i == m.issueCursor && m.active == panelIssues {
 				// Highlighted: style the entire line. Do not apply styling to the ID or state
 				// so that they get the contrasting background/foreground highlight colors.
-				plainLine := fmt.Sprintf("%-10s %-*s %s", issue.IDReadable, availWidth, summaryTrunc, issue.State())
+				statePadded := stateStr
+				if spacesNeeded > 0 {
+					statePadded += strings.Repeat(" ", spacesNeeded)
+				}
+				plainLine := fmt.Sprintf("%-10s %-*s %s", issue.IDReadable, availWidth, summaryTrunc, statePadded)
 				line = StyleSelected.Width(panelWidth - 2).Render(plainLine)
 			} else {
 				// Normal: style the ID with Cyan
+				idPadded := fmt.Sprintf("%-10s", issue.IDReadable)
 				keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan))
-				line = fmt.Sprintf("%-10s %-*s %s", keyStyle.Render(issue.IDReadable), availWidth, summaryTrunc, badge)
+				idStyle := keyStyle.Render(idPadded)
+				line = fmt.Sprintf("%s %-*s %s", idStyle, availWidth, summaryTrunc, badgePadded)
 			}
 			lines = append(lines, line)
 		}
@@ -370,13 +409,30 @@ func (m dashboardModel) View() string {
 		Height(panelHeight).
 		Render(lipgloss.JoinVertical(lipgloss.Left, issuesTitle, "", issuesContent))
 
+	maxVisibleProjects := panelHeight - 4
+	if maxVisibleProjects < 1 {
+		maxVisibleProjects = 1
+	}
+
 	// Projects Panel
 	var projectsContent string
 	if len(m.projects) == 0 {
 		projectsContent = StyleSubtext.Render("No projects found.")
 	} else {
 		lines := []string{}
-		for i, proj := range m.projects {
+		start := m.projectScrollOffset
+		end := start + maxVisibleProjects
+		if start > len(m.projects) {
+			start = 0
+		}
+		if end > len(m.projects) {
+			end = len(m.projects)
+		}
+		if start > end {
+			start = end
+		}
+		for i := start; i < end; i++ {
+			proj := m.projects[i]
 			var line string
 
 			// Calculate remaining width for project name
@@ -462,4 +518,32 @@ func truncateString(s string, maxLen int) string {
 		return string(runes[:maxLen])
 	}
 	return s
+}
+
+func (m *dashboardModel) updateScrollOffsets() {
+	panelHeight := m.height - 4
+	maxVisibleIssues := panelHeight - 4
+	if maxVisibleIssues < 1 {
+		maxVisibleIssues = 1
+	}
+	m.issueScrollOffset = calculateScrollOffset(m.issueCursor, m.issueScrollOffset, maxVisibleIssues, len(m.issues))
+
+	maxVisibleProjects := panelHeight - 4
+	if maxVisibleProjects < 1 {
+		maxVisibleProjects = 1
+	}
+	m.projectScrollOffset = calculateScrollOffset(m.projectCursor, m.projectScrollOffset, maxVisibleProjects, len(m.projects))
+}
+
+func calculateScrollOffset(cursor, offset, maxVisible, total int) int {
+	if total <= maxVisible {
+		return 0
+	}
+	if cursor < offset {
+		return cursor
+	}
+	if cursor >= offset+maxVisible {
+		return cursor - maxVisible + 1
+	}
+	return offset
 }
