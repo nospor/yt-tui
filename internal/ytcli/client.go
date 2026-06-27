@@ -12,18 +12,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"yt-tui/internal/config"
 )
 
 // Client wraps YouTrack API operations.
 type Client struct {
-	baseURL string
-	token   string
+	baseURL    string
+	token      string
+	httpClient *http.Client
 }
 
 // NewClient creates a new REST Client and loads credentials from config.json.
 func NewClient() *Client {
-	c := &Client{}
+	c := &Client{
+		httpClient: &http.Client{
+			Timeout: 15 * time.Second,
+		},
+	}
 	cfg, err := config.LoadConfig()
 	if err == nil {
 		c.baseURL = cfg.URL
@@ -93,9 +99,18 @@ func (c *Client) newRequest(method, endpoint string, body io.Reader) (*http.Requ
 
 // doRequest helper executes the http.Request and returns body and status.
 func (c *Client) doRequest(req *http.Request) ([]byte, int, error) {
-	client := &http.Client{}
+	client := c.httpClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: 15 * time.Second,
+		}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded") || strings.Contains(errStr, "Client.Timeout") {
+			return nil, 0, fmt.Errorf("connection timed out: %w\n\n💡 Tip: Since you are on a VPN, check if a proxy is required. If so, make sure to export HTTP_PROXY or HTTPS_PROXY in your terminal before launching yt-tui.", err)
+		}
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
@@ -413,7 +428,9 @@ func (c *Client) DownloadAttachment(attachmentURL string, destPath string) error
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -472,7 +489,9 @@ func (c *Client) UploadAttachment(issueID string, filename string, content []byt
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
