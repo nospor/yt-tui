@@ -77,6 +77,29 @@ sudo cp yt-tui /usr/local/bin/
 
 ---
 
+## 🏃 Usage
+
+You can launch `yt-tui` without any parameters to open the welcome screen or the dashboard:
+
+```bash
+yt-tui
+```
+
+### Direct Issue Link Loading
+You can also launch `yt-tui` directly with a YouTrack issue URL as an argument:
+
+```bash
+yt-tui https://youtrack.example.com/issue/PROJ-123
+```
+
+When you pass a URL:
+1. `yt-tui` parses the URL to extract the base YouTrack server and the issue ID (e.g., `PROJ-123`).
+2. It searches your configured servers in `config.json` (either the `url` field or the `servers` list).
+3. If it finds a matching server, it automatically connects to that server and opens the issue detail view directly.
+4. If no configured server matches the URL, it will display the welcome/login screen with the YouTrack Base URL pre-filled so you can enter your API token.
+
+---
+
 ## ⚙️ Configuration
 
 `yt-tui` loads its user settings and credentials from a JSON file located at `~/.config/yt-tui/config.json`. The file and its parent directories are automatically created with default settings on the first run.

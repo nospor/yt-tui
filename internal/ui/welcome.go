@@ -30,7 +30,7 @@ type welcomeModel struct {
 	selectedServerIndex int
 }
 
-func newWelcomeModel(client *ytcli.Client, cfg *config.Config, configErr error) welcomeModel {
+func newWelcomeModel(client *ytcli.Client, cfg *config.Config, configErr error, prefilledURL string) welcomeModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet))
@@ -65,12 +65,21 @@ func newWelcomeModel(client *ytcli.Client, cfg *config.Config, configErr error) 
 		configErr:  configErr,
 	}
 
-	if cfg != nil && len(cfg.Servers) > 0 {
-		m.servers = cfg.Servers
-		m.selectingServer = true
+	if prefilledURL != "" {
+		m.urlInput.SetValue(prefilledURL)
+		m.urlInput.Blur()
+		m.tokenInput.Focus()
+		m.focusIndex = 1
+		m.selectingServer = false
+		m.checking = false
 	} else {
-		if prevURL != "" {
-			m.checking = true
+		if cfg != nil && len(cfg.Servers) > 0 {
+			m.servers = cfg.Servers
+			m.selectingServer = true
+		} else {
+			if prevURL != "" {
+				m.checking = true
+			}
 		}
 	}
 

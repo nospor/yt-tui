@@ -85,20 +85,71 @@ type AppModel struct {
 	form      formModel
 }
 
-func NewAppModel() AppModel {
+func NewAppModel(initialURL string) AppModel {
 	client := ytcli.NewClient()
 	cfg, err := config.LoadConfig()
+
+	var startState State = stateWelcome
+	var startData string
+	var prefilledURL string
+	var history []navEntry
+
+	if initialURL != "" {
+		targetBaseURL, targetIssueID := parseYouTrackURL(initialURL)
+		if targetBaseURL != "" && targetIssueID != "" {
+			var matchedServer *config.ServerConfig
+			if cfg != nil {
+				normalizedTarget := normalizeURL(targetBaseURL)
+				for i := range cfg.Servers {
+					if normalizeURL(cfg.Servers[i].URL) == normalizedTarget {
+						matchedServer = &cfg.Servers[i]
+						break
+					}
+				}
+				if matchedServer == nil && normalizeURL(cfg.URL) == normalizedTarget {
+					matchedServer = &config.ServerConfig{
+						URL:   cfg.URL,
+						Token: cfg.Token,
+					}
+				}
+			}
+
+			if matchedServer != nil {
+				client.SetCredentials(matchedServer.URL, matchedServer.Token)
+				startState = stateDetail
+				startData = targetIssueID
+				history = []navEntry{{state: stateDashboard}}
+			} else {
+				prefilledURL = targetBaseURL
+			}
+		}
+	}
+
+	detail := newDetailModel(client, cfg)
+	if startState == stateDetail {
+		detail.issueKey = startData
+		detail.loading = true
+		detail.err = nil
+		detail.mode = modeNormal
+		detail.isModified = false
+		detail.activeViewport = 0
+		detail.linksCursor = 0
+		detail.attachmentsCursor = 0
+		detail.loadingText = ""
+	}
 
 	return AppModel{
 		client:    client,
 		cfg:       cfg,
-		state:     stateWelcome,
-		welcome:   newWelcomeModel(client, cfg, err),
+		state:     startState,
+		stateData: startData,
+		history:   history,
+		welcome:   newWelcomeModel(client, cfg, err, prefilledURL),
 		dashboard: newDashboardModel(client, cfg),
 		projects:  newProjectsModel(client),
 		boards:    newBoardsModel(client),
 		issues:    newIssuesModel(client, cfg),
-		detail:    newDetailModel(client, cfg),
+		detail:    detail,
 		form:      newFormModel(client, cfg),
 	}
 }
@@ -110,6 +161,9 @@ func (m *AppModel) reloadConfig() {
 }
 
 func (m AppModel) Init() tea.Cmd {
+	if m.state == stateDetail {
+		return m.detail.loadDetailCmd()
+	}
 	return m.welcome.Init()
 }
 
@@ -521,6 +575,33 @@ func (m AppModel) View() string {
 
 var issueIDRegex = regexp.MustCompile(`(?i)^[a-z0-9]+-\d+$`)
 var issueURLRegex = regexp.MustCompile(`(?i)/issue/([a-z0-9]+-\d+)`)
+
+func normalizeURL(u string) string {
+	u = strings.ToLower(strings.TrimSpace(u))
+	u = strings.TrimSuffix(u, "/")
+	return u
+}
+
+func parseYouTrackURL(u string) (string, string) {
+	lowerU := strings.ToLower(u)
+	idx := strings.Index(lowerU, "/issue/")
+	if idx == -1 {
+		return "", ""
+	}
+	baseURL := u[:idx]
+	issueIDPart := u[idx+len("/issue/"):]
+
+	if qIdx := strings.IndexAny(issueIDPart, "?#/ "); qIdx != -1 {
+		issueIDPart = issueIDPart[:qIdx]
+	}
+
+	issueID := strings.ToUpper(issueIDPart)
+	if !issueIDRegex.MatchString(issueID) {
+		return "", ""
+	}
+
+	return baseURL, issueID
+}
 
 func extractIssueIDFromURL(val string) string {
 	matches := issueURLRegex.FindStringSubmatch(val)
