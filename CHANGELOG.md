@@ -1,4 +1,18 @@
 
+## [0.6.8] - 2026-06-27
+
+### Features
+
+- Support launching yt-tui directly with a YouTrack issue URL ([15404ed](https://github.com/nospor/yt-tui/commit/15404edb6a891e09a0fc652ca6de63b8e5b8dbd5))
+
+### Bug Fixes
+
+- *(ytcli)* Add http client timeouts and vpn/proxy troubleshooting tips ([52eee9c](https://github.com/nospor/yt-tui/commit/52eee9c305ccb50f0798e11ff1a395dfc836469d))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.7 [skip ci] ([49ccbdc](https://github.com/nospor/yt-tui/commit/49ccbdc0f84e0c28362343b209928ef945b4200a))
+
 ## [0.6.7] - 2026-06-27
 
 ### Features
