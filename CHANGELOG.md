@@ -1,4 +1,14 @@
 
+## [0.6.7] - 2026-06-27
+
+### Features
+
+- *(ui)* Add dashboard panel scrolling and fix column alignment ([6bbe278](https://github.com/nospor/yt-tui/commit/6bbe27877ecada4c546694129f6cd121f8c9f6f7))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.6 [skip ci] ([69bf93f](https://github.com/nospor/yt-tui/commit/69bf93fa848285cce50797f055d43f71f958f3a0))
+
 ## [0.6.6] - 2026-06-25
 
 ### Features
