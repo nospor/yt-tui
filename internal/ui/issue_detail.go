@@ -2513,9 +2513,26 @@ func (m *detailModel) downloadAndOpenFileCmd(att ytcli.Attachment) tea.Cmd {
 			return openFileFinishedMsg{err: fmt.Errorf("failed to download attachment: %w", err)}
 		}
 
-		cmd := exec.Command("xdg-open", destPath)
+		var cmd *exec.Cmd
+		ext := strings.ToLower(filepath.Ext(att.Name))
+		isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".webp"
+		viewerName := "xdg-open"
+
+		if isImage && m.cfg != nil && m.cfg.ImageViewer != "" {
+			parts := strings.Fields(m.cfg.ImageViewer)
+			if len(parts) > 0 {
+				viewerName = parts[0]
+				args := append(parts[1:], destPath)
+				cmd = exec.Command(viewerName, args...)
+			} else {
+				cmd = exec.Command("xdg-open", destPath)
+			}
+		} else {
+			cmd = exec.Command("xdg-open", destPath)
+		}
+
 		if err := cmd.Start(); err != nil {
-			return openFileFinishedMsg{err: fmt.Errorf("failed to open file with xdg-open: %w", err)}
+			return openFileFinishedMsg{err: fmt.Errorf("failed to open file with %s: %w", viewerName, err)}
 		}
 
 		return openFileFinishedMsg{fileName: att.Name, filePath: destPath}

@@ -80,6 +80,7 @@ type Config struct {
 	FilepickerSortOrder string              `json:"filepicker_sort_order,omitempty"`
 	FilepickerLastDir   string              `json:"filepicker_last_dir,omitempty"`
 	Actions             []ActionConfig      `json:"actions,omitempty"`
+	ImageViewer         string              `json:"image_viewer,omitempty"`
 }
 
 // GetCustomStates returns the list of custom states for the given project.

@@ -167,7 +167,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "sort_direction": "asc",
   "favorite_view": "",
   "favorite_views": {},
-  "render_markdown": true
+  "render_markdown": true,
+  "image_viewer": "sxiv"
 }
 ```
 
@@ -197,6 +198,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `filepicker_sort_order`| String          | `""`                                                                             | The sorting direction of the file picker (`asc` or `desc`).                                                                                                                                 |
 | `filepicker_last_dir` | String           | `""`                                                                             | The last directory visited by the file picker.                                                                                                                                             |
 | `actions`             | Array of Objects | `[]` (empty)                                                                     | Custom templated action sequences triggered by `Space`. See [Custom Quick Actions](#-custom-quick-actions) below.                                                                             |
+| `image_viewer`        | String           | `""` (empty)                                                                     | The command or executable to open image attachments (e.g. `sxiv` or `feh`). If empty or not an image file, it defaults to `xdg-open`.                                                        |
 
 ### ⚡ Custom Quick Actions
 
