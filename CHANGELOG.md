@@ -1,4 +1,14 @@
 
+## [0.7.0] - 2026-06-29
+
+### Features
+
+- Support custom image viewer for image attachments ([b7dc71e](https://github.com/nospor/yt-tui/commit/b7dc71e5cdbc9c60f8b45f4feba3da8e04792d9d))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.9 [skip ci] ([b049ec3](https://github.com/nospor/yt-tui/commit/b049ec3fc3cc8a4c7e0e9c8a0d192274092ebadd))
+
 ## [0.6.9] - 2026-06-29
 
 ### Features
