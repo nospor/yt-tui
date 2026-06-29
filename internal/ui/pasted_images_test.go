@@ -46,14 +46,14 @@ func TestCommentPasteScreenshotsIncremental(t *testing.T) {
 	m := newDetailModel(nil, nil)
 	m.loading = false // MUST clear loading to process keys!
 	m.mode = modeCommentInput
-	m.textInput.SetValue("thi ")
-	m.textInput.SetCursor(4)
+	m.commentInput.SetValue("thi ")
+	m.commentInput.SetCursor(4)
 
 	// Simulate first paste
 	vMsg := tea.KeyMsg{Type: tea.KeyCtrlV}
 	m, _ = m.Update(vMsg)
 
-	val1 := m.textInput.Value()
+	val1 := m.commentInput.Value()
 	re1 := regexp.MustCompile(`^thi !\[pasted-image-\d{8}-\d{6}-1\.png\]\(pasted-image-\d{8}-\d{6}-1\.png\)$`)
 	if !re1.MatchString(val1) {
 		t.Errorf("value '%s' does not match pattern", val1)
@@ -63,13 +63,13 @@ func TestCommentPasteScreenshotsIncremental(t *testing.T) {
 	}
 
 	// Type a space and "2 "
-	m.textInput.SetValue(val1 + " 2 ")
-	m.textInput.SetCursor(len([]rune(m.textInput.Value())))
+	m.commentInput.SetValue(val1 + " 2 ")
+	m.commentInput.SetCursor(len([]rune(m.commentInput.Value())))
 
 	// Simulate second paste
 	m, _ = m.Update(vMsg)
 
-	val2 := m.textInput.Value()
+	val2 := m.commentInput.Value()
 	re2 := regexp.MustCompile(`^thi !\[pasted-image-\d{8}-\d{6}-1\.png\]\(pasted-image-\d{8}-\d{6}-1\.png\) 2 !\[pasted-image-\d{8}-\d{6}-2\.png\]\(pasted-image-\d{8}-\d{6}-2\.png\)$`)
 	if !re2.MatchString(val2) {
 		t.Errorf("value '%s' does not match pattern", val2)

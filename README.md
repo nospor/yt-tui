@@ -314,11 +314,11 @@ Supported action command types:
 * `d` (in Attachments viewport): Delete the highlighted attachment (with confirmation).
 * `Ctrl+f`: Open the file browser popup to pick and attach files from your computer to the issue immediately.
 * `Space`: Open the custom quick Actions popup to quickly update the issue using a templated sequence (either select via list or hit shortcut number).
-* `c`: Add a comment. Type your comment and press `Enter` to submit, or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, or `Ctrl+f` to open the file browser popup to pick and attach files from your computer.
+* `c`: Add a comment. Type your comment and press `Enter` to submit, `Alt+Enter` to insert a newline (multiline), or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, or `Ctrl+f` to open the file browser popup to pick and attach files from your computer.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
 * `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
-* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Ctrl+v` image paste and `Ctrl+f` computer file attachment inside the comment editor).
+* `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Alt+Enter` for newlines, `Ctrl+v` image paste, and `Ctrl+f` computer file attachment inside the comment editor).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details, and automatically links the new issue back to the original under the "Is clone of" relationship.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `i`: Copy just the task ID to the clipboard.

@@ -99,6 +99,7 @@ type detailModel struct {
 	// Sub-modes fields
 	mode            detailMode
 	textInput       textinput.Model
+	commentInput    textarea.Model
 	stateOptions    []string
 	stateCursor     int
 	repoOptions     []string
@@ -157,6 +158,14 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 	commIn.FocusedStyle.Text = commIn.FocusedStyle.Text.Background(lipgloss.Color(ColorSurface))
 	commIn.BlurredStyle.Text = commIn.BlurredStyle.Text.Background(lipgloss.Color(ColorSurface))
 
+	commentInput := textarea.New()
+	commentInput.Placeholder = "Add a comment..."
+	commentInput.SetHeight(3)
+	commentInput.FocusedStyle.Base = commentInput.FocusedStyle.Base.Background(lipgloss.Color(ColorSurface))
+	commentInput.BlurredStyle.Base = commentInput.BlurredStyle.Base.Background(lipgloss.Color(ColorSurface))
+	commentInput.FocusedStyle.Text = commentInput.FocusedStyle.Text.Background(lipgloss.Color(ColorSurface))
+	commentInput.BlurredStyle.Text = commentInput.BlurredStyle.Text.Background(lipgloss.Color(ColorSurface))
+
 	var states []string
 	if cfg != nil {
 		states = cfg.GetCustomStates("")
@@ -197,6 +206,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 		loading:                true,
 		mode:                   modeNormal,
 		textInput:              ti,
+		commentInput:           commentInput,
 		stateOptions:           states,
 		repoOptions:            nil,
 		descViewport:           viewport.New(0, 0),
@@ -348,7 +358,11 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					} else {
 						markdownRef = fmt.Sprintf("[%s](%s)", filename, filename)
 					}
-					m.textInput = insertAtCursor(m.textInput, markdownRef)
+					if m.mode == modeCommentInput || m.mode == modeCommentEdit {
+						m.commentInput.InsertString(markdownRef)
+					} else {
+						m.textInput = insertAtCursor(m.textInput, markdownRef)
+					}
 					return m, nil
 				}
 			}
@@ -451,7 +465,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 						Bytes:       imgBytes,
 						ContentType: contentType,
 					})
-					m.textInput = insertAtCursor(m.textInput, fmt.Sprintf("![%s](%s)", filename, filename))
+					m.commentInput.InsertString(fmt.Sprintf("![%s](%s)", filename, filename))
 					return m, nil
 				} else if err != nil {
 					m.err = err
@@ -464,8 +478,15 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				m.filepicker.SetHeight(h)
 				return m, m.filepicker.Init()
+			case "alt+enter":
+				m.commentInput.InsertString("\n")
+				return m, nil
 			case "enter":
-				val := m.textInput.Value()
+				if msg.Alt {
+					m.commentInput.InsertString("\n")
+					return m, nil
+				}
+				val := m.commentInput.Value()
 				if val != "" {
 					m.loading = true
 					pasted := m.pastedCommentImages
@@ -498,7 +519,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 				m.pastedCommentImages = nil
 			}
-			m.textInput, cmd = m.textInput.Update(msg)
+			m.commentInput, cmd = m.commentInput.Update(msg)
 			return m, cmd
 
 		case modeCommentEdit:
@@ -516,7 +537,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 						Bytes:       imgBytes,
 						ContentType: contentType,
 					})
-					m.textInput = insertAtCursor(m.textInput, fmt.Sprintf("![%s](%s)", filename, filename))
+					m.commentInput.InsertString(fmt.Sprintf("![%s](%s)", filename, filename))
 					return m, nil
 				} else if err != nil {
 					m.err = err
@@ -529,8 +550,15 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				m.filepicker.SetHeight(h)
 				return m, m.filepicker.Init()
+			case "alt+enter":
+				m.commentInput.InsertString("\n")
+				return m, nil
 			case "enter":
-				val := m.textInput.Value()
+				if msg.Alt {
+					m.commentInput.InsertString("\n")
+					return m, nil
+				}
+				val := m.commentInput.Value()
 				if val != "" && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
 					m.loading = true
 					commentID := m.activities[m.commentsCursor].GetCommentID()
@@ -564,7 +592,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 				m.pastedCommentImages = nil
 			}
-			m.textInput, cmd = m.textInput.Update(msg)
+			m.commentInput, cmd = m.commentInput.Update(msg)
 			return m, cmd
 
 		case modeAssignInput:
@@ -1248,9 +1276,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, m.filepicker.Init()
 		case "c":
 			m.mode = modeCommentInput
-			m.textInput.Placeholder = "Add a comment..."
-			m.textInput.SetValue("")
-			m.textInput.Focus()
+			m.commentInput.Placeholder = "Add a comment..."
+			m.commentInput.SetValue("")
+			m.commentInput.Focus()
 			m.pastedCommentImages = nil
 			return m, nil
 		case " ":
@@ -1309,9 +1337,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				act := m.activities[m.commentsCursor]
 				if act.Type == "CommentActivityItem" {
 					m.mode = modeCommentEdit
-					m.textInput.Placeholder = "Edit comment..."
-					m.textInput.SetValue(act.GetCommentText())
-					m.textInput.Focus()
+					m.commentInput.Placeholder = "Edit comment..."
+					m.commentInput.SetValue(act.GetCommentText())
+					m.commentInput.Focus()
 					m.pastedCommentImages = nil
 					return m, nil
 				}
@@ -1370,7 +1398,11 @@ func (m detailModel) hasActionView() bool {
 func (m *detailModel) updateViewportSizes() {
 	var actionHeight int
 	if m.hasActionView() {
-		actionHeight = 6
+		if m.mode == modeCommentInput || m.mode == modeCommentEdit {
+			actionHeight = 8
+		} else {
+			actionHeight = 6
+		}
 	}
 	bottomHeight := m.height - 10 - actionHeight
 	if bottomHeight < 3 {
@@ -1419,6 +1451,7 @@ func (m *detailModel) updateViewportSizes() {
 	m.linksViewport.Height = bottomPanelHeight
 	m.attachmentsViewport.Width = viewportCommentsWidth
 	m.attachmentsViewport.Height = bottomPanelHeight
+	m.commentInput.SetWidth(m.width - 6)
 
 	// Only re-wrap and set content if the width changed and we have the issue loaded
 	if m.issue != nil {
@@ -1943,19 +1976,19 @@ func (m detailModel) View() string {
 	var actionView string
 	switch m.mode {
 	case modeCommentInput:
-		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Add Comment (Press Enter to submit, Esc to cancel) ")
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Add Comment (Press Enter to submit, Alt+Enter for newline, Esc to cancel) ")
 		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width - 4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.commentInput.View()))
 	case modeCommentEdit:
-		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Edit Comment (Press Enter to submit, Esc to cancel) ")
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Edit Comment (Press Enter to submit, Alt+Enter for newline, Esc to cancel) ")
 		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width - 4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
+			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.commentInput.View()))
 	case modeAssignInput:
 		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username, 'me', or 'unassigned', Esc to cancel) ")
 		actionView = lipgloss.NewStyle().
@@ -2031,7 +2064,7 @@ func (m detailModel) View() string {
 	} else if m.filepickerActive {
 		footer = StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
 	} else if m.mode == modeCommentInput || m.mode == modeCommentEdit {
-		footer = StyleHelp.Render(" [Enter] Submit Comment  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
+		footer = StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
 	} else if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
 		footer = StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
 	} else if m.mode == modeActionSelect {
