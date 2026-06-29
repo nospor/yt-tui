@@ -1,4 +1,14 @@
 
+## [0.6.9] - 2026-06-29
+
+### Features
+
+- *(ui)* Support multiline comments with Alt+Enter in issue detail view ([5427185](https://github.com/nospor/yt-tui/commit/5427185f04cad4ab6bd9d3ed765db5406f52ae97))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.6.8 [skip ci] ([3acebe2](https://github.com/nospor/yt-tui/commit/3acebe226a6fe91c4412536b70bff6b4b7e35b17))
+
 ## [0.6.8] - 2026-06-27
 
 ### Features
