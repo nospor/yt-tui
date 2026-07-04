@@ -747,6 +747,7 @@ func (m AppModel) isAnyInputFocused() bool {
 		return m.issues.searchMode
 	case stateDetail:
 		return m.detail.textInput.Focused() ||
+			m.detail.commentInput.Focused() ||
 			m.detail.trackTimeDateInput.Focused() ||
 			m.detail.trackTimeDurationInput.Focused() ||
 			m.detail.trackTimeCommentInput.Focused()

@@ -385,6 +385,25 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			if msg.tempPath != "" {
+				os.Remove(msg.tempPath)
+			}
+			return m, tea.ClearScreen
+		}
+		if msg.tempPath != "" {
+			defer os.Remove(msg.tempPath)
+			content, err := os.ReadFile(msg.tempPath)
+			if err != nil {
+				m.err = err
+				return m, tea.ClearScreen
+			}
+			m.commentInput.SetValue(string(content))
+		}
+		return m, tea.ClearScreen
+
 	case detailDataMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -478,6 +497,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				m.filepicker.SetHeight(h)
 				return m, m.filepicker.Init()
+			case "ctrl+g":
+				return m, m.openEditorCmd()
 			case "alt+enter":
 				m.commentInput.InsertString("\n")
 				return m, nil
@@ -550,6 +571,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 				m.filepicker.SetHeight(h)
 				return m, m.filepicker.Init()
+			case "ctrl+g":
+				return m, m.openEditorCmd()
 			case "alt+enter":
 				m.commentInput.InsertString("\n")
 				return m, nil
@@ -2084,7 +2107,7 @@ func (m detailModel) View() string {
 	} else if m.filepickerActive {
 		footer = StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
 	} else if m.mode == modeCommentInput || m.mode == modeCommentEdit {
-		footer = StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image ")
+		footer = StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image  [Ctrl+g] Ext Editor ")
 	} else if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
 		footer = StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
 	} else if m.mode == modeActionSelect {
@@ -2750,4 +2773,35 @@ func insertAtCursor(ti textinput.Model, text string) textinput.Model {
 	ti.SetValue(string(newRunes))
 	ti.SetCursor(pos + len([]rune(text)))
 	return ti
+}
+
+func (m detailModel) openEditorCmd() tea.Cmd {
+	editorParts := strings.Fields(os.Getenv("EDITOR"))
+	if len(editorParts) == 0 {
+		editorParts = []string{"vim"}
+	}
+
+	tempFile, err := os.CreateTemp("", "yt-tui-comment-*.md")
+	if err != nil {
+		return func() tea.Msg {
+			return editorFinishedMsg{err: err}
+		}
+	}
+
+	if _, err := tempFile.WriteString(m.commentInput.Value()); err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		return func() tea.Msg {
+			return editorFinishedMsg{err: err}
+		}
+	}
+	tempFile.Close()
+
+	bin := editorParts[0]
+	args := append(editorParts[1:], tempFile.Name())
+
+	c := exec.Command(bin, args...)
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return editorFinishedMsg{tempPath: tempFile.Name(), err: err}
+	})
 }
