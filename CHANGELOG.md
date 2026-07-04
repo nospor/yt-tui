@@ -1,4 +1,12 @@
 
+## [0.7.1] - 2026-07-04
+
+### Features
+
+- *(ui)* Add option to yank current comment in details view ([43cffcf](https://github.com/nospor/yt-tui/commit/43cffcfab3ddd830d918ed016dcd837bcb1d5578))
+- *(ui)* Support editing comments in external editor with Ctrl+g ([45a6901](https://github.com/nospor/yt-tui/commit/45a6901773fa69c15aa2ee8909cdb10f2f10ea86))
+- *(ui)* Support viewing issue description and comments in external editor via Ctrl+g ([0b49308](https://github.com/nospor/yt-tui/commit/0b4930822005d9be3089bb921db0d3c018283f08))
+
 ## [0.7.0] - 2026-06-29
 
 ### Features
