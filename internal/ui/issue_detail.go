@@ -395,12 +395,14 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		}
 		if msg.tempPath != "" {
 			defer os.Remove(msg.tempPath)
-			content, err := os.ReadFile(msg.tempPath)
-			if err != nil {
-				m.err = err
-				return m, tea.ClearScreen
+			if !msg.readOnly {
+				content, err := os.ReadFile(msg.tempPath)
+				if err != nil {
+					m.err = err
+					return m, tea.ClearScreen
+				}
+				m.commentInput.SetValue(string(content))
 			}
-			m.commentInput.SetValue(string(content))
 		}
 		return m, tea.ClearScreen
 
@@ -498,7 +500,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.filepicker.SetHeight(h)
 				return m, m.filepicker.Init()
 			case "ctrl+g":
-				return m, m.openEditorCmd()
+				return m, m.openEditorCmd(m.commentInput.Value(), false)
 			case "alt+enter":
 				m.commentInput.InsertString("\n")
 				return m, nil
@@ -572,7 +574,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.filepicker.SetHeight(h)
 				return m, m.filepicker.Init()
 			case "ctrl+g":
-				return m, m.openEditorCmd()
+				return m, m.openEditorCmd(m.commentInput.Value(), false)
 			case "alt+enter":
 				m.commentInput.InsertString("\n")
 				return m, nil
@@ -1317,6 +1319,17 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			}
 			m.filepicker.SetHeight(h)
 			return m, m.filepicker.Init()
+		case "ctrl+g":
+			if m.activeViewport == 0 && m.issue != nil {
+				return m, m.openEditorCmd(m.issue.Description, true)
+			}
+			if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+				act := m.activities[m.commentsCursor]
+				if act.Type == "CommentActivityItem" {
+					return m, m.openEditorCmd(act.GetCommentText(), true)
+				}
+			}
+			return m, nil
 		case "c":
 			m.mode = modeCommentInput
 			m.commentInput.Placeholder = "Add a comment..."
@@ -2137,7 +2150,16 @@ func (m detailModel) View() string {
 		} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
 			deleteAction = "  [d] Delete"
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction))
+		editorViewAction := ""
+		if m.activeViewport == 0 && m.issue != nil {
+			editorViewAction = "  [Ctrl+g] Ext View"
+		} else if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+			act := m.activities[m.commentsCursor]
+			if act.Type == "CommentActivityItem" {
+				editorViewAction = "  [Ctrl+g] Ext View"
+			}
+		}
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction))
 	}
 
 	var parts []string
@@ -2775,20 +2797,25 @@ func insertAtCursor(ti textinput.Model, text string) textinput.Model {
 	return ti
 }
 
-func (m detailModel) openEditorCmd() tea.Cmd {
+func (m detailModel) openEditorCmd(content string, readOnly bool) tea.Cmd {
 	editorParts := strings.Fields(os.Getenv("EDITOR"))
 	if len(editorParts) == 0 {
 		editorParts = []string{"vim"}
 	}
 
-	tempFile, err := os.CreateTemp("", "yt-tui-comment-*.md")
+	prefix := "yt-tui-comment-*.md"
+	if readOnly {
+		prefix = "yt-tui-view-*.md"
+	}
+
+	tempFile, err := os.CreateTemp("", prefix)
 	if err != nil {
 		return func() tea.Msg {
 			return editorFinishedMsg{err: err}
 		}
 	}
 
-	if _, err := tempFile.WriteString(m.commentInput.Value()); err != nil {
+	if _, err := tempFile.WriteString(content); err != nil {
 		tempFile.Close()
 		os.Remove(tempFile.Name())
 		return func() tea.Msg {
@@ -2802,6 +2829,6 @@ func (m detailModel) openEditorCmd() tea.Cmd {
 
 	c := exec.Command(bin, args...)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{tempPath: tempFile.Name(), err: err}
+		return editorFinishedMsg{tempPath: tempFile.Name(), err: err, readOnly: readOnly}
 	})
 }

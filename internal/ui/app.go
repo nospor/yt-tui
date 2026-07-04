@@ -852,6 +852,7 @@ func (m AppModel) renderHelpPopup() string {
 			{"R", "Assign repository"},
 			{"a", "Assign user"},
 			{"e", "Edit desc/comment"},
+			{"Ctrl+g", "View desc/comment in editor"},
 			{"C", "Clone issue"},
 			{"y", "Yank options list"},
 			{"d", "Delete link/attach"},

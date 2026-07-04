@@ -315,6 +315,7 @@ Supported action command types:
 * `d` (in Links viewport): Delete the highlighted link (with confirmation).
 * `d` (in Attachments viewport): Delete the highlighted attachment (with confirmation).
 * `Ctrl+f`: Open the file browser popup to pick and attach files from your computer to the issue immediately.
+* `Ctrl+g`: View the description (when focusing the Description viewport) or the currently selected comment (when focusing the Comments viewport) in your preferred external editor without saving changes.
 * `Space`: Open the custom quick Actions popup to quickly update the issue using a templated sequence (either select via list or hit shortcut number).
 * `c`: Add a comment. Type your comment and press `Enter` to submit, `Alt+Enter` to insert a newline (multiline), or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, `Ctrl+f` to open the file browser popup to pick and attach files from your computer, or `Ctrl+g` to write/edit the comment in your preferred external editor.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).

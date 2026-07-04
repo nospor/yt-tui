@@ -163,6 +163,7 @@ func (m formModel) loadProjectsCmd() tea.Cmd {
 type editorFinishedMsg struct {
 	tempPath string
 	err      error
+	readOnly bool
 }
 
 func (m formModel) openEditorCmd() tea.Cmd {
