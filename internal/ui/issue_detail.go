@@ -894,6 +894,26 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					m.mode = modeYankUrlSelect
 					return m, nil
 				}
+			case "c":
+				var copyCmd tea.Cmd
+				if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+					act := m.activities[m.commentsCursor]
+					if act.Type == "CommentActivityItem" {
+						text := act.GetCommentText()
+						if err := clipboardWriteAll(text); err != nil {
+							m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						} else {
+							m.statusMessage = "Copied comment to clipboard!"
+							m.statusMessageID++
+							currentID := m.statusMessageID
+							copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+								return clearStatusMsg{id: currentID}
+							})
+						}
+					}
+				}
+				m.mode = modeNormal
+				return m, copyCmd
 			case "esc":
 				m.mode = modeNormal
 			default:
@@ -2141,13 +2161,22 @@ func (m detailModel) View() string {
 	}
 
 	if m.mode == modeYank {
-		popupContent := lipgloss.JoinVertical(lipgloss.Left,
+		lines := []string{
 			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Yank Options:"),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[i]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("ID")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[s]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("ID & Summary")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[d]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("Description")),
 			fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[u]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("URLs")),
-		)
+		}
+
+		if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+			act := m.activities[m.commentsCursor]
+			if act.Type == "CommentActivityItem" {
+				lines = append(lines, fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[c]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("Comment")))
+			}
+		}
+
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
 		popup := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorViolet)).

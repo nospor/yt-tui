@@ -327,6 +327,7 @@ Supported action command types:
   - `s`: Copy the task ID and summary (one line, separated by space) to the clipboard.
   - `d`: Copy the task description to the clipboard.
   - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
+  - `c`: Copy the currently selected comment to the clipboard (only visible/available when focusing the Comments viewport and a comment is selected).
   - Pressing any other key cancels the yanking motion.
 * `m`: Toggle formatting the issue description between plain text and markdown (choice is remembered in configuration).
 * `t`: Track time (opens a popup with an interactive calendar to select a date, duration input in `1w 1d 1h 1m` format, work type selection, and comment textarea).

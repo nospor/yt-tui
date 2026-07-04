@@ -202,6 +202,41 @@ func TestDetailModel_YankMotion(t *testing.T) {
 	if m.mode != modeNormal {
 		t.Fatalf("expected mode to transition back to modeNormal after pressing 'esc', got %v", m.mode)
 	}
+
+	// 7. Test yank comment option
+	// Add comment activity
+	commentAct := ytcli.ActivityItem{
+		Type: "CommentActivityItem",
+		Added: []interface{}{
+			map[string]interface{}{
+				"text": "This is a test comment content",
+			},
+		},
+	}
+	m.activities = []ytcli.ActivityItem{commentAct}
+	m.activeViewport = 1 // Comments viewport
+	m.commentsCursor = 0
+
+	m, _ = m.Update(yMsg)
+	if m.mode != modeYank {
+		t.Fatalf("expected mode to transition to modeYank, got %v", m.mode)
+	}
+
+	cMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}
+	m, _ = m.Update(cMsg)
+
+	if m.mode != modeNormal {
+		t.Fatalf("expected mode to transition back to modeNormal after pressing 'c', got %v", m.mode)
+	}
+	if m.err != nil {
+		t.Errorf("expected no error, got: %v", m.err)
+	}
+	if m.statusMessage != "Copied comment to clipboard!" {
+		t.Errorf("expected statusMessage to be set when comment copy succeeds, got: %s", m.statusMessage)
+	}
+	if yankedText != "This is a test comment content" {
+		t.Errorf("expected yanked text 'This is a test comment content', got: %q", yankedText)
+	}
 }
 
 func TestDetailModel_YankUrls(t *testing.T) {
