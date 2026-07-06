@@ -402,18 +402,19 @@ func (a ActivityItem) GetWorkItemDetails() (string, string) {
 	return "", ""
 }
 
-// GetVcsChangeDetails extracts revision and text from a VcsChangeActivityItem
-func (a ActivityItem) GetVcsChangeDetails() (string, string) {
+// GetVcsChangeDetails extracts revision, text, and url from a VcsChangeActivityItem
+func (a ActivityItem) GetVcsChangeDetails() (string, string, string) {
 	slice := toSlice(a.Added)
 	if len(slice) == 0 {
-		return "", ""
+		return "", "", ""
 	}
 	if m, ok := slice[0].(map[string]interface{}); ok {
 		rev, _ := m["vcsRevision"].(string)
 		text, _ := m["text"].(string)
-		return rev, text
+		url, _ := m["url"].(string)
+		return rev, text, url
 	}
-	return "", ""
+	return "", "", ""
 }
 
 // GetCustomFieldChanges extracts added and removed custom field values as strings

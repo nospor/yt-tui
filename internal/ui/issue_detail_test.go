@@ -424,6 +424,67 @@ func TestDetailModel_YankUrls(t *testing.T) {
 	if yankedText != "https://github.com" {
 		t.Errorf("expected yanked text 'https://github.com', got: %q", yankedText)
 	}
+
+	// 4. Test case: URLs from Comment and VCS Change
+	m = newDetailModel(nil, nil)
+	m.cfg = &config.Config{
+		VcsBaseURL: "https://my-vcs.com",
+	}
+	issueVCS := &ytcli.Issue{
+		ID:          "1",
+		IDReadable:  "DEMO-1",
+		Summary:     "Test issue VCS URLs",
+		Description: "No links here",
+	}
+	commentAct := ytcli.ActivityItem{
+		Type: "CommentActivityItem",
+		Added: []interface{}{
+			map[string]interface{}{
+				"text": "Check out https://gitlab.com/repo1 and mediatel/mapping!618",
+			},
+		},
+	}
+	vcsAct := ytcli.ActivityItem{
+		Type: "VcsChangeActivityItem",
+		Added: []interface{}{
+			map[string]interface{}{
+				"vcsRevision": "abc123f",
+				"text":        "Commit message referencing foo/bar#123",
+				"url":         "https://gitlab.com/repo/commit/abc123f",
+			},
+		},
+	}
+	m, _ = m.Update(detailDataMsg{
+		issue:      issueVCS,
+		activities: []ytcli.ActivityItem{commentAct, vcsAct},
+	})
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")})
+	if m.mode != modeYankUrlSelect {
+		t.Fatalf("expected modeYankUrlSelect for multiple URLs, got %v", m.mode)
+	}
+
+	// Should extract 4 URLs:
+	// - comment URLs: https://gitlab.com/repo1, https://my-vcs.com/mediatel/mapping/-/merge_requests/618
+	// - VCS change text GitHub reference URL: https://github.com/foo/bar/pull/123
+	// - VCS change direct URL field: https://gitlab.com/repo/commit/abc123f
+	expectedURLs := []string{
+		"https://gitlab.com/repo1",
+		"https://my-vcs.com/mediatel/mapping/-/merge_requests/618",
+		"https://github.com/foo/bar/pull/123",
+		"https://gitlab.com/repo/commit/abc123f",
+	}
+
+	if len(m.yankUrls) != len(expectedURLs) {
+		t.Fatalf("expected %d urls, got %d: %v", len(expectedURLs), len(m.yankUrls), m.yankUrls)
+	}
+
+	for i, u := range expectedURLs {
+		if m.yankUrls[i] != u {
+			t.Errorf("expected URL at index %d to be %q, got %q", i, u, m.yankUrls[i])
+		}
+	}
 }
 
 func TestParseDurationToMinutes(t *testing.T) {

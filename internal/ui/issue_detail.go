@@ -852,6 +852,49 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					}
 				}
 
+				// 1b. Check all activities (comments and VCS changes) for URLs
+				for _, act := range m.activities {
+					if act.Type == "CommentActivityItem" {
+						commentText := act.GetCommentText()
+						if commentText != "" {
+							for _, u := range extractURLs(commentText) {
+								if !seen[u] {
+									seen[u] = true
+									urls = append(urls, u)
+								}
+							}
+							for _, u := range m.extractVCSChangeURLs(commentText) {
+								if !seen[u] {
+									seen[u] = true
+									urls = append(urls, u)
+								}
+							}
+						}
+					} else if act.Type == "VcsChangeActivityItem" {
+						_, msgText, vcsURL := act.GetVcsChangeDetails()
+						if msgText != "" {
+							for _, u := range extractURLs(msgText) {
+								if !seen[u] {
+									seen[u] = true
+									urls = append(urls, u)
+								}
+							}
+							for _, u := range m.extractVCSChangeURLs(msgText) {
+								if !seen[u] {
+									seen[u] = true
+									urls = append(urls, u)
+								}
+							}
+						}
+						if vcsURL != "" {
+							if !seen[vcsURL] {
+								seen[vcsURL] = true
+								urls = append(urls, vcsURL)
+							}
+						}
+					}
+				}
+
 				// 2. Add task URL
 				if m.issue != nil && baseURL != "" {
 					taskURL := baseURL + "issue/" + m.issue.IDReadable
@@ -936,7 +979,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 							})
 						}
 					} else if act.Type == "VcsChangeActivityItem" {
-						_, msgText := act.GetVcsChangeDetails()
+						_, msgText, _ := act.GetVcsChangeDetails()
 						if err := clipboardWriteAll(msgText); err != nil {
 							m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
 						} else {
@@ -1340,7 +1383,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				if act.Type == "CommentActivityItem" {
 					return m, m.openEditorCmd(act.GetCommentText(), true)
 				} else if act.Type == "VcsChangeActivityItem" {
-					_, msgText := act.GetVcsChangeDetails()
+					_, msgText, _ := act.GetVcsChangeDetails()
 					return m, m.openEditorCmd(msgText, true)
 				}
 			}
@@ -1615,7 +1658,7 @@ func (m *detailModel) updateViewportContents() {
 				}
 
 			case "VcsChangeActivityItem":
-				rev, msgText := act.GetVcsChangeDetails()
+				rev, msgText, _ := act.GetVcsChangeDetails()
 				headerText = fmt.Sprintf("%s%s (%s) linked VCS change:",
 					prefix,
 					lipgloss.NewStyle().Foreground(lipgloss.Color(ColorViolet)).Bold(true).Render(authorName),
@@ -2848,4 +2891,103 @@ func (m detailModel) openEditorCmd(content string, readOnly bool) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorFinishedMsg{tempPath: tempFile.Name(), err: err, readOnly: readOnly}
 	})
+}
+
+var gitlabMRRegex = regexp.MustCompile(`\b([a-zA-Z0-9-._]+/[a-zA-Z0-9-._]+)!([0-9]+)\b`)
+var githubPRRegex = regexp.MustCompile(`\b([a-zA-Z0-9-._]+/[a-zA-Z0-9-._]+)#([0-9]+)\b`)
+
+func guessVcsBaseURL() string {
+	// Try ~/.ssh/config first
+	if home, err := os.UserHomeDir(); err == nil {
+		sshConfigPath := filepath.Join(home, ".ssh", "config")
+		if data, err := os.ReadFile(sshConfigPath); err == nil {
+			// Find Host gitlab... or HostName gitlab...
+			lines := strings.Split(string(data), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "Host ") {
+					host := strings.TrimSpace(strings.TrimPrefix(line, "Host "))
+					if strings.Contains(host, "gitlab.") && !strings.Contains(host, "*") {
+						return "https://" + host
+					}
+				}
+				if strings.HasPrefix(line, "HostName ") {
+					host := strings.TrimSpace(strings.TrimPrefix(line, "HostName "))
+					if strings.Contains(host, "gitlab.") {
+						return "https://" + host
+					}
+				}
+			}
+		}
+	}
+	// Fallback to gitlab.com
+	return "https://gitlab.com"
+}
+
+func (m *detailModel) extractVCSChangeURLs(text string) []string {
+	var urls []string
+	seen := make(map[string]bool)
+
+	// 1. Check for GitLab MR references: group/project!mr
+	matches := gitlabMRRegex.FindAllStringSubmatch(text, -1)
+	if len(matches) > 0 {
+		var vcsBaseURL string
+		if m.cfg != nil {
+			// Try to find active server-specific VcsBaseURL
+			var activeURL string
+			if m.client != nil {
+				activeURL = normalizeURL(m.client.GetConfiguredBaseURL())
+			}
+			if activeURL != "" {
+				for _, s := range m.cfg.Servers {
+					if normalizeURL(s.URL) == activeURL && s.VcsBaseURL != "" {
+						vcsBaseURL = s.VcsBaseURL
+						break
+					}
+				}
+			}
+			// Fall back to global VcsBaseURL
+			if vcsBaseURL == "" && m.cfg.VcsBaseURL != "" {
+				vcsBaseURL = m.cfg.VcsBaseURL
+			}
+		}
+
+		// Expand env variables if any
+		if vcsBaseURL != "" {
+			vcsBaseURL = os.ExpandEnv(vcsBaseURL)
+		}
+
+		if vcsBaseURL == "" {
+			vcsBaseURL = guessVcsBaseURL()
+		}
+		vcsBaseURL = strings.TrimSuffix(vcsBaseURL, "/")
+
+		for _, match := range matches {
+			if len(match) >= 3 {
+				groupProj := match[1]
+				mrID := match[2]
+				u := fmt.Sprintf("%s/%s/-/merge_requests/%s", vcsBaseURL, groupProj, mrID)
+				if !seen[u] {
+					seen[u] = true
+					urls = append(urls, u)
+				}
+			}
+		}
+	}
+
+	// 2. Check for GitHub PR references: group/project#pr
+	ghMatches := githubPRRegex.FindAllStringSubmatch(text, -1)
+	for _, match := range ghMatches {
+		if len(match) >= 3 {
+			groupProj := match[1]
+			prID := match[2]
+			u := fmt.Sprintf("https://github.com/%s/pull/%s", groupProj, prID)
+			if !seen[u] {
+				seen[u] = true
+				urls = append(urls, u)
+			}
+		}
+	}
+
+	return urls
 }

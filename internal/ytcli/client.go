@@ -1264,7 +1264,7 @@ func (c *Client) ListActivities(id string, categories []string) ([]ActivityItem,
 	apiURL := baseURL + "api/issues/" + id + "/activities"
 	if len(categories) > 0 {
 		apiURL += "?categories=" + strings.Join(categories, ",")
-		apiURL += "&fields=id,$type,timestamp,author(login,fullName,email),added(id,text,duration(presentation),vcsRevision,name,displayName),removed(id,text,name,displayName),field(name)"
+		apiURL += "&fields=id,$type,timestamp,author(login,fullName,email),added(id,text,duration(presentation),vcsRevision,name,displayName,url),removed(id,text,name,displayName),field(name)"
 	} else {
 		return nil, nil
 	}

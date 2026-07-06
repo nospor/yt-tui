@@ -81,6 +81,7 @@ type Config struct {
 	FilepickerLastDir   string              `json:"filepicker_last_dir,omitempty"`
 	Actions             []ActionConfig      `json:"actions,omitempty"`
 	ImageViewer         string              `json:"image_viewer,omitempty"`
+	VcsBaseURL          string              `json:"vcs_base_url,omitempty"`
 }
 
 // GetCustomStates returns the list of custom states for the given project.
@@ -170,9 +171,10 @@ type ActionConfig struct {
 }
 
 type ServerConfig struct {
-	Name  string `json:"name,omitempty"`
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	Name       string `json:"name,omitempty"`
+	URL        string `json:"url"`
+	Token      string `json:"token"`
+	VcsBaseURL string `json:"vcs_base_url,omitempty"`
 }
 
 const (
