@@ -166,9 +166,10 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "sort_column": "ID",
   "sort_direction": "asc",
   "favorite_view": "",
-  "favorite_views": {},
   "render_markdown": true,
-  "image_viewer": "sxiv"
+  "image_viewer": "sxiv",
+  "browser_command": "xdg-open",
+  "gitlab_command": ""
 }
 ```
 
@@ -200,6 +201,9 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `actions`             | Array of Objects | `[]` (empty)                                                                     | Custom templated action sequences triggered by `Space`. See [Custom Quick Actions](#-custom-quick-actions) below.                                                                             |
 | `image_viewer`        | String           | `""` (empty)                                                                     | The command or executable to open image attachments (e.g. `sxiv` or `feh`). If empty or not an image file, it defaults to `xdg-open`.                                                        |
 | `vcs_base_url`        | String           | `""` (empty)                                                                     | Base URL of your VCS (e.g. GitLab/GitHub instance) to resolve references like `group/project!mr` to links. Can also be set per-server in the `servers` list.                                |
+| `browser_command`     | String           | `"xdg-open"`                                                                     | The command or executable used to open web browser links (e.g. `google-chrome`).                                                                                                            |
+| `gitlab_command`      | String           | `""` (empty)                                                                     | The command or executable to open GitLab merge requests inside a popup TUI process (e.g. [gitlab-tui](https://github.com/nospor/gitlab-tui)). If empty, GitLab links are opened in the default browser. |
+
 
 ### ⚡ Custom Quick Actions
 
@@ -331,6 +335,7 @@ Supported action command types:
   - `u`: Copy issue URLs (extracts URLs from description, the YouTrack issue URL itself, linked issues, and attachment download URLs; copies if only 1 is found, or shows a selection popup if multiple exist).
   - `c`: Copy the currently selected comment to the clipboard (only visible/available when focusing the Comments viewport and a comment is selected).
   - Pressing any other key cancels the yanking motion.
+* `o`: Show a list of unique URLs found in the description, comments, links, and attachments. Highlight and select a URL to open it. It will open via `browser_command` (defaults to `xdg-open`). If the URL is a GitLab merge request and `gitlab_command` is configured (e.g. to `gitlab-tui`), it opens the URL using that command in an interactive popup instead. You can find the GitLab TUI repository at [gitlab-tui](https://github.com/nospor/gitlab-tui).
 * `m`: Toggle formatting the issue description between plain text and markdown (choice is remembered in configuration).
 * `t`: Track time (opens a popup with an interactive calendar to select a date, duration input in `1w 1d 1h 1m` format, work type selection, and comment textarea).
 * `F` (in Comments viewport): Open the Activity filter panel (Comments, Spent Time, VCS Changes, Change History). Use arrow keys/hjkl to navigate, Space to toggle checkboxes, Enter to save, and Esc to cancel.

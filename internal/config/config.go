@@ -82,6 +82,8 @@ type Config struct {
 	Actions             []ActionConfig      `json:"actions,omitempty"`
 	ImageViewer         string              `json:"image_viewer,omitempty"`
 	VcsBaseURL          string              `json:"vcs_base_url,omitempty"`
+	BrowserCommand      string              `json:"browser_command,omitempty"`
+	GitLabCommand       string              `json:"gitlab_command,omitempty"`
 }
 
 // GetCustomStates returns the list of custom states for the given project.
@@ -207,6 +209,7 @@ func LoadConfig() (*Config, error) {
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
 			ActivityFilters:    []string{"Comments"},
 			RenderMarkdown:     true,
+			BrowserCommand:     "xdg-open",
 		}, err
 	}
 
@@ -242,6 +245,7 @@ func LoadConfig() (*Config, error) {
 		FilteredPriorities: append([]string{}, DefaultPriorities...),
 		ActivityFilters:    []string{"Comments"},
 		RenderMarkdown:     true,
+		BrowserCommand:     "xdg-open",
 	}
 
 	// Check if file exists
@@ -275,6 +279,10 @@ func LoadConfig() (*Config, error) {
 	needsWrite := false
 	if fileCfg.PageSize <= 0 {
 		fileCfg.PageSize = DefaultPageSize
+		needsWrite = true
+	}
+	if fileCfg.BrowserCommand == "" {
+		fileCfg.BrowserCommand = "xdg-open"
 		needsWrite = true
 	}
 	if fileCfg.MaxIssues <= 0 {

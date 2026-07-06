@@ -655,3 +655,53 @@ func TestDetailModel_ReproduceLayoutBug(t *testing.T) {
 		t.Errorf("expected action height %d, got %d", m.height, actionHeight)
 	}
 }
+
+func TestDetailModel_OpenURLOptions(t *testing.T) {
+	// Initialize model with a mock config
+	cfg := &config.Config{
+		BrowserCommand: "test-browser",
+		GitLabCommand:  "test-gitlab-tui",
+	}
+	m := newDetailModel(nil, cfg)
+	m.width = 80
+	m.height = 24
+
+	// Load issue with description containing multiple URLs (one gitlab MR, one regular web url)
+	issue := &ytcli.Issue{
+		ID:          "1",
+		IDReadable:  "DEMO-1",
+		Summary:     "Test issue URLs opening",
+		Description: "Check this merge request: https://gitlab.example.com/group/project/-/merge_requests/42 and also google: https://google.com",
+	}
+
+	m, _ = m.Update(detailDataMsg{
+		issue:      issue,
+		activities: []ytcli.ActivityItem{},
+	})
+
+	// Press 'o' to open URL selection popup
+	oMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")}
+	m, _ = m.Update(oMsg)
+
+	if m.mode != modeOpenUrlSelect {
+		t.Fatalf("expected mode to be modeOpenUrlSelect, got %v", m.mode)
+	}
+
+	if len(m.openUrls) != 2 { // Only 2 URLs from description since client is nil
+		t.Fatalf("expected 2 extracted URLs, got %d: %v", len(m.openUrls), m.openUrls)
+	}
+
+	// Press 'j' to move cursor down
+	jMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}
+	m, _ = m.Update(jMsg)
+	if m.openUrlCursor != 1 {
+		t.Errorf("expected openUrlCursor to be 1, got %d", m.openUrlCursor)
+	}
+
+	// Press 'esc' to cancel
+	escMsg := tea.KeyMsg{Type: tea.KeyEscape}
+	m, _ = m.Update(escMsg)
+	if m.mode != modeNormal {
+		t.Errorf("expected mode to return to modeNormal, got %v", m.mode)
+	}
+}

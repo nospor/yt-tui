@@ -42,6 +42,7 @@ const (
 	modeDeleteAttachmentConfirm
 	modeDeleteLinkConfirm
 	modeActionSelect
+	modeOpenUrlSelect
 )
 
 type linkedIssue struct {
@@ -109,9 +110,11 @@ type detailModel struct {
 	statusMessage   string
 	statusMessageID int
 
-	// URL Yanking
+	// URL Yanking / Opening
 	yankUrls      []string
 	yankUrlCursor int
+	openUrls      []string
+	openUrlCursor int
 
 	// Track Time fields
 	trackTimeDate          time.Time
@@ -460,6 +463,36 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 			return clearStatusMsg{id: currentID}
 		})
+
+	case popupFinishedMsg:
+		m.loading = false
+		m.loadingText = ""
+		if msg.err != nil {
+			m.err = fmt.Errorf("popup error: %w", msg.err)
+		} else {
+			m.statusMessage = "Popup closed"
+			m.statusMessageID++
+			currentID := m.statusMessageID
+			return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+				return clearStatusMsg{id: currentID}
+			})
+		}
+		return m, nil
+
+	case browserFinishedMsg:
+		m.loading = false
+		m.loadingText = ""
+		if msg.err != nil {
+			m.err = fmt.Errorf("browser error: %w", msg.err)
+		} else {
+			m.statusMessage = "Opened URL in browser!"
+			m.statusMessageID++
+			currentID := m.statusMessageID
+			return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+				return clearStatusMsg{id: currentID}
+			})
+		}
+		return m, nil
 
 	case tea.KeyMsg:
 		if m.loading {
@@ -1037,6 +1070,33 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			}
 			return m, nil
 
+		case modeOpenUrlSelect:
+			switch msg.String() {
+			case "up", "k":
+				m.openUrlCursor--
+				if m.openUrlCursor < 0 {
+					m.openUrlCursor = len(m.openUrls) - 1
+				}
+			case "down", "j":
+				m.openUrlCursor++
+				if m.openUrlCursor >= len(m.openUrls) {
+					m.openUrlCursor = 0
+				}
+			case "enter":
+				if len(m.openUrls) > 0 && m.openUrlCursor >= 0 && m.openUrlCursor < len(m.openUrls) {
+					u := m.openUrls[m.openUrlCursor]
+					m.mode = modeNormal
+					return m.openURL(u)
+				}
+				m.mode = modeNormal
+				return m, nil
+			case "esc":
+				m.mode = modeNormal
+			default:
+				// Ignore other keys inside URL select mode
+			}
+			return m, nil
+
 		case modeTrackTime:
 			// Reset error on keypresses so it disappears when they start typing
 			m.trackTimeError = ""
@@ -1224,6 +1284,128 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 
 		// Normal Mode Key Handling
 		switch msg.String() {
+		case "o":
+			var urls []string
+			seen := make(map[string]bool)
+
+			var baseURL string
+			if m.client != nil {
+				baseURL = m.client.GetConfiguredBaseURL()
+			}
+			if baseURL != "" {
+				if !strings.HasSuffix(baseURL, "/") {
+					baseURL += "/"
+				}
+			}
+
+			// 1. Check description for any URL
+			if m.issue != nil && m.issue.Description != "" {
+				descUrls := extractURLs(m.issue.Description)
+				for _, u := range descUrls {
+					if !seen[u] {
+						seen[u] = true
+						urls = append(urls, u)
+					}
+				}
+			}
+
+			// 1b. Check all activities (comments and VCS changes) for URLs
+			for _, act := range m.activities {
+				if act.Type == "CommentActivityItem" {
+					commentText := act.GetCommentText()
+					if commentText != "" {
+						for _, u := range extractURLs(commentText) {
+							if !seen[u] {
+								seen[u] = true
+								urls = append(urls, u)
+							}
+						}
+						for _, u := range m.extractVCSChangeURLs(commentText) {
+							if !seen[u] {
+								seen[u] = true
+								urls = append(urls, u)
+							}
+						}
+					}
+				} else if act.Type == "VcsChangeActivityItem" {
+					_, msgText, vcsURL := act.GetVcsChangeDetails()
+					if msgText != "" {
+						for _, u := range extractURLs(msgText) {
+							if !seen[u] {
+								seen[u] = true
+								urls = append(urls, u)
+							}
+						}
+						for _, u := range m.extractVCSChangeURLs(msgText) {
+							if !seen[u] {
+								seen[u] = true
+								urls = append(urls, u)
+							}
+						}
+					}
+					if vcsURL != "" {
+						if !seen[vcsURL] {
+							seen[vcsURL] = true
+							urls = append(urls, vcsURL)
+						}
+					}
+				}
+			}
+
+			// 2. Add task URL
+			if m.issue != nil && baseURL != "" {
+				taskURL := baseURL + "issue/" + m.issue.IDReadable
+				if !seen[taskURL] {
+					seen[taskURL] = true
+					urls = append(urls, taskURL)
+				}
+			}
+
+			// 3. Add all tasks from Links section
+			if m.issue != nil && baseURL != "" {
+				for _, link := range m.issue.Links {
+					for _, linked := range link.Issues {
+						linkedURL := baseURL + "issue/" + linked.IDReadable
+						if !seen[linkedURL] {
+							seen[linkedURL] = true
+							urls = append(urls, linkedURL)
+						}
+					}
+				}
+			}
+
+			// 4. Add all attachment URLs
+			if m.issue != nil && baseURL != "" {
+				for _, att := range m.issue.Attachments {
+					var attURL string
+					if strings.HasPrefix(att.URL, "http://") || strings.HasPrefix(att.URL, "https://") {
+						attURL = att.URL
+					} else {
+						trimmedURL := strings.TrimPrefix(att.URL, "/")
+						attURL = baseURL + trimmedURL
+					}
+					if !seen[attURL] {
+						seen[attURL] = true
+						urls = append(urls, attURL)
+					}
+				}
+			}
+
+			if len(urls) == 0 {
+				m.statusMessage = "No URLs found to open!"
+				m.statusMessageID++
+				currentID := m.statusMessageID
+				return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+					return clearStatusMsg{id: currentID}
+				})
+			} else if len(urls) == 1 {
+				return m.openURL(urls[0])
+			} else {
+				m.openUrls = urls
+				m.openUrlCursor = 0
+				m.mode = modeOpenUrlSelect
+				return m, nil
+			}
 		case "y":
 			m.mode = modeYank
 			return m, nil
@@ -2334,6 +2516,42 @@ func (m detailModel) View() string {
 		view = overlayLines(view, popup, x, 0)
 	}
 
+	if m.mode == modeOpenUrlSelect {
+		var lines []string
+		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select URL to open:"))
+		maxLen := m.width - 10
+		if maxLen < 20 {
+			maxLen = 20
+		}
+		for idx, u := range m.openUrls {
+			displayURL := u
+			if len(displayURL) > maxLen {
+				displayURL = displayURL[:maxLen-3] + "..."
+			}
+			// If it's the selected one, highlight it
+			if idx == m.openUrlCursor {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayURL))
+			} else {
+				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+displayURL))
+			}
+		}
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(0, 1).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		x := (m.width - 4) - popupWidth
+		if x < 0 {
+			x = 0
+		}
+		// Overlay starting at row 0 (aligned with title), col x
+		view = overlayLines(view, popup, x, 0)
+	}
+
 	if m.mode == modeTrackTime {
 		// Left column: Date, Time Spent, Type
 		var leftColParts []string
@@ -2990,4 +3208,64 @@ func (m *detailModel) extractVCSChangeURLs(text string) []string {
 	}
 
 	return urls
+}
+
+type popupFinishedMsg struct {
+	err error
+}
+
+type browserFinishedMsg struct {
+	err error
+	url string
+}
+
+func (m detailModel) openPopupCmd(cmdStr string, urlStr string) tea.Cmd {
+	parts := strings.Fields(cmdStr)
+	if len(parts) == 0 {
+		return func() tea.Msg { return popupFinishedMsg{err: fmt.Errorf("empty command")} }
+	}
+	bin := parts[0]
+	args := append(parts[1:], urlStr)
+	c := exec.Command(bin, args...)
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return popupFinishedMsg{err: err}
+	})
+}
+
+func openBrowserCmd(browserCmd string, urlStr string) tea.Cmd {
+	return func() tea.Msg {
+		parts := strings.Fields(browserCmd)
+		if len(parts) == 0 {
+			return browserFinishedMsg{err: fmt.Errorf("empty browser command"), url: urlStr}
+		}
+		bin := parts[0]
+		args := append(parts[1:], urlStr)
+		c := exec.Command(bin, args...)
+		if err := c.Start(); err != nil {
+			return browserFinishedMsg{err: err, url: urlStr}
+		}
+		return browserFinishedMsg{url: urlStr}
+	}
+}
+
+func (m detailModel) openURL(urlStr string) (detailModel, tea.Cmd) {
+	isGitLabMR := strings.Contains(urlStr, "/merge_requests/")
+	var gitlabCmd string
+	if m.cfg != nil {
+		gitlabCmd = m.cfg.GitLabCommand
+	}
+
+	if isGitLabMR && gitlabCmd != "" {
+		m.loading = true
+		m.loadingText = "Launching GitLab TUI..."
+		return m, m.openPopupCmd(gitlabCmd, urlStr)
+	}
+
+	browserCmd := "xdg-open"
+	if m.cfg != nil && m.cfg.BrowserCommand != "" {
+		browserCmd = m.cfg.BrowserCommand
+	}
+	m.loading = true
+	m.loadingText = "Opening URL..."
+	return m, openBrowserCmd(browserCmd, urlStr)
 }

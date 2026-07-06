@@ -855,6 +855,7 @@ func (m AppModel) renderHelpPopup() string {
 			{"Ctrl+g", "View desc/comment in editor"},
 			{"C", "Clone issue"},
 			{"y", "Yank options list"},
+			{"o", "Open URLs list"},
 			{"d", "Delete link/attach"},
 			{"r", "Refresh details"},
 			{"Esc", "Go back"},
