@@ -237,6 +237,39 @@ func TestDetailModel_YankMotion(t *testing.T) {
 	if yankedText != "This is a test comment content" {
 		t.Errorf("expected yanked text 'This is a test comment content', got: %q", yankedText)
 	}
+
+	// 8. Test yank VCS change option
+	vcsAct := ytcli.ActivityItem{
+		Type: "VcsChangeActivityItem",
+		Added: []interface{}{
+			map[string]interface{}{
+				"vcsRevision": "abc123f",
+				"text":        "Commit message text",
+			},
+		},
+	}
+	m.activities = []ytcli.ActivityItem{vcsAct}
+	m.activeViewport = 1 // Comments viewport
+	m.commentsCursor = 0
+
+	m, _ = m.Update(yMsg)
+	if m.mode != modeYank {
+		t.Fatalf("expected mode to transition to modeYank for VCS change, got %v", m.mode)
+	}
+
+	m, _ = m.Update(cMsg)
+	if m.mode != modeNormal {
+		t.Fatalf("expected mode to transition back to modeNormal after pressing 'c' on VCS change, got %v", m.mode)
+	}
+	if m.err != nil {
+		t.Errorf("expected no error on VCS change yank, got: %v", m.err)
+	}
+	if m.statusMessage != "Copied VCS change to clipboard!" {
+		t.Errorf("expected statusMessage 'Copied VCS change to clipboard!', got: %s", m.statusMessage)
+	}
+	if yankedText != "Commit message text" {
+		t.Errorf("expected yanked text 'Commit message text', got: %q", yankedText)
+	}
 }
 
 func TestDetailModel_YankUrls(t *testing.T) {

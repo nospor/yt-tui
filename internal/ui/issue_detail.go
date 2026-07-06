@@ -935,6 +935,18 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 								return clearStatusMsg{id: currentID}
 							})
 						}
+					} else if act.Type == "VcsChangeActivityItem" {
+						_, msgText := act.GetVcsChangeDetails()
+						if err := clipboardWriteAll(msgText); err != nil {
+							m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						} else {
+							m.statusMessage = "Copied VCS change to clipboard!"
+							m.statusMessageID++
+							currentID := m.statusMessageID
+							copyCmd = tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+								return clearStatusMsg{id: currentID}
+							})
+						}
 					}
 				}
 				m.mode = modeNormal
@@ -1327,6 +1339,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				act := m.activities[m.commentsCursor]
 				if act.Type == "CommentActivityItem" {
 					return m, m.openEditorCmd(act.GetCommentText(), true)
+				} else if act.Type == "VcsChangeActivityItem" {
+					_, msgText := act.GetVcsChangeDetails()
+					return m, m.openEditorCmd(msgText, true)
 				}
 			}
 			return m, nil
@@ -2155,7 +2170,7 @@ func (m detailModel) View() string {
 			editorViewAction = "  [Ctrl+g] Ext View"
 		} else if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
 			act := m.activities[m.commentsCursor]
-			if act.Type == "CommentActivityItem" {
+			if act.Type == "CommentActivityItem" || act.Type == "VcsChangeActivityItem" {
 				editorViewAction = "  [Ctrl+g] Ext View"
 			}
 		}
@@ -2218,6 +2233,8 @@ func (m detailModel) View() string {
 			act := m.activities[m.commentsCursor]
 			if act.Type == "CommentActivityItem" {
 				lines = append(lines, fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[c]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("Comment")))
+			} else if act.Type == "VcsChangeActivityItem" {
+				lines = append(lines, fmt.Sprintf("%s %s", lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("[c]"), lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("VCS Change")))
 			}
 		}
 
