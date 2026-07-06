@@ -1,4 +1,17 @@
 
+## [0.7.2] - 2026-07-06
+
+### Features
+
+- *(ui)* Support viewing and yanking VCS change comments in details view ([61a9ad3](https://github.com/nospor/yt-tui/commit/61a9ad3bac6fd09fefca144072dd5572bbe767d5))
+- *(ui)* Resolve GitLab MR and GitHub PR references in VCS changes to URLs ([0831f11](https://github.com/nospor/yt-tui/commit/0831f11f7fce24840a345438f93ff69558c99744))
+- Add custom browser_command and gitlab_command options to open URLs ([e94b2ba](https://github.com/nospor/yt-tui/commit/e94b2bad313879e664b354c4f5a6457d8315cc7a))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.0 [skip ci] ([592acc7](https://github.com/nospor/yt-tui/commit/592acc70b6e05a981f8b6e8c3cc96531ed067fff))
+- Update CHANGELOG.md for v0.7.1 [skip ci] ([cec6ce9](https://github.com/nospor/yt-tui/commit/cec6ce9ab783a1a9a9e1f066ed804438f7308ca1))
+
 ## [0.7.1] - 2026-07-04
 
 ### Features
