@@ -1,4 +1,26 @@
 
+## [0.7.3] - 2026-07-07
+
+### Features
+
+- Add multi-theme support with Catppuccin and Teams themes ([c9cecf5](https://github.com/nospor/yt-tui/commit/c9cecf5125a4866829bc5ba91f349a06db1b57d7))
+- *(config)* Support per-project custom_types config options ([98429bb](https://github.com/nospor/yt-tui/commit/98429bb28bf5bc73bc87a0c8c09c813d6b1b65cb))
+- *(config)* Add username_separator option to customize name merging per server ([46164ab](https://github.com/nospor/yt-tui/commit/46164ab81e4afad1783e24df7b5ab756c62c9208))
+- *(ui)* Add "Toggle Full View" option to task details actions list ([bf39b32](https://github.com/nospor/yt-tui/commit/bf39b32d10a97449de0024d18238115cfd5bef25))
+- *(ui)* Support loading all image attachments in custom image viewer ([8580d63](https://github.com/nospor/yt-tui/commit/8580d634bc71da27e24844c58425af966036f0f8))
+
+### Other
+
+- Enlarge comment textareas and hide line numbers ([0d8a78b](https://github.com/nospor/yt-tui/commit/0d8a78b57d643533698aaf1b5626fb9027a03f69))
+
+### Styling
+
+- *(ui)* Remove line numbers from issue description area in form ([387e269](https://github.com/nospor/yt-tui/commit/387e269a26a4025ca1bd49c62fdc662b87b518f7))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.2 [skip ci] ([331c019](https://github.com/nospor/yt-tui/commit/331c019c0de52d3ea7c335e0b045542086c17300))
+
 ## [0.7.2] - 2026-07-06
 
 ### Features
