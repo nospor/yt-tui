@@ -80,6 +80,7 @@ func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
 	desc := textarea.New()
 	desc.Placeholder = "Detailed description (Markdown supported)..."
 	desc.SetHeight(10) // Bigger description field
+	desc.ShowLineNumbers = false
 
 	a := textinput.New()
 	a.Placeholder = "Assignee username (or 'me', 'unassigned')"
