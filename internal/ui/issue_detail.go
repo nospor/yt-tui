@@ -2944,31 +2944,122 @@ func extractURLs(text string) []string {
 
 func (m *detailModel) downloadAndOpenFileCmd(att ytcli.Attachment) tea.Cmd {
 	return func() tea.Msg {
-		dir := filepath.Join(os.TempDir(), "yt-tui-attachments")
+		subDir := ""
+		if m.issue != nil && m.issue.IDReadable != "" {
+			subDir = m.issue.IDReadable
+		}
+		dir := filepath.Join(os.TempDir(), "yt-tui-attachments", subDir)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return openFileFinishedMsg{err: fmt.Errorf("failed to create temp dir: %w", err)}
 		}
 
-		destPath := filepath.Join(dir, att.Name)
-		if err := m.client.DownloadAttachment(att.URL, destPath); err != nil {
-			return openFileFinishedMsg{err: fmt.Errorf("failed to download attachment: %w", err)}
-		}
-
-		var cmd *exec.Cmd
 		ext := strings.ToLower(filepath.Ext(att.Name))
 		isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp" || ext == ".webp"
+
+		var cmd *exec.Cmd
+		var destPath string
 		viewerName := "xdg-open"
 
 		if isImage && m.cfg != nil && m.cfg.ImageViewer != "" {
+			var imageAtts []ytcli.Attachment
+			selectedImageIndex := -1
+			if m.issue != nil {
+				for _, a := range m.issue.Attachments {
+					aExt := strings.ToLower(filepath.Ext(a.Name))
+					aIsImage := aExt == ".png" || aExt == ".jpg" || aExt == ".jpeg" || aExt == ".gif" || aExt == ".bmp" || aExt == ".webp"
+					if aIsImage {
+						if a.ID == att.ID {
+							selectedImageIndex = len(imageAtts)
+						}
+						imageAtts = append(imageAtts, a)
+					}
+				}
+			}
+
+			if selectedImageIndex == -1 {
+				selectedImageIndex = len(imageAtts)
+				imageAtts = append(imageAtts, att)
+			}
+
+			savedPaths := []string{}
+			for i, imgAtt := range imageAtts {
+				path := filepath.Join(dir, imgAtt.Name)
+				exists := false
+				if stat, err := os.Stat(path); err == nil && !stat.IsDir() {
+					exists = true
+				}
+				if !exists {
+					if err := m.client.DownloadAttachment(imgAtt.URL, path); err != nil {
+						if i == selectedImageIndex {
+							return openFileFinishedMsg{err: fmt.Errorf("failed to download attachment %s: %w", imgAtt.Name, err)}
+						}
+						continue
+					}
+				}
+				savedPaths = append(savedPaths, path)
+				if i == selectedImageIndex {
+					destPath = path
+				}
+			}
+
+			newSelectedIdx := -1
+			for idx, p := range savedPaths {
+				if p == destPath {
+					newSelectedIdx = idx
+					break
+				}
+			}
+
 			parts := strings.Fields(m.cfg.ImageViewer)
 			if len(parts) > 0 {
 				viewerName = parts[0]
-				args := append(parts[1:], destPath)
+				viewerBase := filepath.Base(viewerName)
+
+				var args []string
+				if viewerBase == "sxiv" || viewerBase == "nsxiv" {
+					if newSelectedIdx != -1 {
+						args = append(parts[1:], "-n", strconv.Itoa(newSelectedIdx+1))
+					} else {
+						args = parts[1:]
+					}
+					args = append(args, savedPaths...)
+				} else if viewerBase == "feh" {
+					if destPath != "" {
+						args = append(parts[1:], "--start-at", destPath)
+					} else {
+						args = parts[1:]
+					}
+					args = append(args, savedPaths...)
+				} else if viewerBase == "imv" {
+					if destPath != "" {
+						args = append(parts[1:], "-n", destPath)
+					} else {
+						args = parts[1:]
+					}
+					args = append(args, savedPaths...)
+				} else {
+					// Reorder so that destPath is first, followed by the rest
+					var reorderedPaths []string
+					if destPath != "" {
+						reorderedPaths = append(reorderedPaths, destPath)
+					}
+					for idx, p := range savedPaths {
+						if idx != newSelectedIdx {
+							reorderedPaths = append(reorderedPaths, p)
+						}
+					}
+					args = append(parts[1:], reorderedPaths...)
+				}
+
 				cmd = exec.Command(viewerName, args...)
 			} else {
 				cmd = exec.Command("xdg-open", destPath)
 			}
 		} else {
+			destPath = filepath.Join(dir, att.Name)
+			if err := m.client.DownloadAttachment(att.URL, destPath); err != nil {
+				return openFileFinishedMsg{err: fmt.Errorf("failed to download attachment: %w", err)}
+			}
 			cmd = exec.Command("xdg-open", destPath)
 		}
 
