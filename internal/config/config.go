@@ -109,6 +109,7 @@ type Config struct {
 	BrowserCommand      string              `json:"browser_command,omitempty"`
 	GitLabCommand       string              `json:"gitlab_command,omitempty"`
 	Theme               string              `json:"theme"`
+	UsernameSeparator   string              `json:"username_separator,omitempty"`
 }
 
 // GetCustomStates returns the list of custom states for the given project.
@@ -216,10 +217,11 @@ type ActionConfig struct {
 }
 
 type ServerConfig struct {
-	Name       string `json:"name,omitempty"`
-	URL        string `json:"url"`
-	Token      string `json:"token"`
-	VcsBaseURL string `json:"vcs_base_url,omitempty"`
+	Name              string `json:"name,omitempty"`
+	URL               string `json:"url"`
+	Token             string `json:"token"`
+	VcsBaseURL        string `json:"vcs_base_url,omitempty"`
+	UsernameSeparator string `json:"username_separator,omitempty"`
 }
 
 const (

@@ -932,9 +932,37 @@ func (c *Client) GetCurrentUserLogin() (string, error) {
 	return userData.Login, nil
 }
 
-// normalizeAssignee converts assignee username input to lowercase and replaces spaces with dots.
+// getUsernameSeparator resolves the separator for joining username parts.
+// It checks the current server configuration, falling back to a global config setting,
+// and finally defaults to ".".
+func (c *Client) getUsernameSeparator() string {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return "."
+	}
+
+	cleanBaseURL := strings.TrimSuffix(c.baseURL, "/")
+
+	// 1. Check if the active server in the config has a specific separator
+	for _, s := range cfg.Servers {
+		if strings.TrimSuffix(resolveEnvValue(s.URL), "/") == cleanBaseURL {
+			if s.UsernameSeparator != "" {
+				return s.UsernameSeparator
+			}
+		}
+	}
+
+	// 2. Check if a global default separator is specified
+	if cfg.UsernameSeparator != "" {
+		return cfg.UsernameSeparator
+	}
+
+	return "."
+}
+
+// normalizeAssignee converts assignee username input to lowercase and replaces spaces with the configured separator (defaults to ".").
 // It also maps unassignment keywords like "unassigned", "unassign", "none", and "-" to an empty string.
-func normalizeAssignee(assignee string) string {
+func (c *Client) normalizeAssignee(assignee string) string {
 	assignee = strings.TrimSpace(assignee)
 	if assignee == "" {
 		return ""
@@ -950,12 +978,13 @@ func normalizeAssignee(assignee string) string {
 	for i, part := range parts {
 		parts[i] = strings.ToLower(part)
 	}
-	return strings.Join(parts, ".")
+	sep := c.getUsernameSeparator()
+	return strings.Join(parts, sep)
 }
 
 // AssignIssue assigns an issue to a user.
 func (c *Client) AssignIssue(id string, assignee string) error {
-	assignee = normalizeAssignee(assignee)
+	assignee = c.normalizeAssignee(assignee)
 	if assignee == "me" {
 		if resolved, err := c.GetCurrentUserLogin(); err == nil {
 			assignee = resolved
@@ -1065,7 +1094,7 @@ func (c *Client) CreateIssue(projectID, summary, description, priority, issueTyp
 		})
 	}
 
-	assignee = normalizeAssignee(assignee)
+	assignee = c.normalizeAssignee(assignee)
 	if assignee == "me" {
 		if resolved, err := c.GetCurrentUserLogin(); err == nil {
 			assignee = resolved
@@ -1159,7 +1188,7 @@ func (c *Client) UpdateIssue(id, summary, description, priority, issueType, assi
 		})
 	}
 
-	assignee = normalizeAssignee(assignee)
+	assignee = c.normalizeAssignee(assignee)
 	if assignee == "me" {
 		if resolved, err := c.GetCurrentUserLogin(); err == nil {
 			assignee = resolved

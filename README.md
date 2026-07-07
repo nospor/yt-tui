@@ -132,7 +132,8 @@ If you manage issues across multiple YouTrack instances, you can configure an ar
     {
       "name": "Work YouTrack",
       "url": "https://work.youtrack.cloud",
-      "token": "$WORK_TOKEN"
+      "token": "$WORK_TOKEN",
+      "username_separator": "_"
     },
     {
       "name": "Personal YouTrack",
@@ -183,7 +184,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | --------------------- | ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `url`                 | String           | `""`                                                                             | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                             |
 | `token`               | String           | `""`                                                                             | Your permanent YouTrack API token.                                                                                                                                                          |
-| `servers`             | Array of Objects | `[]` (empty)                                                                     | List of YouTrack server configurations (each containing `name`, `url`, `token`, and optionally `vcs_base_url`) to choose from on startup.                                                  |
+| `servers`             | Array of Objects | `[]` (empty)                                                                     | List of YouTrack server configurations (each containing `name`, `url`, `token`, and optionally `vcs_base_url` or `username_separator`) to choose from on startup.                           |
+| `username_separator`   | String           | `""` (defaults to `.`)                                                           | The separator string used to merge first and last names when normalizing assignee inputs (e.g., `_` for `First_Last` or `.` for `first.last`). Can be set globally or per-server.           |
 | `page_size`           | Integer          | `20`                                                                             | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
 | `max_issues`          | Integer          | `500`                                                                            | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
 | `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]`                             | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`, `Updated`, `Updater`, `Created`, `Creator`/`Reporter`) as well as custom field names.                 |
