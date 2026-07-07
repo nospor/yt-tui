@@ -84,6 +84,7 @@ type Config struct {
 	VcsBaseURL          string              `json:"vcs_base_url,omitempty"`
 	BrowserCommand      string              `json:"browser_command,omitempty"`
 	GitLabCommand       string              `json:"gitlab_command,omitempty"`
+	Theme               string              `json:"theme"`
 }
 
 // GetCustomStates returns the list of custom states for the given project.
@@ -210,6 +211,7 @@ func LoadConfig() (*Config, error) {
 			ActivityFilters:    []string{"Comments"},
 			RenderMarkdown:     true,
 			BrowserCommand:     "xdg-open",
+			Theme:              "catppuccin",
 		}, err
 	}
 
@@ -229,6 +231,7 @@ func LoadConfig() (*Config, error) {
 			FilteredPriorities: append([]string{}, DefaultPriorities...),
 			ActivityFilters:    []string{"Comments"},
 			RenderMarkdown:     true,
+			Theme:              "catppuccin",
 		}, err
 	}
 
@@ -246,6 +249,7 @@ func LoadConfig() (*Config, error) {
 		ActivityFilters:    []string{"Comments"},
 		RenderMarkdown:     true,
 		BrowserCommand:     "xdg-open",
+		Theme:              "catppuccin",
 	}
 
 	// Check if file exists
@@ -349,6 +353,10 @@ func LoadConfig() (*Config, error) {
 	}
 	if fileCfg.ActivityFilters == nil {
 		fileCfg.ActivityFilters = []string{"Comments"}
+		needsWrite = true
+	}
+	if fileCfg.Theme == "" {
+		fileCfg.Theme = "catppuccin"
 		needsWrite = true
 	}
 

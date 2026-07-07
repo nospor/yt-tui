@@ -169,7 +169,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "render_markdown": true,
   "image_viewer": "sxiv",
   "browser_command": "xdg-open",
-  "gitlab_command": ""
+  "gitlab_command": "",
+  "theme": "catppuccin"
 }
 ```
 
@@ -203,6 +204,8 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `vcs_base_url`        | String           | `""` (empty)                                                                     | Base URL of your VCS (e.g. GitLab/GitHub instance) to resolve references like `group/project!mr` to links. Can also be set per-server in the `servers` list.                                |
 | `browser_command`     | String           | `"xdg-open"`                                                                     | The command or executable used to open web browser links (e.g. `google-chrome`).                                                                                                            |
 | `gitlab_command`      | String           | `""` (empty)                                                                     | The command or executable to open GitLab merge requests inside a popup TUI process (e.g. [gitlab-tui](https://github.com/nospor/gitlab-tui)). If empty, GitLab links are opened in the default browser. |
+| `theme`               | String           | `"catppuccin"`                                                                   | The TUI color theme. Supported values: `catppuccin` (Catppuccin Mocha, default) and `teams` (adapted from `teams-tui-go` with green borders, cyan accents, and popups).                     |
+
 
 
 ### ⚡ Custom Quick Actions

@@ -89,6 +89,12 @@ func NewAppModel(initialURL string) AppModel {
 	client := ytcli.NewClient()
 	cfg, err := config.LoadConfig()
 
+	if cfg != nil {
+		SetTheme(cfg.Theme)
+	} else {
+		SetTheme("catppuccin")
+	}
+
 	var startState State = stateWelcome
 	var startData string
 	var prefilledURL string
@@ -157,6 +163,7 @@ func NewAppModel(initialURL string) AppModel {
 func (m *AppModel) reloadConfig() {
 	if cfg, err := config.LoadConfig(); err == nil {
 		*m.cfg = *cfg
+		SetTheme(m.cfg.Theme)
 	}
 }
 

@@ -85,7 +85,7 @@ func overlayLines(base, overlay string, x, y int) string {
 
 		for j, oCell := range oCells {
 			pos := x + j
-			bgSeq := "\x1b[48;2;49;50;68m" // truecolor escape for ColorSurface (#313244)
+			bgSeq := BgSeq
 			if oCell.style == "" {
 				oCell.style = bgSeq
 			} else {
