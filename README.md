@@ -154,7 +154,10 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
   "page_size": 20,
   "max_issues": 500,
   "fields": ["ID", "Summary", "State", "Priority", "Assignee"],
-  "custom_types": ["Bug", "Task", "Ops", "Initiative", "Epic"],
+  "custom_types": {
+    "default": ["Bug", "Task", "Ops", "Initiative", "Epic"],
+    "MTEL": ["Bug", "Feature", "Task"]
+  },
   "custom_priorities": {
     "default": ["0 - Immediate action", "1 - Interrupt current sprint", "2 - Must have", "3 - Should have", "4 - Nice to have"],
     "MTEL": ["Minor", "Normal", "Major"]
@@ -184,7 +187,7 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 | `page_size`           | Integer          | `20`                                                                             | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
 | `max_issues`          | Integer          | `500`                                                                            | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
 | `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]`                             | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`, `Updated`, `Updater`, `Created`, `Creator`/`Reporter`) as well as custom field names.                 |
-| `custom_types`        | Array of Strings | `[]` (empty)                                                                     | Custom list of issue type options to populate the creation dropdown instead of the standard default list (Bug, Feature, Task, etc.).                                                        |
+| `custom_types`        | Object           | `{}` (empty)                                                                     | Custom list of issue type options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["Bug", "Task"], "default": ["Bug", "Feature"]}`) to populate the creation dropdown. Supports legacy array format as a fallback.                                                        |
 | `custom_priorities`   | Object           | `{}` (empty)                                                                     | Custom list of issue priority options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["Minor", "Normal"], "default": ["Minor", "Major"]}`) to populate the creation dropdown. Supports legacy array format as a fallback. |
 | `custom_states`       | Object           | `{}` (empty)                                                                     | Custom list of issue state transition options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["New", "In Dev"], "default": ["Open", "Closed"]}`) to populate the state selection modal. Supports legacy array format as a fallback. |
 | `filtered_states`     | Array of Strings | `[]` (empty)                                                                     | List of selected issue states to display on the tasks list. States not in this list will be filtered out.                                                                                   |

@@ -241,8 +241,10 @@ func (m *formModel) setPriorityByValue(val string) {
 func (m formModel) getTypes() []string {
 	var opts []string
 	opts = append(opts, "(Default)")
-	if m.cfg != nil && len(m.cfg.CustomTypes) > 0 {
-		opts = append(opts, m.cfg.CustomTypes...)
+	projectCode := m.getSelectedProjectCode()
+	if m.cfg != nil {
+		custom := m.cfg.GetCustomTypes(projectCode)
+		opts = append(opts, custom...)
 	} else {
 		opts = append(opts, "Bug", "Feature", "Task", "Epic", "Improvement", "Support")
 	}

@@ -55,6 +55,30 @@ func (c *CustomPrioritiesMap) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("custom_priorities must be either a list of strings or a map of list of strings")
 }
 
+// CustomTypesMap represents custom types configured per project, or a default fallback.
+type CustomTypesMap map[string][]string
+
+// UnmarshalJSON handles loading custom_types either as a list of strings (legacy/fallback) or a map of list of strings.
+func (c *CustomTypesMap) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as map first
+	var m map[string][]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		*c = m
+		return nil
+	}
+
+	// If that fails, try unmarshaling as a slice of strings
+	var s []string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*c = map[string][]string{
+			"default": s,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("custom_types must be either a list of strings or a map of list of strings")
+}
+
 // Config represents the application configuration.
 type Config struct {
 	URL                 string              `json:"url"`
@@ -63,7 +87,7 @@ type Config struct {
 	PageSize            int                 `json:"page_size"`
 	MaxIssues           int                 `json:"max_issues"`
 	Fields              []string            `json:"fields"`
-	CustomTypes         []string            `json:"custom_types"`
+	CustomTypes         CustomTypesMap      `json:"custom_types"`
 	CustomPriorities    CustomPrioritiesMap `json:"custom_priorities"`
 	CustomStates        CustomStatesMap     `json:"custom_states"`
 	WorkTypes           []string            `json:"work_types"`
@@ -121,6 +145,24 @@ func (cfg *Config) GetCustomPriorities(projectCode string) []string {
 		return priorities
 	}
 	return DefaultPriorities
+}
+
+// GetCustomTypes returns the list of custom types for the given project.
+// If projectCode is empty or not found, it falls back to the "default" key,
+// and finally to config.DefaultTypes.
+func (cfg *Config) GetCustomTypes(projectCode string) []string {
+	if cfg == nil || len(cfg.CustomTypes) == 0 {
+		return DefaultTypes
+	}
+	if projectCode != "" {
+		if types, ok := cfg.CustomTypes[projectCode]; ok && len(types) > 0 {
+			return types
+		}
+	}
+	if types, ok := cfg.CustomTypes["default"]; ok && len(types) > 0 {
+		return types
+	}
+	return DefaultTypes
 }
 
 // GetFavoriteView returns the favorite view for the given server URL.
@@ -202,7 +244,7 @@ func LoadConfig() (*Config, error) {
 			PageSize:           DefaultPageSize,
 			MaxIssues:          DefaultMaxIssues,
 			Fields:             DefaultFields,
-			CustomTypes:        DefaultTypes,
+			CustomTypes:        map[string][]string{"default": DefaultTypes},
 			CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 			CustomStates:       map[string][]string{"default": DefaultStates},
 			WorkTypes:          DefaultWorkTypes,
@@ -224,7 +266,7 @@ func LoadConfig() (*Config, error) {
 			PageSize:           DefaultPageSize,
 			MaxIssues:          DefaultMaxIssues,
 			Fields:             DefaultFields,
-			CustomTypes:        DefaultTypes,
+			CustomTypes:        map[string][]string{"default": DefaultTypes},
 			CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 			CustomStates:       map[string][]string{"default": DefaultStates},
 			FilteredStates:     append([]string{}, DefaultStates...),
@@ -240,7 +282,7 @@ func LoadConfig() (*Config, error) {
 		PageSize:           DefaultPageSize,
 		MaxIssues:          DefaultMaxIssues,
 		Fields:             DefaultFields,
-		CustomTypes:        DefaultTypes,
+		CustomTypes:        map[string][]string{"default": DefaultTypes},
 		CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 		CustomStates:       map[string][]string{"default": DefaultStates},
 		WorkTypes:          DefaultWorkTypes,
@@ -298,7 +340,7 @@ func LoadConfig() (*Config, error) {
 		needsWrite = true
 	}
 	if len(fileCfg.CustomTypes) == 0 {
-		fileCfg.CustomTypes = DefaultTypes
+		fileCfg.CustomTypes = map[string][]string{"default": DefaultTypes}
 		needsWrite = true
 	}
 	if len(fileCfg.CustomPriorities) == 0 {
