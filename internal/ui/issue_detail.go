@@ -76,6 +76,7 @@ type detailModel struct {
 	width               int
 	height              int
 	activeViewport      int // 0 = description, 1 = comments, 2 = links, 3 = attachments
+	fullView            bool
 	descViewport        viewport.Model
 	commentsViewport    viewport.Model
 	linksViewport       viewport.Model
@@ -723,6 +724,12 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, nil
 
 		case modeActionSelect:
+			var actions []config.ActionConfig
+			if m.cfg != nil {
+				actions = m.cfg.Actions
+			}
+			totalActions := len(actions) + 1
+
 			switch msg.String() {
 			case "esc", " ":
 				m.mode = modeNormal
@@ -730,32 +737,45 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			case "up", "k":
 				m.actionCursor--
 				if m.actionCursor < 0 {
-					m.actionCursor = len(m.cfg.Actions) - 1
+					m.actionCursor = totalActions - 1
 				}
 				return m, nil
 			case "down", "j":
 				m.actionCursor++
-				if m.actionCursor >= len(m.cfg.Actions) {
+				if m.actionCursor >= totalActions {
 					m.actionCursor = 0
 				}
 				return m, nil
 			case "enter":
-				if len(m.cfg.Actions) > 0 {
+				if m.actionCursor >= 0 && m.actionCursor < len(actions) {
 					m.loading = true
 					m.loadingText = "Running action..."
-					act := m.cfg.Actions[m.actionCursor]
+					act := actions[m.actionCursor]
 					issueID := m.issue.IDReadable
 					client := m.client
 					return m, func() tea.Msg {
 						err := executeAction(client, issueID, act)
 						return detailActionFinishedMsg{err: err}
 					}
+				} else if m.actionCursor == len(actions) {
+					m.fullView = !m.fullView
+					m.mode = modeNormal
+					m.updateViewportSizes()
+					m.updateViewportContents()
+					return m, nil
 				}
 				m.mode = modeNormal
 				return m, nil
 			default:
-				// Check shortcuts
-				for _, act := range m.cfg.Actions {
+				if strings.ToLower(msg.String()) == "f" {
+					m.fullView = !m.fullView
+					m.mode = modeNormal
+					m.updateViewportSizes()
+					m.updateViewportContents()
+					return m, nil
+				}
+
+				for _, act := range actions {
 					if msg.String() == act.Shortcut {
 						m.loading = true
 						m.loadingText = "Running action..."
@@ -1429,11 +1449,13 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		case "tab":
 			// Switch focus between Description, Comments, Links and Attachments viewports
 			m.activeViewport = (m.activeViewport + 1) % 4
+			m.updateViewportSizes()
 			m.updateViewportContents()
 			return m, nil
 		case "shift+tab":
 			// Switch focus in opposite direction
 			m.activeViewport = (m.activeViewport - 1 + 4) % 4
+			m.updateViewportSizes()
 			m.updateViewportContents()
 			return m, nil
 		case "up", "k":
@@ -1578,10 +1600,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.pastedCommentImages = nil
 			return m, nil
 		case " ":
-			if m.cfg != nil && len(m.cfg.Actions) > 0 {
-				m.mode = modeActionSelect
-				m.actionCursor = 0
-			}
+			m.mode = modeActionSelect
+			m.actionCursor = 0
 			return m, nil
 		case "s":
 			m.mode = modeStateSelect
@@ -1735,23 +1755,59 @@ func (m *detailModel) updateViewportSizes() {
 		commentsViewportHeight = 1
 	}
 
-	// Check if the dimensions actually changed
-	descWidthChanged := m.descViewport.Width != viewportDescWidth
-	commentsWidthChanged := m.commentsViewport.Width != viewportCommentsWidth
+	targetDescWidth := viewportDescWidth
+	targetCommentsWidth := viewportCommentsWidth
+	targetLinksWidth := viewportDescWidth
+	targetAttachmentsWidth := viewportCommentsWidth
 
-	m.descViewport.Width = viewportDescWidth
-	m.descViewport.Height = descViewportHeight
-	m.commentsViewport.Width = viewportCommentsWidth
-	m.commentsViewport.Height = commentsViewportHeight
-	m.linksViewport.Width = viewportDescWidth
-	m.linksViewport.Height = bottomPanelHeight
-	m.attachmentsViewport.Width = viewportCommentsWidth
-	m.attachmentsViewport.Height = bottomPanelHeight
+	targetDescHeight := descViewportHeight
+	targetCommentsHeight := commentsViewportHeight
+	targetLinksHeight := bottomPanelHeight
+	targetAttachmentsHeight := bottomPanelHeight
+
+	if m.fullView {
+		fullViewportWidth := m.width - 8
+		if fullViewportWidth < 1 {
+			fullViewportWidth = 1
+		}
+		fullViewportHeight := bottomHeight - 2
+		if fullViewportHeight < 1 {
+			fullViewportHeight = 1
+		}
+
+		switch m.activeViewport {
+		case 0:
+			targetDescWidth = fullViewportWidth
+			targetDescHeight = fullViewportHeight
+		case 1:
+			targetCommentsWidth = fullViewportWidth
+			targetCommentsHeight = fullViewportHeight
+		case 2:
+			targetLinksWidth = fullViewportWidth
+			targetLinksHeight = fullViewportHeight
+		case 3:
+			targetAttachmentsWidth = fullViewportWidth
+			targetAttachmentsHeight = fullViewportHeight
+		}
+	}
+
+	descWidthChanged := m.descViewport.Width != targetDescWidth
+	commentsWidthChanged := m.commentsViewport.Width != targetCommentsWidth
+	linksWidthChanged := m.linksViewport.Width != targetLinksWidth
+	attachmentsWidthChanged := m.attachmentsViewport.Width != targetAttachmentsWidth
+
+	m.descViewport.Width = targetDescWidth
+	m.descViewport.Height = targetDescHeight
+	m.commentsViewport.Width = targetCommentsWidth
+	m.commentsViewport.Height = targetCommentsHeight
+	m.linksViewport.Width = targetLinksWidth
+	m.linksViewport.Height = targetLinksHeight
+	m.attachmentsViewport.Width = targetAttachmentsWidth
+	m.attachmentsViewport.Height = targetAttachmentsHeight
 	m.commentInput.SetWidth(m.width - 6)
 
-	// Only re-wrap and set content if the width changed and we have the issue loaded
 	if m.issue != nil {
-		if descWidthChanged || commentsWidthChanged {
+		if descWidthChanged || commentsWidthChanged || linksWidthChanged || attachmentsWidthChanged {
 			m.updateViewportContents()
 		}
 	}
@@ -2264,9 +2320,23 @@ func (m detailModel) View() string {
 		m.activeViewport == 3,
 	)
 
-	leftColumn := lipgloss.JoinVertical(lipgloss.Left, descView, " ", linksView)
-	rightColumn := lipgloss.JoinVertical(lipgloss.Left, commentsView, " ", attachmentsView)
-	splitView := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", rightColumn)
+	var splitView string
+	if m.fullView {
+		switch m.activeViewport {
+		case 0:
+			splitView = descView
+		case 1:
+			splitView = commentsView
+		case 2:
+			splitView = linksView
+		case 3:
+			splitView = attachmentsView
+		}
+	} else {
+		leftColumn := lipgloss.JoinVertical(lipgloss.Left, descView, " ", linksView)
+		rightColumn := lipgloss.JoinVertical(lipgloss.Left, commentsView, " ", attachmentsView)
+		splitView = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, " ", rightColumn)
+	}
 
 	// 3. Lower Action overlay
 	var actionView string
@@ -2416,11 +2486,17 @@ func (m detailModel) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
-	if m.mode == modeActionSelect && m.cfg != nil && len(m.cfg.Actions) > 0 {
+	if m.mode == modeActionSelect {
 		var lines []string
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select Action (or press shortcut):"))
 		lines = append(lines, "")
-		for idx, act := range m.cfg.Actions {
+
+		var actions []config.ActionConfig
+		if m.cfg != nil {
+			actions = m.cfg.Actions
+		}
+
+		for idx, act := range actions {
 			displayStr := fmt.Sprintf("[%s] %s", act.Shortcut, act.Name)
 			if idx == m.actionCursor {
 				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayStr))
@@ -2428,6 +2504,17 @@ func (m detailModel) View() string {
 				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+displayStr))
 			}
 		}
+
+		// Add special "Toggle Full View" action
+		lines = append(lines, "")
+		specialDisplayStr := "[f] Toggle Full View"
+		specialIdx := len(actions)
+		if specialIdx == m.actionCursor {
+			lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+specialDisplayStr))
+		} else {
+			lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText)).Render("  "+specialDisplayStr))
+		}
+
 		popupContent := lipgloss.JoinVertical(lipgloss.Left, lines...)
 		popup := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
