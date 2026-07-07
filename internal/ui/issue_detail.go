@@ -156,7 +156,8 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 
 	commIn := textarea.New()
 	commIn.Placeholder = "Add a comment..."
-	commIn.SetHeight(3)
+	commIn.ShowLineNumbers = false
+	commIn.SetHeight(4)
 	commIn.FocusedStyle.Base = commIn.FocusedStyle.Base.Background(lipgloss.Color(ColorSurface))
 	commIn.BlurredStyle.Base = commIn.BlurredStyle.Base.Background(lipgloss.Color(ColorSurface))
 	commIn.FocusedStyle.Text = commIn.FocusedStyle.Text.Background(lipgloss.Color(ColorSurface))
@@ -164,7 +165,8 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 
 	commentInput := textarea.New()
 	commentInput.Placeholder = "Add a comment..."
-	commentInput.SetHeight(3)
+	commentInput.ShowLineNumbers = false
+	commentInput.SetHeight(5)
 	commentInput.FocusedStyle.Base = commentInput.FocusedStyle.Base.Background(lipgloss.Color(ColorSurface))
 	commentInput.BlurredStyle.Base = commentInput.BlurredStyle.Base.Background(lipgloss.Color(ColorSurface))
 	commentInput.FocusedStyle.Text = commentInput.FocusedStyle.Text.Background(lipgloss.Color(ColorSurface))
@@ -1715,7 +1717,7 @@ func (m *detailModel) updateViewportSizes() {
 	var actionHeight int
 	if m.hasActionView() {
 		if m.mode == modeCommentInput || m.mode == modeCommentEdit {
-			actionHeight = 8
+			actionHeight = 10
 		} else {
 			actionHeight = 6
 		}
