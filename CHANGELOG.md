@@ -1,4 +1,14 @@
 
+## [0.7.4] - 2026-07-08
+
+### Bug Fixes
+
+- *(ytcli)* Normalize non-standard and accented characters in assignee usernames ([8fb0e72](https://github.com/nospor/yt-tui/commit/8fb0e7273a72c3e6f17b21bbde68645e61d40c19))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.3 [skip ci] ([4e139cf](https://github.com/nospor/yt-tui/commit/4e139cf2b5649836fe779559a5de5578b60eda13))
+
 ## [0.7.3] - 2026-07-07
 
 ### Features
