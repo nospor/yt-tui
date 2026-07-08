@@ -584,7 +584,7 @@ func (m AppModel) View() string {
 }
 
 var issueIDRegex = regexp.MustCompile(`(?i)^[a-z0-9]+-\d+$`)
-var issueURLRegex = regexp.MustCompile(`(?i)/issue/([a-z0-9]+-\d+)`)
+var issueURLRegex = regexp.MustCompile(`(?i)(?:/projects/[a-z0-9_-]+/issues/|/issue/|/issues/)([a-z0-9]+-\d+)`)
 
 func normalizeURL(u string) string {
 	u = strings.ToLower(strings.TrimSpace(u))
@@ -593,19 +593,16 @@ func normalizeURL(u string) string {
 }
 
 func parseYouTrackURL(u string) (string, string) {
-	lowerU := strings.ToLower(u)
-	idx := strings.Index(lowerU, "/issue/")
-	if idx == -1 {
+	loc := issueURLRegex.FindStringSubmatchIndex(u)
+	if loc == nil {
 		return "", ""
 	}
-	baseURL := u[:idx]
-	issueIDPart := u[idx+len("/issue/"):]
 
-	if qIdx := strings.IndexAny(issueIDPart, "?#/ "); qIdx != -1 {
-		issueIDPart = issueIDPart[:qIdx]
-	}
+	baseURL := u[:loc[0]]
+	issueID := u[loc[2]:loc[3]]
 
-	issueID := strings.ToUpper(issueIDPart)
+	// Validate the extracted issueID
+	issueID = strings.ToUpper(issueID)
 	if !issueIDRegex.MatchString(issueID) {
 		return "", ""
 	}

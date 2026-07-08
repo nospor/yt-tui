@@ -90,6 +90,9 @@ You can also launch `yt-tui` directly with a YouTrack issue URL as an argument:
 
 ```bash
 yt-tui https://youtrack.example.com/issue/PROJ-123
+# Or project-specific/plural issue URLs:
+yt-tui https://youtrack.example.com/projects/PROJ/issues/PROJ-123
+yt-tui https://youtrack.example.com/issues/PROJ-123
 ```
 
 When you pass a URL:
