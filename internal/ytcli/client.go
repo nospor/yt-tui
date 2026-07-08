@@ -13,7 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 	"yt-tui/internal/config"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Client wraps YouTrack API operations.
@@ -960,7 +963,59 @@ func (c *Client) getUsernameSeparator() string {
 	return "."
 }
 
-// normalizeAssignee converts assignee username input to lowercase and replaces spaces with the configured separator (defaults to ".").
+// replaceSpecialRunes handles runes that do not decompose under NFD.
+func replaceSpecialRunes(r rune) string {
+	switch r {
+	case 'ł':
+		return "l"
+	case 'Ł':
+		return "l"
+	case 'ø':
+		return "o"
+	case 'Ø':
+		return "o"
+	case 'æ':
+		return "ae"
+	case 'Æ':
+		return "ae"
+	case 'ß':
+		return "ss"
+	case 'ð':
+		return "d"
+	case 'Ð':
+		return "d"
+	case 'đ':
+		return "d"
+	case 'Đ':
+		return "d"
+	case 'þ':
+		return "th"
+	case 'Þ':
+		return "th"
+	default:
+		return string(r)
+	}
+}
+
+// removeDiacritics removes accents and replaces non-standard characters with their ASCII equivalents.
+func removeDiacritics(s string) string {
+	var buf strings.Builder
+	for _, r := range s {
+		buf.WriteString(replaceSpecialRunes(r))
+	}
+	s = buf.String()
+
+	t := norm.NFD.String(s)
+	var result strings.Builder
+	for _, r := range t {
+		if !unicode.Is(unicode.Mn, r) {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+// normalizeAssignee converts assignee username input to lowercase, replaces non-standard/accented characters with standard ASCII equivalents, and replaces spaces with the configured separator (defaults to ".").
 // It also maps unassignment keywords like "unassigned", "unassign", "none", and "-" to an empty string.
 func (c *Client) normalizeAssignee(assignee string) string {
 	assignee = strings.TrimSpace(assignee)
@@ -976,7 +1031,7 @@ func (c *Client) normalizeAssignee(assignee string) string {
 		return ""
 	}
 	for i, part := range parts {
-		parts[i] = strings.ToLower(part)
+		parts[i] = removeDiacritics(strings.ToLower(part))
 	}
 	sep := c.getUsernameSeparator()
 	return strings.Join(parts, sep)
