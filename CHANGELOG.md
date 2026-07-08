@@ -1,4 +1,14 @@
 
+## [0.7.5] - 2026-07-08
+
+### Bug Fixes
+
+- *(ui)* Render issue detail action errors as popup overlays instead of full page ([afafc2f](https://github.com/nospor/yt-tui/commit/afafc2f45a3a4a31816f7ebdf64439f60b67124b))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.4 [skip ci] ([57312fd](https://github.com/nospor/yt-tui/commit/57312fd37048faa5e172319ffe8d08a18d7cfafd))
+
 ## [0.7.4] - 2026-07-08
 
 ### Bug Fixes
