@@ -1,4 +1,14 @@
 
+## [0.7.6] - 2026-07-08
+
+### Features
+
+- Support new YouTrack URL formats for direct link loading ([694e0d6](https://github.com/nospor/yt-tui/commit/694e0d6374fec28be72847c490b5ea806b941f55))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.5 [skip ci] ([b76c11c](https://github.com/nospor/yt-tui/commit/b76c11c43adafaa6c55aacdba07a6746c33df568))
+
 ## [0.7.5] - 2026-07-08
 
 ### Bug Fixes
