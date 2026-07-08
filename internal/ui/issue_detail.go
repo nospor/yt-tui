@@ -72,6 +72,7 @@ type detailModel struct {
 	filterCursor        int
 	tempFilters         map[string]bool
 	err                 error
+	errPopupShow        bool
 	spinner             spinner.Model
 	width               int
 	height              int
@@ -223,6 +224,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 		trackTimeDurationInput: durIn,
 		trackTimeCommentInput:  commIn,
 		filepicker:             fp,
+		errPopupShow:           false,
 	}
 }
 
@@ -299,6 +301,7 @@ func (m *detailModel) setIssueKey(key string) tea.Cmd {
 	m.issueKey = key
 	m.loading = true
 	m.err = nil
+	m.errPopupShow = false
 	m.mode = modeNormal
 	m.activeViewport = 0
 	m.linksCursor = 0
@@ -394,6 +397,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 	case editorFinishedMsg:
 		if msg.err != nil {
 			m.err = msg.err
+			m.errPopupShow = true
 			if msg.tempPath != "" {
 				os.Remove(msg.tempPath)
 			}
@@ -405,6 +409,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				content, err := os.ReadFile(msg.tempPath)
 				if err != nil {
 					m.err = err
+					m.errPopupShow = true
 					return m, tea.ClearScreen
 				}
 				m.commentInput.SetValue(string(content))
@@ -416,6 +421,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			if m.issue != nil {
+				m.errPopupShow = true
+			}
 			return m, nil
 		}
 		m.issue = msg.issue
@@ -446,6 +454,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.mode = modeNormal
 		if msg.err != nil {
 			m.err = msg.err
+			m.errPopupShow = true
 			return m, nil
 		}
 		m.isModified = true
@@ -458,6 +467,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.loadingText = ""
 		if msg.err != nil {
 			m.err = msg.err
+			m.errPopupShow = true
 			return m, nil
 		}
 		m.statusMessage = fmt.Sprintf("Opened %s!", msg.fileName)
@@ -472,6 +482,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.loadingText = ""
 		if msg.err != nil {
 			m.err = fmt.Errorf("popup error: %w", msg.err)
+			m.errPopupShow = true
 		} else {
 			m.statusMessage = "Popup closed"
 			m.statusMessageID++
@@ -487,6 +498,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.loadingText = ""
 		if msg.err != nil {
 			m.err = fmt.Errorf("browser error: %w", msg.err)
+			m.errPopupShow = true
 		} else {
 			m.statusMessage = "Opened URL in browser!"
 			m.statusMessageID++
@@ -498,6 +510,15 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.errPopupShow && m.err != nil {
+			if msg.String() == "y" {
+				_ = clipboardWriteAll(m.err.Error())
+			}
+			m.errPopupShow = false
+			m.err = nil
+			return m, nil
+		}
+
 		if m.loading {
 			return m, nil
 		}
@@ -526,6 +547,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					return m, nil
 				} else if err != nil {
 					m.err = err
+					m.errPopupShow = true
 				}
 			case "ctrl+f":
 				m.filepickerActive = true
@@ -600,6 +622,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					return m, nil
 				} else if err != nil {
 					m.err = err
+					m.errPopupShow = true
 				}
 			case "ctrl+f":
 				m.filepickerActive = true
@@ -836,6 +859,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					text := m.issue.IDReadable
 					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						m.errPopupShow = true
 					} else {
 						m.statusMessage = "Copied issue ID to clipboard!"
 						m.statusMessageID++
@@ -853,6 +877,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					text := fmt.Sprintf("%s %s", m.issue.IDReadable, m.issue.Summary)
 					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						m.errPopupShow = true
 					} else {
 						m.statusMessage = "Copied ID and summary to clipboard!"
 						m.statusMessageID++
@@ -870,6 +895,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					text := m.issue.Description
 					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						m.errPopupShow = true
 					} else {
 						m.statusMessage = "Copied description to clipboard!"
 						m.statusMessageID++
@@ -1001,6 +1027,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				} else if len(urls) == 1 {
 					if err := clipboardWriteAll(urls[0]); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						m.errPopupShow = true
 					} else {
 						m.statusMessage = "Copied URL to clipboard!"
 						m.statusMessageID++
@@ -1025,6 +1052,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 						text := act.GetCommentText()
 						if err := clipboardWriteAll(text); err != nil {
 							m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+							m.errPopupShow = true
 						} else {
 							m.statusMessage = "Copied comment to clipboard!"
 							m.statusMessageID++
@@ -1037,6 +1065,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 						_, msgText, _ := act.GetVcsChangeDetails()
 						if err := clipboardWriteAll(msgText); err != nil {
 							m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+							m.errPopupShow = true
 						} else {
 							m.statusMessage = "Copied VCS change to clipboard!"
 							m.statusMessageID++
@@ -1074,6 +1103,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					text := m.yankUrls[m.yankUrlCursor]
 					if err := clipboardWriteAll(text); err != nil {
 						m.err = fmt.Errorf("failed to copy to clipboard: %w", err)
+						m.errPopupShow = true
 					} else {
 						m.statusMessage = "Copied URL to clipboard!"
 						m.statusMessageID++
@@ -2216,7 +2246,7 @@ func (m *detailModel) updateViewportScroll() {
 }
 
 func (m detailModel) View() string {
-	if m.err != nil {
+	if m.err != nil && m.issue == nil {
 		return StyleErrorMessage.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
@@ -2813,7 +2843,83 @@ func (m detailModel) View() string {
 		view = overlayLines(view, popup, x, y)
 	}
 
+	if m.errPopupShow && m.err != nil {
+		// Clip or pad base view to m.height lines to prevent terminal scrolling
+		lines := strings.Split(view, "\n")
+		if len(lines) > m.height {
+			lines = lines[:m.height]
+			view = strings.Join(lines, "\n")
+		} else if len(lines) < m.height {
+			for len(lines) < m.height {
+				lines = append(lines, "")
+			}
+			view = strings.Join(lines, "\n")
+		}
+
+		errorPopup := m.renderErrorPopup()
+		popupWidth := lipgloss.Width(errorPopup)
+		popupHeight := strings.Count(errorPopup, "\n") + 1
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, errorPopup, x, y)
+	}
+
 	return view
+}
+
+func (m detailModel) renderErrorPopup() string {
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Bold(true)
+	title := titleStyle.Render("⚠  Error")
+
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorOverlay)).Render(strings.Repeat("─", 56))
+
+	errMsg := ""
+	if m.err != nil {
+		errMsg = m.err.Error()
+	}
+
+	// Wrap long error messages
+	const maxLineLen = 56
+	var wrappedLines []string
+	for len(errMsg) > maxLineLen {
+		wrappedLines = append(wrappedLines, errMsg[:maxLineLen])
+		errMsg = errMsg[maxLineLen:]
+	}
+	wrappedLines = append(wrappedLines, errMsg)
+
+	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorText))
+	var errLines []string
+	for _, l := range wrappedLines {
+		errLines = append(errLines, errStyle.Render(l))
+	}
+
+	footer := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Italic(true).Render("[y] Copy to clipboard  [any] Dismiss")
+
+	popupContent := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		divider,
+		"",
+		lipgloss.JoinVertical(lipgloss.Left, errLines...),
+		"",
+		divider,
+		"",
+		footer,
+	)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorRed)).
+		Background(lipgloss.Color(ColorSurface)).
+		Padding(1, 2).
+		Width(60).
+		Render(popupContent)
 }
 
 func (m detailModel) renderFilePickerPopup() string {

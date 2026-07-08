@@ -142,6 +142,7 @@ func NewAppModel(initialURL string) AppModel {
 		detail.linksCursor = 0
 		detail.attachmentsCursor = 0
 		detail.loadingText = ""
+		detail.errPopupShow = false
 	}
 
 	return AppModel{
@@ -464,6 +465,7 @@ func (m *AppModel) switchState(state State, data string, isBack bool) tea.Cmd {
 		m.detail.attachmentsCursor = 0
 		m.detail.loadingText = ""
 		m.detail.fullView = false
+		m.detail.errPopupShow = false
 		return m.detail.loadDetailCmd()
 	case stateForm:
 		return m.form.setupForm(data)
