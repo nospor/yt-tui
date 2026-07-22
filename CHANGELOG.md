@@ -1,4 +1,18 @@
 
+## [0.7.7] - 2026-07-22
+
+### Features
+
+- Support storing issue state and priority filters per-project ([0c5381b](https://github.com/nospor/yt-tui/commit/0c5381bd90000146058d0ff1a6be066ea66249ba))
+
+### Bug Fixes
+
+- *(ui)* Use actual issue project shortname for filtering and sorting ([72779ba](https://github.com/nospor/yt-tui/commit/72779ba72dabde52c4f73aab7fd36aa6caa1797e))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.6 [skip ci] ([d373be5](https://github.com/nospor/yt-tui/commit/d373be56bf02fb0091cfc767d0ad5e7abfe39c3e))
+
 ## [0.7.6] - 2026-07-08
 
 ### Features
