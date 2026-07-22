@@ -258,12 +258,15 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 	state := issue.State()
 	// Check if state is in CustomStates
 	inCustomStates := false
-	projectCode := m.projectCode
-	if projectCode == "" && issue.Project != nil {
+	projectCode := ""
+	if issue.Project != nil {
 		projectCode = issue.Project.ShortName
 		if projectCode == "" {
 			projectCode = issue.Project.ID
 		}
+	}
+	if projectCode == "" {
+		projectCode = m.projectCode
 	}
 	for _, cs := range m.cfg.GetCustomStates(projectCode) {
 		if strings.EqualFold(cs, state) {
@@ -489,12 +492,15 @@ func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 	}
 
 	if titleLower == "priority" && m.cfg != nil {
-		projectCode := m.projectCode
-		if projectCode == "" && a.Project != nil {
+		projectCode := ""
+		if a.Project != nil {
 			projectCode = a.Project.ShortName
 			if projectCode == "" {
 				projectCode = a.Project.ID
 			}
+		}
+		if projectCode == "" {
+			projectCode = m.projectCode
 		}
 		priorities := m.cfg.GetCustomPriorities(projectCode)
 		idxA := priorityIndex(valA, priorities)
@@ -511,12 +517,15 @@ func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 	}
 
 	if titleLower == "state" && m.cfg != nil {
-		projectCode := m.projectCode
-		if projectCode == "" && a.Project != nil {
+		projectCode := ""
+		if a.Project != nil {
 			projectCode = a.Project.ShortName
 			if projectCode == "" {
 				projectCode = a.Project.ID
 			}
+		}
+		if projectCode == "" {
+			projectCode = m.projectCode
 		}
 		states := m.cfg.GetCustomStates(projectCode)
 		idxA := stateIndex(valA, states)
