@@ -266,7 +266,7 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 		}
 	}
 	if projectCode == "" {
-		projectCode = m.projectCode
+		projectCode = m.effectiveProjectCode()
 	}
 	for _, cs := range m.cfg.GetCustomStates(projectCode) {
 		if strings.EqualFold(cs, state) {
@@ -277,7 +277,7 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 	if inCustomStates {
 		// Must be in FilteredStates
 		found := false
-		for _, fs := range m.cfg.FilteredStates {
+		for _, fs := range m.cfg.GetFilteredStates(projectCode) {
 			if strings.EqualFold(fs, state) {
 				found = true
 				break
@@ -300,7 +300,7 @@ func (m *issuesModel) isVisible(issue ytcli.Issue) bool {
 	if inCustomPriorities {
 		// Must be in FilteredPriorities
 		found := false
-		for _, fp := range m.cfg.FilteredPriorities {
+		for _, fp := range m.cfg.GetFilteredPriorities(projectCode) {
 			if strings.EqualFold(fp, priority) {
 				found = true
 				break
@@ -360,8 +360,9 @@ func (m *issuesModel) getAvailableStates() []string {
 		return config.DefaultStates
 	}
 	projects := make(map[string]bool)
-	if m.projectCode != "" {
-		projects[m.projectCode] = true
+	projCode := m.effectiveProjectCode()
+	if projCode != "" {
+		projects[projCode] = true
 	}
 	for _, issue := range m.issues {
 		if issue.Project != nil {
@@ -382,8 +383,8 @@ func (m *issuesModel) getAvailableStates() []string {
 	seen := make(map[string]bool)
 	var merged []string
 
-	if m.projectCode != "" {
-		primaryStates := m.cfg.GetCustomStates(m.projectCode)
+	if projCode != "" {
+		primaryStates := m.cfg.GetCustomStates(projCode)
 		for _, s := range primaryStates {
 			if !seen[s] {
 				seen[s] = true
@@ -394,7 +395,7 @@ func (m *issuesModel) getAvailableStates() []string {
 
 	var codes []string
 	for code := range projects {
-		if code != m.projectCode {
+		if code != projCode {
 			codes = append(codes, code)
 		}
 	}
@@ -418,8 +419,9 @@ func (m *issuesModel) getAvailablePriorities() []string {
 		return config.DefaultPriorities
 	}
 	projects := make(map[string]bool)
-	if m.projectCode != "" {
-		projects[m.projectCode] = true
+	projCode := m.effectiveProjectCode()
+	if projCode != "" {
+		projects[projCode] = true
 	}
 	for _, issue := range m.issues {
 		if issue.Project != nil {
@@ -440,8 +442,8 @@ func (m *issuesModel) getAvailablePriorities() []string {
 	seen := make(map[string]bool)
 	var merged []string
 
-	if m.projectCode != "" {
-		primaryPriorities := m.cfg.GetCustomPriorities(m.projectCode)
+	if projCode != "" {
+		primaryPriorities := m.cfg.GetCustomPriorities(projCode)
 		for _, p := range primaryPriorities {
 			if !seen[p] {
 				seen[p] = true
@@ -452,7 +454,7 @@ func (m *issuesModel) getAvailablePriorities() []string {
 
 	var codes []string
 	for code := range projects {
-		if code != m.projectCode {
+		if code != projCode {
 			codes = append(codes, code)
 		}
 	}
@@ -500,7 +502,7 @@ func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 			}
 		}
 		if projectCode == "" {
-			projectCode = m.projectCode
+			projectCode = m.effectiveProjectCode()
 		}
 		priorities := m.cfg.GetCustomPriorities(projectCode)
 		idxA := priorityIndex(valA, priorities)
@@ -525,7 +527,7 @@ func (m *issuesModel) compareIssues(a, b ytcli.Issue, fieldTitle string) int {
 			}
 		}
 		if projectCode == "" {
-			projectCode = m.projectCode
+			projectCode = m.effectiveProjectCode()
 		}
 		states := m.cfg.GetCustomStates(projectCode)
 		idxA := stateIndex(valA, states)
@@ -644,6 +646,32 @@ func (m *issuesModel) currentViewData() string {
 		return "query:" + m.query
 	}
 	return ""
+}
+
+func (m *issuesModel) effectiveProjectCode() string {
+	if m.projectCode != "" {
+		return m.projectCode
+	}
+	if len(m.issues) == 0 {
+		return ""
+	}
+	var singleProject string
+	for _, issue := range m.issues {
+		if issue.Project != nil {
+			code := issue.Project.ShortName
+			if code == "" {
+				code = issue.Project.ID
+			}
+			if code != "" {
+				if singleProject == "" {
+					singleProject = code
+				} else if singleProject != code {
+					return ""
+				}
+			}
+		}
+	}
+	return singleProject
 }
 
 func (m *issuesModel) initProject(projectCode string, isBack bool) tea.Cmd {
@@ -997,9 +1025,10 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				return m, nil
 			case "enter":
 				if m.cfg != nil {
+					projCode := m.effectiveProjectCode()
 					// Build a map of current filtered states to preserve those not displayed
 					currentFiltered := make(map[string]bool)
-					for _, fs := range m.cfg.FilteredStates {
+					for _, fs := range m.cfg.GetFilteredStates(projCode) {
 						currentFiltered[fs] = true
 					}
 
@@ -1036,7 +1065,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 
 					// Build a map of current filtered priorities to preserve those not displayed
 					currentFilteredP := make(map[string]bool)
-					for _, fp := range m.cfg.FilteredPriorities {
+					for _, fp := range m.cfg.GetFilteredPriorities(projCode) {
 						currentFilteredP[fp] = true
 					}
 
@@ -1071,8 +1100,8 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 						}
 					}
 
-					m.cfg.FilteredStates = newStates
-					m.cfg.FilteredPriorities = newPriorities
+					m.cfg.SetFilteredStates(projCode, newStates)
+					m.cfg.SetFilteredPriorities(projCode, newPriorities)
 					_ = config.SaveConfig(m.cfg)
 					m.updateTableRows()
 				}
@@ -1142,10 +1171,11 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				m.filterCursor = 0
 				m.tempStates = make(map[string]bool)
 				m.tempPriorities = make(map[string]bool)
-				for _, s := range m.cfg.FilteredStates {
+				projCode := m.effectiveProjectCode()
+				for _, s := range m.cfg.GetFilteredStates(projCode) {
 					m.tempStates[s] = true
 				}
-				for _, p := range m.cfg.FilteredPriorities {
+				for _, p := range m.cfg.GetFilteredPriorities(projCode) {
 					m.tempPriorities[p] = true
 				}
 			}
@@ -1190,7 +1220,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			}
 		case "n":
 			return m, func() tea.Msg {
-				return pushStateMsg{state: stateForm, data: m.projectCode}
+				return pushStateMsg{state: stateForm, data: m.effectiveProjectCode()}
 			}
 		case "r":
 			m.loading = true

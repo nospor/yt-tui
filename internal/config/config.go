@@ -79,37 +79,85 @@ func (c *CustomTypesMap) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("custom_types must be either a list of strings or a map of list of strings")
 }
 
+// FilteredStatesMap represents filtered states configured per project, or a default fallback.
+type FilteredStatesMap map[string][]string
+
+// UnmarshalJSON handles loading filtered_states either as a list of strings (legacy/fallback) or a map of list of strings.
+func (f *FilteredStatesMap) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as map first
+	var m map[string][]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		*f = m
+		return nil
+	}
+
+	// If that fails, try unmarshaling as a slice of strings
+	var s []string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = map[string][]string{
+			"default": s,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("filtered_states must be either a list of strings or a map of list of strings")
+}
+
+// FilteredPrioritiesMap represents filtered priorities configured per project, or a default fallback.
+type FilteredPrioritiesMap map[string][]string
+
+// UnmarshalJSON handles loading filtered_priorities either as a list of strings (legacy/fallback) or a map of list of strings.
+func (f *FilteredPrioritiesMap) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as map first
+	var m map[string][]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		*f = m
+		return nil
+	}
+
+	// If that fails, try unmarshaling as a slice of strings
+	var s []string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = map[string][]string{
+			"default": s,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("filtered_priorities must be either a list of strings or a map of list of strings")
+}
+
 // Config represents the application configuration.
 type Config struct {
-	URL                 string              `json:"url"`
-	Token               string              `json:"token"`
-	Servers             []ServerConfig      `json:"servers,omitempty"`
-	PageSize            int                 `json:"page_size"`
-	MaxIssues           int                 `json:"max_issues"`
-	Fields              []string            `json:"fields"`
-	CustomTypes         CustomTypesMap      `json:"custom_types"`
-	CustomPriorities    CustomPrioritiesMap `json:"custom_priorities"`
-	CustomStates        CustomStatesMap     `json:"custom_states"`
-	WorkTypes           []string            `json:"work_types"`
-	FilteredStates      []string            `json:"filtered_states"`
-	FilteredPriorities  []string            `json:"filtered_priorities"`
-	SortColumn          string              `json:"sort_column"`
-	SortDirection       string              `json:"sort_direction"`
-	FavoriteView        string              `json:"favorite_view,omitempty"`
-	FavoriteViews       map[string]string   `json:"favorite_views,omitempty"`
-	ActivityFilters     []string            `json:"activity_filters,omitempty"`
-	RenderMarkdown      bool                `json:"render_markdown"`
-	RepoOptions         map[string][]string `json:"repo_options,omitempty"`
-	FilepickerSortBy    string              `json:"filepicker_sort_by,omitempty"`
-	FilepickerSortOrder string              `json:"filepicker_sort_order,omitempty"`
-	FilepickerLastDir   string              `json:"filepicker_last_dir,omitempty"`
-	Actions             []ActionConfig      `json:"actions,omitempty"`
-	ImageViewer         string              `json:"image_viewer,omitempty"`
-	VcsBaseURL          string              `json:"vcs_base_url,omitempty"`
-	BrowserCommand      string              `json:"browser_command,omitempty"`
-	GitLabCommand       string              `json:"gitlab_command,omitempty"`
-	Theme               string              `json:"theme"`
-	UsernameSeparator   string              `json:"username_separator,omitempty"`
+	URL                 string                `json:"url"`
+	Token               string                `json:"token"`
+	Servers             []ServerConfig        `json:"servers,omitempty"`
+	PageSize            int                   `json:"page_size"`
+	MaxIssues           int                   `json:"max_issues"`
+	Fields              []string              `json:"fields"`
+	CustomTypes         CustomTypesMap        `json:"custom_types"`
+	CustomPriorities    CustomPrioritiesMap   `json:"custom_priorities"`
+	CustomStates        CustomStatesMap       `json:"custom_states"`
+	WorkTypes           []string              `json:"work_types"`
+	FilteredStates      FilteredStatesMap     `json:"filtered_states"`
+	FilteredPriorities  FilteredPrioritiesMap `json:"filtered_priorities"`
+	SortColumn          string                `json:"sort_column"`
+	SortDirection       string                `json:"sort_direction"`
+	FavoriteView        string                `json:"favorite_view,omitempty"`
+	FavoriteViews       map[string]string     `json:"favorite_views,omitempty"`
+	ActivityFilters     []string              `json:"activity_filters,omitempty"`
+	RenderMarkdown      bool                  `json:"render_markdown"`
+	RepoOptions         map[string][]string   `json:"repo_options,omitempty"`
+	FilepickerSortBy    string                `json:"filepicker_sort_by,omitempty"`
+	FilepickerSortOrder string                `json:"filepicker_sort_order,omitempty"`
+	FilepickerLastDir   string                `json:"filepicker_last_dir,omitempty"`
+	Actions             []ActionConfig        `json:"actions,omitempty"`
+	ImageViewer         string                `json:"image_viewer,omitempty"`
+	VcsBaseURL          string                `json:"vcs_base_url,omitempty"`
+	BrowserCommand      string                `json:"browser_command,omitempty"`
+	GitLabCommand       string                `json:"gitlab_command,omitempty"`
+	Theme               string                `json:"theme"`
+	UsernameSeparator   string                `json:"username_separator,omitempty"`
 }
 
 // GetCustomStates returns the list of custom states for the given project.
@@ -164,6 +212,72 @@ func (cfg *Config) GetCustomTypes(projectCode string) []string {
 		return types
 	}
 	return DefaultTypes
+}
+
+// GetFilteredStates returns the list of filtered states for the given project.
+func (cfg *Config) GetFilteredStates(projectCode string) []string {
+	if cfg == nil || len(cfg.FilteredStates) == 0 {
+		return DefaultStates
+	}
+	key := projectCode
+	if key == "" {
+		key = "default"
+	}
+	if states, ok := cfg.FilteredStates[key]; ok {
+		return states
+	}
+	if states, ok := cfg.FilteredStates["default"]; ok {
+		return states
+	}
+	return cfg.GetCustomStates(projectCode)
+}
+
+// GetFilteredPriorities returns the list of filtered priorities for the given project.
+func (cfg *Config) GetFilteredPriorities(projectCode string) []string {
+	if cfg == nil || len(cfg.FilteredPriorities) == 0 {
+		return DefaultPriorities
+	}
+	key := projectCode
+	if key == "" {
+		key = "default"
+	}
+	if priorities, ok := cfg.FilteredPriorities[key]; ok {
+		return priorities
+	}
+	if priorities, ok := cfg.FilteredPriorities["default"]; ok {
+		return priorities
+	}
+	return cfg.GetCustomPriorities(projectCode)
+}
+
+// SetFilteredStates sets the filtered states for the given project.
+func (cfg *Config) SetFilteredStates(projectCode string, states []string) {
+	if cfg == nil {
+		return
+	}
+	if cfg.FilteredStates == nil {
+		cfg.FilteredStates = make(FilteredStatesMap)
+	}
+	key := projectCode
+	if key == "" {
+		key = "default"
+	}
+	cfg.FilteredStates[key] = states
+}
+
+// SetFilteredPriorities sets the filtered priorities for the given project.
+func (cfg *Config) SetFilteredPriorities(projectCode string, priorities []string) {
+	if cfg == nil {
+		return
+	}
+	if cfg.FilteredPriorities == nil {
+		cfg.FilteredPriorities = make(FilteredPrioritiesMap)
+	}
+	key := projectCode
+	if key == "" {
+		key = "default"
+	}
+	cfg.FilteredPriorities[key] = priorities
 }
 
 // GetFavoriteView returns the favorite view for the given server URL.
@@ -250,8 +364,8 @@ func LoadConfig() (*Config, error) {
 			CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 			CustomStates:       map[string][]string{"default": DefaultStates},
 			WorkTypes:          DefaultWorkTypes,
-			FilteredStates:     append([]string{}, DefaultStates...),
-			FilteredPriorities: append([]string{}, DefaultPriorities...),
+			FilteredStates:     FilteredStatesMap{"default": append([]string{}, DefaultStates...)},
+			FilteredPriorities: FilteredPrioritiesMap{"default": append([]string{}, DefaultPriorities...)},
 			ActivityFilters:    []string{"Comments"},
 			RenderMarkdown:     true,
 			BrowserCommand:     "xdg-open",
@@ -271,8 +385,8 @@ func LoadConfig() (*Config, error) {
 			CustomTypes:        map[string][]string{"default": DefaultTypes},
 			CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 			CustomStates:       map[string][]string{"default": DefaultStates},
-			FilteredStates:     append([]string{}, DefaultStates...),
-			FilteredPriorities: append([]string{}, DefaultPriorities...),
+			FilteredStates:     FilteredStatesMap{"default": append([]string{}, DefaultStates...)},
+			FilteredPriorities: FilteredPrioritiesMap{"default": append([]string{}, DefaultPriorities...)},
 			ActivityFilters:    []string{"Comments"},
 			RenderMarkdown:     true,
 			Theme:              "catppuccin",
@@ -288,8 +402,8 @@ func LoadConfig() (*Config, error) {
 		CustomPriorities:   map[string][]string{"default": DefaultPriorities},
 		CustomStates:       map[string][]string{"default": DefaultStates},
 		WorkTypes:          DefaultWorkTypes,
-		FilteredStates:     append([]string{}, DefaultStates...),
-		FilteredPriorities: append([]string{}, DefaultPriorities...),
+		FilteredStates:     FilteredStatesMap{"default": append([]string{}, DefaultStates...)},
+		FilteredPriorities: FilteredPrioritiesMap{"default": append([]string{}, DefaultPriorities...)},
 		ActivityFilters:    []string{"Comments"},
 		RenderMarkdown:     true,
 		BrowserCommand:     "xdg-open",
@@ -370,10 +484,11 @@ func LoadConfig() (*Config, error) {
 				uniqueStates[s] = true
 			}
 		}
-		fileCfg.FilteredStates = make([]string, 0, len(uniqueStates))
+		statesList := make([]string, 0, len(uniqueStates))
 		for s := range uniqueStates {
-			fileCfg.FilteredStates = append(fileCfg.FilteredStates, s)
+			statesList = append(statesList, s)
 		}
+		fileCfg.FilteredStates = FilteredStatesMap{"default": statesList}
 		needsWrite = true
 	}
 	if fileCfg.FilteredPriorities == nil {
@@ -389,10 +504,11 @@ func LoadConfig() (*Config, error) {
 				uniquePriorities[p] = true
 			}
 		}
-		fileCfg.FilteredPriorities = make([]string, 0, len(uniquePriorities))
+		prioritiesList := make([]string, 0, len(uniquePriorities))
 		for p := range uniquePriorities {
-			fileCfg.FilteredPriorities = append(fileCfg.FilteredPriorities, p)
+			prioritiesList = append(prioritiesList, p)
 		}
+		fileCfg.FilteredPriorities = FilteredPrioritiesMap{"default": prioritiesList}
 		needsWrite = true
 	}
 	if fileCfg.ActivityFilters == nil {
