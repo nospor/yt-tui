@@ -1,4 +1,14 @@
 
+## [0.7.8] - 2026-08-04
+
+### Features
+
+- Add live user autocomplete to assignee fields ([d32b28f](https://github.com/nospor/yt-tui/commit/d32b28f40a5369c5b3deb3e7069588347d05c146))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.7 [skip ci] ([3093981](https://github.com/nospor/yt-tui/commit/3093981c77c30735763aec2575ceb0504b434c21))
+
 ## [0.7.7] - 2026-07-22
 
 ### Features
