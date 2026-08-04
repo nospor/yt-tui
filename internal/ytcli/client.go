@@ -1487,6 +1487,69 @@ func (c *Client) ListUsers() ([]User, error) {
 	return users, nil
 }
 
+// ListProjectMembers fetches the users who are members of a given project (by short name or ID).
+// It tries the admin/projects/:id/members endpoint first; if that returns 403/404 it silently falls
+// back to an empty slice so callers can degrade gracefully.
+func (c *Client) ListProjectMembers(projectShortName string) ([]User, error) {
+	if c.baseURL == "" || c.token == "" {
+		return nil, errors.New("missing YouTrack connection URL or token")
+	}
+
+	// Resolve the internal project ID from the short name.
+	projectID, err := c.getProjectIDByShortName(projectShortName)
+	if err != nil {
+		return nil, err
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	// Try the project-members endpoint (requires Read Project admin permission).
+	apiURL := baseURL + "api/admin/projects/" + projectID + "/members?fields=user(login,fullName)&$top=500"
+
+	req, err := c.newRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 403 / 404 mean the token does not have admin read access — fall back silently.
+	if statusCode == http.StatusForbidden || statusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, parseAPIError(statusCode, body)
+	}
+
+	// The response is an array of ProjectMember objects, each containing a nested User.
+	var members []struct {
+		User *User `json:"user"`
+	}
+	if err := json.Unmarshal(body, &members); err != nil {
+		// Might be a plain []User in some older YT versions — try that.
+		var users []User
+		if err2 := json.Unmarshal(body, &users); err2 != nil {
+			return nil, err
+		}
+		return users, nil
+	}
+
+	var users []User
+	for _, m := range members {
+		if m.User != nil && (m.User.Login != "" || m.User.FullName != "") {
+			users = append(users, *m.User)
+		}
+	}
+	return users, nil
+}
+
 // GetConfiguredBaseURL reads the current base URL.
 func (c *Client) GetConfiguredBaseURL() string {
 	return c.baseURL

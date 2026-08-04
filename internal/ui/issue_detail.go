@@ -112,6 +112,11 @@ type detailModel struct {
 	statusMessage   string
 	statusMessageID int
 
+	// Assignee autocomplete for modeAssignInput
+	assignUsers    []ytcli.User
+	assignFiltered []ytcli.User
+	assignCursor   int
+
 	// URL Yanking / Opening
 	yankUrls      []string
 	yankUrlCursor int
@@ -238,6 +243,10 @@ type detailDataMsg struct {
 
 type detailActionFinishedMsg struct {
 	err error
+}
+
+type usersForAssignLoadedMsg struct {
+	users []ytcli.User
 }
 
 type clearStatusMsg struct {
@@ -447,6 +456,13 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.updateViewportSizes()
 		m.updateViewportContents()
 
+		return m, nil
+
+	case usersForAssignLoadedMsg:
+		m.assignUsers = msg.users
+		// Pre-populate suggestions (empty query shows all up to 8).
+		m.assignFiltered = m.filterAssignUsers(m.textInput.Value())
+		m.assignCursor = 0
 		return m, nil
 
 	case detailActionFinishedMsg:
@@ -681,7 +697,48 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 
 		case modeAssignInput:
 			switch msg.String() {
+			case "up", "k":
+				if len(m.assignFiltered) > 0 {
+					m.assignCursor--
+					if m.assignCursor < 0 {
+						m.assignCursor = len(m.assignFiltered) - 1
+					}
+					return m, nil
+				}
+			case "down", "j":
+				if len(m.assignFiltered) > 0 {
+					m.assignCursor++
+					if m.assignCursor >= len(m.assignFiltered) {
+						m.assignCursor = 0
+					}
+					return m, nil
+				}
+			case "tab":
+				if len(m.assignFiltered) > 0 && m.assignCursor >= 0 && m.assignCursor < len(m.assignFiltered) {
+					selected := m.assignFiltered[m.assignCursor]
+					name := selected.FullName
+					if name == "" {
+						name = selected.Login
+					}
+					m.textInput.SetValue(name)
+					m.textInput.CursorEnd()
+					m.assignFiltered = nil
+					return m, nil
+				}
 			case "enter":
+				// If a suggestion is highlighted, apply it first.
+				if len(m.assignFiltered) > 0 && m.assignCursor >= 0 && m.assignCursor < len(m.assignFiltered) {
+					selected := m.assignFiltered[m.assignCursor]
+					name := selected.FullName
+					if name == "" {
+						name = selected.Login
+					}
+					m.textInput.SetValue(name)
+					m.textInput.CursorEnd()
+					m.assignFiltered = nil
+					return m, nil
+				}
+				// Otherwise submit what's in the text input.
 				val := m.textInput.Value()
 				if val != "" {
 					m.loading = true
@@ -693,6 +750,13 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 			case "esc":
 				m.mode = modeNormal
+				m.assignFiltered = nil
+			default:
+				m.textInput, cmd = m.textInput.Update(msg)
+				// Re-filter suggestions as the user types.
+				m.assignFiltered = m.filterAssignUsers(m.textInput.Value())
+				m.assignCursor = 0
+				return m, cmd
 			}
 			m.textInput, cmd = m.textInput.Update(msg)
 			return m, cmd
@@ -1671,10 +1735,28 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, nil
 		case "a":
 			m.mode = modeAssignInput
-			m.textInput.Placeholder = "Assignee (username, 'me', or 'unassigned')..."
+			m.textInput.Placeholder = "Type name to search or enter freely..."
 			m.textInput.SetValue("")
 			m.textInput.Focus()
-			return m, nil
+			m.assignUsers = nil
+			m.assignFiltered = nil
+			m.assignCursor = 0
+			// Load project members asynchronously.
+			var projectCode string
+			if m.issue != nil && m.issue.Project != nil {
+				projectCode = m.issue.Project.ShortName
+			}
+			pc := projectCode
+			return m, func() tea.Msg {
+				var users []ytcli.User
+				if pc != "" {
+					users, _ = m.client.ListProjectMembers(pc)
+				}
+				if len(users) == 0 {
+					users, _ = m.client.ListUsers()
+				}
+				return usersForAssignLoadedMsg{users: users}
+			}
 		case "C":
 			// Clone issue (pushes form pre-filled)
 			return m, func() tea.Msg {
@@ -1732,6 +1814,38 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// filterAssignUsers filters the assignee candidate list by query string (case-insensitive).
+// Returns nil for special keywords (me, unassigned, etc.) so they are submitted as-is.
+func (m detailModel) filterAssignUsers(query string) []ytcli.User {
+	if len(m.assignUsers) == 0 {
+		return nil
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	// Special keywords bypass the suggestion list.
+	if q == "me" || q == "unassigned" || q == "unassign" || q == "none" || q == "-" {
+		return nil
+	}
+	if q == "" {
+		result := make([]ytcli.User, len(m.assignUsers))
+		copy(result, m.assignUsers)
+		if len(result) > 8 {
+			result = result[:8]
+		}
+		return result
+	}
+	var result []ytcli.User
+	for _, u := range m.assignUsers {
+		if strings.Contains(strings.ToLower(u.FullName), q) ||
+			strings.Contains(strings.ToLower(u.Login), q) {
+			result = append(result, u)
+			if len(result) >= 8 {
+				break
+			}
+		}
+	}
+	return result
 }
 
 func (m detailModel) hasActionView() bool {
@@ -2388,12 +2502,43 @@ func (m detailModel) View() string {
 			Width(m.width - 4).
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.commentInput.View()))
 	case modeAssignInput:
-		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Assign Issue (Enter username, 'me', or 'unassigned', Esc to cancel) ")
+		var titleStr string
+		if len(m.assignUsers) == 0 {
+			titleStr = " Assign Issue — loading suggestions... (or type to enter freely (also 'me', or 'unassigned'), Esc to cancel) "
+		} else if len(m.assignFiltered) > 0 {
+			titleStr = " Assign Issue — ↑/↓ Select, Tab/Enter Apply, or type freely (also 'me', or 'unassigned'), Esc to cancel "
+		} else {
+			titleStr = " Assign Issue — type name, 'me', or 'unassigned', Esc to cancel "
+		}
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(titleStr)
+		var parts []string
+		parts = append(parts, title, " ", m.textInput.View())
+		if len(m.assignFiltered) > 0 {
+			parts = append(parts, "")
+			for i, u := range m.assignFiltered {
+				label := u.FullName
+				if label == "" {
+					label = u.Login
+				} else if u.Login != "" {
+					label = fmt.Sprintf("%s (%s)", u.FullName, u.Login)
+				}
+				if i == m.assignCursor {
+					parts = append(parts, lipgloss.NewStyle().
+						Foreground(lipgloss.Color(ColorCyan)).
+						Bold(true).
+						Render("  ▶ "+label))
+				} else {
+					parts = append(parts, lipgloss.NewStyle().
+						Foreground(lipgloss.Color(ColorSubtext)).
+						Render("    "+label))
+				}
+			}
+		}
 		actionView = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorCyan)).
 			Width(m.width - 4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.textInput.View()))
+			Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 	case modeStateSelect:
 		var optsStr strings.Builder
 		for idx, opt := range m.stateOptions {

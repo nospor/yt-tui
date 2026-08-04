@@ -63,6 +63,11 @@ type formModel struct {
 	priorityIndex    int
 	customPriorities []string
 
+	// Assignee autocomplete
+	allUsers      []ytcli.User // all available members/users
+	filteredUsers []ytcli.User // users matching current input
+	userCursor    int          // highlighted row in suggestion list
+
 	pastedImages []PastedImage
 
 	filepicker       filepicker.Model
@@ -147,6 +152,11 @@ type projectsLoadedMsg struct {
 	err      error
 }
 
+type usersLoadedMsg struct {
+	users []ytcli.User
+	err   error
+}
+
 func (m formModel) loadFormDataCmd(key string) tea.Cmd {
 	return func() tea.Msg {
 		issue, err := m.client.GetIssue(key)
@@ -158,6 +168,22 @@ func (m formModel) loadProjectsCmd() tea.Cmd {
 	return func() tea.Msg {
 		projects, err := m.client.ListProjects()
 		return projectsLoadedMsg{projects: projects, err: err}
+	}
+}
+
+func (m formModel) loadUsersCmd(projectCode string) tea.Cmd {
+	return func() tea.Msg {
+		var users []ytcli.User
+		var err error
+		if projectCode != "" {
+			// Try project-specific members first.
+			users, err = m.client.ListProjectMembers(projectCode)
+		}
+		// If no members returned (e.g. 403 / no project), fall back to all users.
+		if len(users) == 0 {
+			users, err = m.client.ListUsers()
+		}
+		return usersLoadedMsg{users: users, err: err}
 	}
 }
 
@@ -291,11 +317,15 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 	m.priorityIndex = 0
 	m.customTypes = nil
 	m.customPriorities = nil
+	m.allUsers = nil
+	m.filteredUsers = nil
+	m.userCursor = 0
 	m.pastedImages = nil
 	m.filepickerActive = false
 
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.loadProjectsCmd())
+	cmds = append(cmds, m.loadUsersCmd("")) // load users; will be refreshed when project is known
 
 	if strings.HasPrefix(data, "clone:") {
 		m.isClone = true
@@ -400,6 +430,14 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		}
 		return m, tea.ClearScreen
 
+	case usersLoadedMsg:
+		if msg.err == nil {
+			m.allUsers = msg.users
+			m.filteredUsers = m.filterUsers(m.assigneeInput.Value())
+			m.userCursor = 0
+		}
+		return m, nil
+
 	case projectsLoadedMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -409,6 +447,8 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 		m.projects = msg.projects
 		if m.initialProjectCode != "" {
 			m.setProjectByCode(m.initialProjectCode)
+			// Refresh user list for this project.
+			return m, m.loadUsersCmd(m.initialProjectCode)
 		}
 		return m, nil
 
@@ -632,6 +672,24 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			}
 
 		case "tab", "down":
+			// If assignee field is focused and suggestions are showing, navigate suggestions.
+			if m.focusIndex == fieldAssignee && len(m.filteredUsers) > 0 {
+				if msg.String() == "tab" {
+					// Tab selects current suggestion.
+					if m.userCursor >= 0 && m.userCursor < len(m.filteredUsers) {
+						selected := m.filteredUsers[m.userCursor].DisplayName()
+						m.assigneeInput.SetValue(selected)
+						m.assigneeInput.CursorEnd()
+						m.filteredUsers = nil
+						m.userCursor = 0
+						return m, nil
+					}
+				} else {
+					// Down moves cursor in suggestions.
+					m.userCursor = (m.userCursor + 1) % len(m.filteredUsers)
+					return m, nil
+				}
+			}
 			if m.focusIndex == fieldDescription {
 				if msg.String() == "down" {
 					m.descTextArea, cmd = m.descTextArea.Update(msg)
@@ -642,6 +700,14 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			return m, nil
 
 		case "shift+tab", "up":
+			// If assignee field is focused and suggestions are showing, navigate suggestions.
+			if m.focusIndex == fieldAssignee && len(m.filteredUsers) > 0 && msg.String() == "up" {
+				m.userCursor--
+				if m.userCursor < 0 {
+					m.userCursor = len(m.filteredUsers) - 1
+				}
+				return m, nil
+			}
 			if m.focusIndex == fieldDescription {
 				if msg.String() == "up" {
 					m.descTextArea, cmd = m.descTextArea.Update(msg)
@@ -680,6 +746,10 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				m.descTextArea, cmd = m.descTextArea.Update(msg)
 			case fieldAssignee:
 				m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+				if m.focusIndex == fieldAssignee {
+					m.filteredUsers = m.filterUsers(m.assigneeInput.Value())
+					m.userCursor = 0
+				}
 			}
 			return m, cmd
 
@@ -712,6 +782,10 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				m.descTextArea, cmd = m.descTextArea.Update(msg)
 			case fieldAssignee:
 				m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+				if m.focusIndex == fieldAssignee {
+					m.filteredUsers = m.filterUsers(m.assigneeInput.Value())
+					m.userCursor = 0
+				}
 			}
 			return m, cmd
 
@@ -749,6 +823,33 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				}
 			}
 
+			// Navigate suggestion list with arrow keys when assignee is focused
+			if m.focusIndex == fieldAssignee && len(m.filteredUsers) > 0 {
+				switch msg.String() {
+				case "up":
+					m.userCursor--
+					if m.userCursor < 0 {
+						m.userCursor = len(m.filteredUsers) - 1
+					}
+					return m, nil
+				case "down":
+					m.userCursor++
+					if m.userCursor >= len(m.filteredUsers) {
+						m.userCursor = 0
+					}
+					return m, nil
+				case "tab", "enter":
+					if m.userCursor >= 0 && m.userCursor < len(m.filteredUsers) {
+						selected := m.filteredUsers[m.userCursor].DisplayName()
+						m.assigneeInput.SetValue(selected)
+						m.assigneeInput.CursorEnd()
+						m.filteredUsers = nil
+						m.userCursor = 0
+						return m, nil
+					}
+				}
+			}
+
 			// Forward keys to the currently focused input
 			switch m.focusIndex {
 			case fieldSummary:
@@ -757,11 +858,46 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 				m.descTextArea, cmd = m.descTextArea.Update(msg)
 			case fieldAssignee:
 				m.assigneeInput, cmd = m.assigneeInput.Update(msg)
+				m.filteredUsers = m.filterUsers(m.assigneeInput.Value())
+				m.userCursor = 0
 			}
 			return m, cmd
 		}
 	}
 	return m, nil
+}
+
+// filterUsers returns users whose FullName or Login contains the query (case-insensitive).
+// Returns nil for special keywords (me, unassigned, etc.) so they are submitted as-is.
+func (m formModel) filterUsers(query string) []ytcli.User {
+	if len(m.allUsers) == 0 {
+		return nil
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	// Special keywords bypass the suggestion list.
+	if q == "me" || q == "unassigned" || q == "unassign" || q == "none" || q == "-" {
+		return nil
+	}
+	if q == "" {
+		// Show all when field is empty but focused
+		result := make([]ytcli.User, len(m.allUsers))
+		copy(result, m.allUsers)
+		if len(result) > 8 {
+			result = result[:8]
+		}
+		return result
+	}
+	var result []ytcli.User
+	for _, u := range m.allUsers {
+		if strings.Contains(strings.ToLower(u.FullName), q) ||
+			strings.Contains(strings.ToLower(u.Login), q) {
+			result = append(result, u)
+			if len(result) >= 8 {
+				break
+			}
+		}
+	}
+	return result
 }
 
 func (m *formModel) nextField() {
@@ -801,6 +937,11 @@ func (m *formModel) focusCurrent() {
 		m.descTextArea.Focus()
 	case fieldAssignee:
 		m.assigneeInput.Focus()
+		// Populate suggestions whenever the field gains focus
+		if len(m.allUsers) > 0 {
+			m.filteredUsers = m.filterUsers(m.assigneeInput.Value())
+			m.userCursor = 0
+		}
 	}
 }
 
@@ -953,7 +1094,12 @@ func (m formModel) View() string {
 	// Assignee
 	builder.WriteString("Assignee:\n")
 	builder.WriteString(renderField(m.assigneeInput.View(), m.focusIndex == fieldAssignee, targetWidth))
-	builder.WriteString("\n\n")
+	builder.WriteString("\n")
+	if m.focusIndex == fieldAssignee && len(m.filteredUsers) > 0 {
+		suggestion := renderAssigneeSuggestions(m.filteredUsers, m.userCursor)
+		builder.WriteString(suggestion + "\n")
+	}
+	builder.WriteString("\n")
 
 	formContent := formStyle.Render(builder.String())
 
@@ -962,8 +1108,14 @@ func (m formModel) View() string {
 		helpText = " [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker "
 	} else if m.focusIndex == fieldDescription {
 		helpText = " [Tab/Shift-Tab] Navigate  [Ctrl+v] Paste Img  [Ctrl+f] Attach File  [Ctrl+g] External Editor  [Ctrl+s] Submit  [Esc] Back "
-	} else if m.focusIndex == fieldSummary || m.focusIndex == fieldAssignee {
+	} else if m.focusIndex == fieldSummary {
 		helpText = " [Tab/Shift-Tab] Navigate Fields  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
+	} else if m.focusIndex == fieldAssignee {
+		if len(m.filteredUsers) > 0 {
+			helpText = " [↑/↓] Select Suggestion  [Tab/Enter] Apply  [Tab/Shift-Tab] Navigate Fields  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
+		} else {
+			helpText = " [Tab/Shift-Tab] Navigate Fields  [Ctrl+s] Save & Submit  [Esc] Cancel/Back "
+		}
 	} else {
 		helpText = " [Tab/Shift-Tab] Navigate Fields  [<- / -> or h/l] Select Dropdown Option  [Ctrl+s] Save & Submit  [?] Help  [Esc] Cancel/Back "
 	}
@@ -1125,4 +1277,28 @@ func renderDropdownOptions(options []string, activeIndex int) string {
 		}
 	}
 	return "  " + strings.Join(formatted, "   ")
+}
+
+// renderAssigneeSuggestions renders a vertical dropdown list of user suggestions.
+func renderAssigneeSuggestions(users []ytcli.User, cursor int) string {
+	var lines []string
+	for i, u := range users {
+		label := u.FullName
+		if label == "" {
+			label = u.Login
+		} else if u.Login != "" {
+			label = fmt.Sprintf("%s (%s)", u.FullName, u.Login)
+		}
+		if i == cursor {
+			lines = append(lines, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorCyan)).
+				Bold(true).
+				Render("  ▶ "+label))
+		} else {
+			lines = append(lines, lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorSubtext)).
+				Render("    "+label))
+		}
+	}
+	return strings.Join(lines, "\n")
 }

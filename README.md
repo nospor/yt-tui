@@ -29,7 +29,7 @@ Styled out-of-the-box with a vibrant **Catppuccin Mocha** color palette, `yt-tui
 - **🔄 Complete Issue Lifecycle**:
   - **Create & Clone**: Instantly spawn new issues or clone existing ones (pre-populating description, type, priority, and assignee details).
   - **State Transitions**: Transition states (e.g. `Open` ➔ `In Progress` ➔ `Fixed`) dynamically.
-  - **Assigning**: Quickly assign tickets to other team members, self-assign with `me`, or unassign with `unassigned` (also supports `unassign`, `none`, or `-`).
+  - **Assigning**: Quickly assign tickets with a **live autocomplete dropdown** that filters project members as you type. Navigate suggestions with `↑`/`↓` and select with `Tab`/`Enter`. Still supports free-text entry: type `me` to self-assign, `unassigned`/`-` to unassign.
   - **Commenting**: Write and submit markdown comments directly from the detail view.
   - **Linked Issues**: Displays grouped relations (e.g., parent/subtask, depends on, etc.) with quick jump navigation on `Enter`.
   - **Task Attachments**: Lists issue files and attachments with their sizes; download and open them directly via `xdg-open` on `Enter`.
@@ -336,7 +336,7 @@ Supported action command types:
 * `c`: Add a comment. Type your comment and press `Enter` to submit, `Alt+Enter` to insert a newline (multiline), or `Esc` to cancel. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, `Ctrl+f` to open the file browser popup to pick and attach files from your computer, or `Ctrl+g` to write/edit the comment in your preferred external editor.
 * `s`: Transition issue state (opens state input prompt; e.g. type `In Progress` or `Fixed` and hit `Enter`).
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
-* `a`: Assign issue (opens assignee input prompt; type username, `me`, or `unassigned` to unassign, and hit `Enter`).
+* `a`: Assign issue (opens an assignee input with a **live user suggestion dropdown**). As you type, matching project members and YouTrack users appear below the input. Use `↑`/`↓` to navigate the list and `Tab` or `Enter` to apply the highlighted name. You can also type a username, `me`, or `unassigned` directly and press `Enter`.
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Alt+Enter` for newlines, `Ctrl+v` image paste, `Ctrl+f` computer file attachment, and `Ctrl+g` external editor inside the comment editor).
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details, and automatically links the new issue back to the original under the "Is clone of" relationship.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
@@ -354,7 +354,8 @@ Supported action command types:
 * `Esc` / `Backspace`: Go back to the issues list (or the previous issue if navigated via links).
 
 ### 📝 Issue Form (Create / Clone / Edit)
-* `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee).
+* `Tab` / `Shift+Tab` / `↑` / `↓`: Move focus between form fields (Project, Summary, Description, Type, Priority, Assignee). When the **Assignee** field is focused and suggestions are visible, `↑`/`↓` navigates the suggestion list instead.
+* On the **Assignee** field: a **live autocomplete dropdown** appears as you type, filtering project members and YouTrack users. Press `Tab` or `Enter` while a suggestion is highlighted to apply it. You can still type any name freely if the list is empty or the person is not listed.
 * `←` / `→` (or `h` / `l`): Cycle options in dropdown fields (Project, Type, Priority).
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
 * `Ctrl+g` (on Description field): Open preferred external editor (using the `$EDITOR` environment variable) to write/edit the description.
