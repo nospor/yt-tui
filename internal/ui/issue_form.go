@@ -300,6 +300,28 @@ func (m formModel) getPriorities() []string {
 	return opts
 }
 
+// formTargetWidth returns the target width for form fields based on the
+// current form width.
+func (m formModel) formTargetWidth() int {
+	targetWidth := m.width - 8
+	if targetWidth < 40 {
+		targetWidth = 40
+	}
+	if targetWidth > 80 {
+		targetWidth = 80
+	}
+	return targetWidth
+}
+
+// applyInputSizes applies the computed width to the stored input models so that
+// cursor navigation and viewport scrolling stay consistent with rendering.
+func (m *formModel) applyInputSizes() {
+	targetWidth := m.formTargetWidth()
+	m.summaryInput.Width = targetWidth - 2
+	m.descTextArea.SetWidth(targetWidth - 2)
+	m.assigneeInput.Width = targetWidth - 2
+}
+
 func (m *formModel) setupForm(data string) tea.Cmd {
 	m.isClone = false
 	m.cloneKey = ""
@@ -322,6 +344,7 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 	m.userCursor = 0
 	m.pastedImages = nil
 	m.filepickerActive = false
+	m.applyInputSizes()
 
 	var cmds []tea.Cmd
 	cmds = append(cmds, m.loadProjectsCmd())
@@ -358,6 +381,10 @@ func (m formModel) Init() tea.Cmd {
 
 func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Keep input sizes applied to the stored models so cursor navigation and
+	// viewport scrolling use the same width as rendering.
+	m.applyInputSizes()
 
 	if m.filepickerActive {
 		switch msg := msg.(type) {
@@ -979,15 +1006,10 @@ func (m formModel) View() string {
 	title := StyleTitle.Render(titleText)
 
 	// Determine width
-	targetWidth := m.width - 8
-	if targetWidth < 40 {
-		targetWidth = 40
-	}
-	if targetWidth > 80 {
-		targetWidth = 80
-	}
+	targetWidth := m.formTargetWidth()
 
-	// Update inputs' widths dynamically
+	// Update inputs' widths dynamically (applied to the copy used for
+	// rendering; the stored models are sized in applyInputSizes during Update)
 	m.summaryInput.Width = targetWidth - 2
 	m.descTextArea.SetWidth(targetWidth - 2)
 	m.assigneeInput.Width = targetWidth - 2
