@@ -338,6 +338,7 @@ Supported action command types:
 * `R`: Select and update the custom `Repo` field options (opens selection menu; Left/Right to choose, Enter to save, Esc to cancel).
 * `a`: Assign issue (opens an assignee input with a **live user suggestion dropdown**). As you type, matching project members and YouTrack users appear below the input. Use `↑`/`↓` to navigate the list and `Tab` or `Enter` to apply the highlighted name. You can also type a username, `me`, or `unassigned` directly and press `Enter`.
 * `e`: Edit/update this issue's details (Summary, Description, Priority, Type, Assignee). When focusing the Comments viewport and a comment is selected, this edits the selected comment instead (supporting `Alt+Enter` for newlines, `Ctrl+v` image paste, `Ctrl+f` computer file attachment, and `Ctrl+g` external editor inside the comment editor).
+* `E`: Edit the issue's **Estimation** field (opens a small modal popup). Type a duration in `1w 1d 1h 1m` format and press `Enter` to save or `Esc` to cancel. Leave the input empty to clear the estimation.
 * `C`: Clone this issue. Pre-populates the new issue form with this ticket's details, and automatically links the new issue back to the original under the "Is clone of" relationship.
 * `y`: Start a yanking motion to copy issue details to the clipboard. Follow with:
   - `i`: Copy just the task ID to the clipboard.

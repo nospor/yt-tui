@@ -43,6 +43,7 @@ const (
 	modeDeleteLinkConfirm
 	modeActionSelect
 	modeOpenUrlSelect
+	modeEditEstimation
 )
 
 type linkedIssue struct {
@@ -133,6 +134,10 @@ type detailModel struct {
 	trackTimeTypes         []ytcli.WorkItemType
 	trackTimeError         string
 
+	// Estimation fields
+	estimationInput textinput.Model
+	estimationError string
+
 	pastedCommentImages []PastedImage
 	filepicker          filepicker.Model
 	filepickerActive    bool
@@ -159,6 +164,13 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 	durIn.TextStyle = durIn.TextStyle.Background(lipgloss.Color(ColorSurface))
 	durIn.PlaceholderStyle = durIn.PlaceholderStyle.Background(lipgloss.Color(ColorSurface))
 	durIn.PromptStyle = durIn.PromptStyle.Background(lipgloss.Color(ColorSurface))
+
+	estIn := textinput.New()
+	estIn.Prompt = "⏱️  "
+	estIn.Placeholder = "e.g. 1w 1d 1h 1m"
+	estIn.TextStyle = estIn.TextStyle.Background(lipgloss.Color(ColorSurface))
+	estIn.PlaceholderStyle = estIn.PlaceholderStyle.Background(lipgloss.Color(ColorSurface))
+	estIn.PromptStyle = estIn.PromptStyle.Background(lipgloss.Color(ColorSurface))
 
 	commIn := textarea.New()
 	commIn.Placeholder = "Add a comment..."
@@ -228,6 +240,7 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 		trackTimeDateInput:     dateIn,
 		trackTimeDurationInput: durIn,
 		trackTimeCommentInput:  commIn,
+		estimationInput:        estIn,
 		filepicker:             fp,
 		errPopupShow:           false,
 	}
@@ -317,6 +330,12 @@ func (m *detailModel) setIssueKey(key string) tea.Cmd {
 	m.attachmentsCursor = 0
 	m.commentsCursor = 0
 	m.loadingText = ""
+	m.estimationInput.Blur()
+	m.commentInput.Blur()
+	m.textInput.Blur()
+	m.trackTimeDateInput.Blur()
+	m.trackTimeDurationInput.Blur()
+	m.trackTimeCommentInput.Blur()
 	return m.loadDetailCmd()
 }
 
@@ -468,6 +487,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 	case detailActionFinishedMsg:
 		m.loading = false
 		m.mode = modeNormal
+		m.estimationInput.Blur()
+		m.commentInput.Blur()
+		m.textInput.Blur()
 		if msg.err != nil {
 			m.err = msg.err
 			m.errPopupShow = true
@@ -615,6 +637,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			case "esc":
 				m.mode = modeNormal
 				m.pastedCommentImages = nil
+				m.commentInput.Blur()
 			}
 			m.commentInput, cmd = m.commentInput.Update(msg)
 			return m, cmd
@@ -691,6 +714,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			case "esc":
 				m.mode = modeNormal
 				m.pastedCommentImages = nil
+				m.commentInput.Blur()
 			}
 			m.commentInput, cmd = m.commentInput.Update(msg)
 			return m, cmd
@@ -751,6 +775,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			case "esc":
 				m.mode = modeNormal
 				m.assignFiltered = nil
+				m.textInput.Blur()
 			default:
 				m.textInput, cmd = m.textInput.Update(msg)
 				// Re-filter suggestions as the user types.
@@ -811,6 +836,32 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 			}
 			return m, nil
+
+		case modeEditEstimation:
+			m.estimationError = ""
+			switch msg.String() {
+			case "enter":
+				val := m.estimationInput.Value()
+				minutes, err := parseDurationToMinutes(val)
+				if err != nil {
+					m.estimationError = fmt.Sprintf("invalid estimation: %v", err)
+					return m, nil
+				}
+				m.loading = true
+				m.loadingText = "Updating estimation..."
+				issueKey := m.issue.IDReadable
+				return m, func() tea.Msg {
+					err := m.client.UpdateIssueEstimation(issueKey, minutes)
+					return detailActionFinishedMsg{err: err}
+				}
+			case "esc":
+				m.mode = modeNormal
+				m.estimationInput.Blur()
+				return m, nil
+			default:
+				m.estimationInput, cmd = m.estimationInput.Update(msg)
+				return m, cmd
+			}
 
 		case modeActionSelect:
 			var actions []config.ActionConfig
@@ -1220,6 +1271,9 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			switch msg.String() {
 			case "esc":
 				m.mode = modeNormal
+				m.trackTimeDateInput.Blur()
+				m.trackTimeDurationInput.Blur()
+				m.trackTimeCommentInput.Blur()
 				return m, nil
 
 			case "tab":
@@ -1762,6 +1816,18 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			return m, func() tea.Msg {
 				return pushStateMsg{state: stateForm, data: "clone:" + m.issue.IDReadable}
 			}
+		case "E":
+			// Edit estimation (opens small modal popup)
+			m.mode = modeEditEstimation
+			m.estimationError = ""
+			estVal := ""
+			if m.issue != nil {
+				estVal = m.issue.ExtractStringField("Estimation")
+			}
+			m.estimationInput.SetValue(estVal)
+			m.estimationInput.CursorEnd()
+			m.estimationInput.Focus()
+			return m, nil
 		case "e":
 			if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
 				act := m.activities[m.commentsCursor]
@@ -2653,7 +2719,7 @@ func (m detailModel) View() string {
 				editorViewAction = "  [Ctrl+g] Ext View"
 			}
 		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [e] %s  [C] Clone  [y] Yank%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction))
+		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate  [e] %s  [C] Clone  [y] Yank%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction))
 	}
 
 	var parts []string
@@ -2948,6 +3014,47 @@ func (m detailModel) View() string {
 		filterLines = append(filterLines, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [↑↓/k/j] Navigate   [Space] Toggle   [Enter] Save   [Esc] Cancel "))
 
 		popupContent := lipgloss.JoinVertical(lipgloss.Left, filterLines...)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := strings.Count(popup, "\n") + 1
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, popup, x, y)
+	}
+
+	if m.mode == modeEditEstimation {
+		var estParts []string
+		title := "Estimation - " + m.issue.IDReadable
+		estParts = append(estParts, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Render("⏱️  "+title))
+		estParts = append(estParts, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+		estParts = append(estParts, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorSubtext)).Background(lipgloss.Color(ColorSurface)).Render("Estimation (e.g. 1w 1d 1h 1m):"))
+		estParts = append(estParts, renderTrackTimeField(m.estimationInput.View(), true, 24))
+		estParts = append(estParts, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+
+		var errLine string
+		if m.estimationError != "" {
+			errLine = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).Background(lipgloss.Color(ColorSurface)).Bold(true).Render("⚠️  " + m.estimationError)
+		} else {
+			errLine = lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render("Leave empty to clear estimation.")
+		}
+
+		estParts = append(estParts, errLine)
+		estParts = append(estParts, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+		estParts = append(estParts, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [Enter] Save   [Esc] Cancel "))
+
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, estParts...)
 		popup := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorViolet)).

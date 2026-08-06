@@ -562,6 +562,86 @@ func TestActivitiesFilterSelect(t *testing.T) {
 	}
 }
 
+func TestDetailModel_EditEstimation(t *testing.T) {
+	issue := &ytcli.Issue{
+		ID:         "1",
+		IDReadable: "DEMO-1",
+		Summary:    "Test estimation",
+		CustomFields: []ytcli.CustomField{
+			{Name: "Estimation", Value: map[string]interface{}{"presentation": "1d 2h"}},
+		},
+	}
+	m := newDetailModel(nil, nil)
+	m.loading = false
+	m.mode = modeNormal
+	m, _ = m.Update(detailDataMsg{
+		issue:      issue,
+		activities: []ytcli.ActivityItem{},
+	})
+
+	// Press capital E to open the estimation modal
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
+	if m.mode != modeEditEstimation {
+		t.Fatalf("expected modeEditEstimation, got %v", m.mode)
+	}
+	if got := m.estimationInput.Value(); got != "1d 2h" {
+		t.Errorf("expected estimation input prefilled with '1d 2h', got %q", got)
+	}
+
+	// Type an invalid value and press Enter -> stays in modal with error, no crash
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("abc")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.mode != modeEditEstimation {
+		t.Errorf("expected to stay in modeEditEstimation on invalid input, got %v", m.mode)
+	}
+	if m.estimationError == "" {
+		t.Errorf("expected estimation error to be set on invalid input")
+	}
+
+	// Clear the whole input (remove "abc" and the prefilled "1d 2h"), then type a valid value
+	for i := 0; i < 10; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	for _, r := range "2h" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+	}
+	if m.estimationInput.Value() != "2h" {
+		t.Fatalf("expected estimation input '2h', got %q", m.estimationInput.Value())
+	}
+
+	// Press Enter with valid input -> kicks off save (loading), stays in modal until it finishes
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.mode != modeEditEstimation {
+		t.Errorf("expected to stay in modeEditEstimation while saving, got %v", m.mode)
+	}
+	if !m.loading {
+		t.Errorf("expected loading to be true while saving estimation")
+	}
+	m, _ = m.Update(detailActionFinishedMsg{err: nil})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after estimation save finished, got %v", m.mode)
+	}
+
+	// The save triggers a reload; complete it before pressing keys again
+	m, _ = m.Update(detailDataMsg{issue: issue, activities: []ytcli.ActivityItem{}})
+	if m.loading {
+		t.Errorf("expected loading to be false after reload completed")
+	}
+
+	// Press E again, then Esc to cancel
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
+	if m.mode != modeEditEstimation {
+		t.Fatalf("expected modeEditEstimation after second E, got %v", m.mode)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after escape, got %v", m.mode)
+	}
+	if m.estimationInput.Focused() {
+		t.Errorf("expected estimation input to be blurred after escape")
+	}
+}
+
 func TestDetailModel_ReproduceLayoutBug(t *testing.T) {
 	m := newDetailModel(nil, nil)
 	m.width = 120

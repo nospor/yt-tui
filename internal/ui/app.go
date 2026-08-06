@@ -757,7 +757,8 @@ func (m AppModel) isAnyInputFocused() bool {
 			m.detail.commentInput.Focused() ||
 			m.detail.trackTimeDateInput.Focused() ||
 			m.detail.trackTimeDurationInput.Focused() ||
-			m.detail.trackTimeCommentInput.Focused()
+			m.detail.trackTimeCommentInput.Focused() ||
+			m.detail.estimationInput.Focused()
 	case stateForm:
 		return m.form.summaryInput.Focused() ||
 			m.form.descTextArea.Focused() ||
@@ -858,6 +859,7 @@ func (m AppModel) renderHelpPopup() string {
 			{"s", "Change issue state"},
 			{"R", "Assign repository"},
 			{"a", "Assign user"},
+			{"E", "Edit estimation"},
 			{"e", "Edit desc/comment"},
 			{"Ctrl+g", "View desc/comment in editor"},
 			{"C", "Clone issue"},

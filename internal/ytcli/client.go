@@ -1858,3 +1858,57 @@ func (c *Client) UpdateIssueCustomField(id string, fieldName string, value strin
 
 	return nil
 }
+
+// UpdateIssueEstimation updates the Estimation (period) custom field on an issue.
+// A minutes value of 0 clears the estimation.
+func (c *Client) UpdateIssueEstimation(id string, minutes int) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	baseURL := c.baseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
+	var fieldValue interface{}
+	if minutes > 0 {
+		fieldValue = map[string]interface{}{
+			"$type":   "PeriodValue",
+			"minutes": minutes,
+		}
+	}
+
+	payload := map[string]interface{}{
+		"$type": "Issue",
+		"customFields": []map[string]interface{}{
+			{
+				"$type": "PeriodIssueCustomField",
+				"name":  "Estimation",
+				"value": fieldValue,
+			},
+		},
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	postURL := baseURL + "api/issues/" + id + "?fields=id"
+	postReq, err := c.newRequest("POST", postURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+
+	postBody, postStatusCode, err := c.doRequest(postReq)
+	if err != nil {
+		return err
+	}
+
+	if postStatusCode != http.StatusOK && postStatusCode != http.StatusNoContent {
+		return parseAPIError(postStatusCode, postBody)
+	}
+
+	return nil
+}
