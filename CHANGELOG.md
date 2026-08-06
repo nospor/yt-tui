@@ -1,4 +1,21 @@
 
+## [0.7.9] - 2026-08-06
+
+### Features
+
+- *(ui)* Display Estimation field in issue detail view ([0f1cef9](https://github.com/nospor/yt-tui/commit/0f1cef9541e6daf31552132d2ec0ac85bd809c5a))
+- *(detail)* Add Estimation editing via `E` popup ([2da5052](https://github.com/nospor/yt-tui/commit/2da5052a573008b5766c488556805a8227497077))
+- Open URLs from issue detail with YouTrack-aware handling ([3a6cc1b](https://github.com/nospor/yt-tui/commit/3a6cc1b2a348a85a2999b1a4b111b5fe3c7ab4e7))
+
+### Bug Fixes
+
+- *(ui)* Wrap issue detail footer help across multiple lines ([8197a4f](https://github.com/nospor/yt-tui/commit/8197a4fd9c1104656bbce6bfe3b5dc842f3e9b80))
+- *(form)* Keep description textarea content when navigating with arrow keys ([bfa762b](https://github.com/nospor/yt-tui/commit/bfa762bcec42feef1cdaf4b979368cdf03d4f6f0))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.8 [skip ci] ([3a0e5f9](https://github.com/nospor/yt-tui/commit/3a0e5f9c0c9a02eecc0a7050b21a43f610191a16))
+
 ## [0.7.8] - 2026-08-04
 
 ### Features
