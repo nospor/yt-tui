@@ -1253,7 +1253,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				if len(m.openUrls) > 0 && m.openUrlCursor >= 0 && m.openUrlCursor < len(m.openUrls) {
 					u := m.openUrls[m.openUrlCursor]
 					m.mode = modeNormal
-					return m.openURL(u)
+					return m.openSelectedURL(u)
 				}
 				m.mode = modeNormal
 				return m, nil
@@ -1522,16 +1522,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 			}
 
-			// 2. Add task URL
-			if m.issue != nil && baseURL != "" {
-				taskURL := baseURL + "issue/" + m.issue.IDReadable
-				if !seen[taskURL] {
-					seen[taskURL] = true
-					urls = append(urls, taskURL)
-				}
-			}
-
-			// 3. Add all tasks from Links section
+			// 2. Add all tasks from Links section
 			if m.issue != nil && baseURL != "" {
 				for _, link := range m.issue.Links {
 					for _, linked := range link.Issues {
@@ -1544,7 +1535,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 			}
 
-			// 4. Add all attachment URLs
+			// 3. Add all attachment URLs
 			if m.issue != nil && baseURL != "" {
 				for _, att := range m.issue.Attachments {
 					var attURL string
@@ -1561,6 +1552,23 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 			}
 
+			// 4. Skip URLs pointing to the ticket we are currently viewing
+			var filtered []string
+			for _, u := range urls {
+				if id, ok := m.youTrackIssueID(u); ok && m.issueKey != "" && strings.EqualFold(id, m.issueKey) {
+					continue
+				}
+				filtered = append(filtered, u)
+			}
+			urls = filtered
+
+			// 5. Sort so YouTrack issue links on this server appear first
+			sort.SliceStable(urls, func(i, j int) bool {
+				_, iIsYT := m.youTrackIssueID(urls[i])
+				_, jIsYT := m.youTrackIssueID(urls[j])
+				return iIsYT && !jIsYT
+			})
+
 			if len(urls) == 0 {
 				m.statusMessage = "No URLs found to open!"
 				m.statusMessageID++
@@ -1568,8 +1576,6 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 					return clearStatusMsg{id: currentID}
 				})
-			} else if len(urls) == 1 {
-				return m.openURL(urls[0])
 			} else {
 				m.openUrls = urls
 				m.openUrlCursor = 0
@@ -1974,7 +1980,7 @@ func (m detailModel) footerHelp() string {
 			editorViewAction = "  [Ctrl+g] Ext View"
 		}
 	}
-	helpStr := fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate  [e] %s  [C] Clone  [y] Yank%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction)
+	helpStr := fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate  [e] %s  [C] Clone  [y] Yank  [o] Open%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction)
 	return StyleHelp.Render(wrapFooterHelp(helpStr, m.width-4))
 }
 
@@ -2909,7 +2915,11 @@ func (m detailModel) View() string {
 			maxLen = 20
 		}
 		for idx, u := range m.openUrls {
-			displayURL := u
+			prefix := "[Link]"
+			if _, ok := m.youTrackIssueID(u); ok {
+				prefix = "[YouTrack]"
+			}
+			displayURL := fmt.Sprintf("%s %s", prefix, u)
 			if len(displayURL) > maxLen {
 				displayURL = displayURL[:maxLen-3] + "..."
 			}
@@ -3839,6 +3849,35 @@ func openBrowserCmd(browserCmd string, urlStr string) tea.Cmd {
 		}
 		return browserFinishedMsg{url: urlStr}
 	}
+}
+
+// youTrackIssueID reports whether urlStr is a YouTrack issue link on this
+// server, returning the issue ID to open in-app.
+func (m detailModel) youTrackIssueID(urlStr string) (string, bool) {
+	baseURL, issueID := parseYouTrackURL(urlStr)
+	if issueID == "" {
+		return "", false
+	}
+	var serverURL string
+	if m.client != nil {
+		serverURL = m.client.GetConfiguredBaseURL()
+	}
+	if serverURL == "" || normalizeURL(serverURL) != normalizeURL(baseURL) {
+		return "", false
+	}
+	return issueID, true
+}
+
+// openSelectedURL opens urlStr, navigating in-app for YouTrack issue links on
+// this server and opening everything else via the configured browser/xdg.
+func (m detailModel) openSelectedURL(urlStr string) (detailModel, tea.Cmd) {
+	if issueID, ok := m.youTrackIssueID(urlStr); ok {
+		m.mode = modeNormal
+		return m, func() tea.Msg {
+			return pushStateMsg{state: stateDetail, data: issueID}
+		}
+	}
+	return m.openURL(urlStr)
 }
 
 func (m detailModel) openURL(urlStr string) (detailModel, tea.Cmd) {
