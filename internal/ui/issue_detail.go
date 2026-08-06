@@ -1923,6 +1923,61 @@ func (m detailModel) hasActionView() bool {
 	}
 }
 
+// footerHelp renders the bottom help/status footer, wrapping long help text
+// onto multiple lines so every action stays visible without overflowing.
+func (m detailModel) footerHelp() string {
+	if m.statusMessage != "" {
+		return StyleStatusMessage.Render(" " + m.statusMessage + " ")
+	}
+	if m.filepickerActive {
+		return StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
+	}
+	if m.mode == modeCommentInput || m.mode == modeCommentEdit {
+		return StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image  [Ctrl+g] Ext Editor ")
+	}
+	if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
+		return StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
+	}
+	if m.mode == modeActionSelect {
+		return StyleHelp.Render(" [↑/↓/j/k] Navigate  [Enter] Select Action  [0-9/Shortcut] Apply Action  [Esc/Space] Cancel ")
+	}
+	enterAction := "Jump to Task"
+	if m.activeViewport == 3 {
+		enterAction = "Open Attachment"
+	}
+	editAction := "Edit"
+	filterAction := ""
+	if m.activeViewport == 1 {
+		editAction = "Edit Comment"
+		filterAction = "  [F] Filter"
+	}
+	mdAction := ""
+	if m.cfg != nil {
+		if m.cfg.RenderMarkdown {
+			mdAction = "  [m] Plain"
+		} else {
+			mdAction = "  [m] Markdown"
+		}
+	}
+	deleteAction := ""
+	if m.activeViewport == 3 && m.issue != nil && len(m.issue.Attachments) > 0 {
+		deleteAction = "  [d] Delete"
+	} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
+		deleteAction = "  [d] Delete"
+	}
+	editorViewAction := ""
+	if m.activeViewport == 0 && m.issue != nil {
+		editorViewAction = "  [Ctrl+g] Ext View"
+	} else if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+		act := m.activities[m.commentsCursor]
+		if act.Type == "CommentActivityItem" || act.Type == "VcsChangeActivityItem" {
+			editorViewAction = "  [Ctrl+g] Ext View"
+		}
+	}
+	helpStr := fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate  [e] %s  [C] Clone  [y] Yank%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction)
+	return StyleHelp.Render(wrapFooterHelp(helpStr, m.width-4))
+}
+
 func (m *detailModel) updateViewportSizes() {
 	var actionHeight int
 	if m.hasActionView() {
@@ -1932,7 +1987,11 @@ func (m *detailModel) updateViewportSizes() {
 			actionHeight = 6
 		}
 	}
-	bottomHeight := m.height - 10 - actionHeight
+	footerHeight := lipgloss.Height(m.footerHelp())
+	if footerHeight < 1 {
+		footerHeight = 1
+	}
+	bottomHeight := m.height - 10 - actionHeight - (footerHeight - 1)
 	if bottomHeight < 3 {
 		bottomHeight = 3
 	}
@@ -2425,6 +2484,41 @@ func (m *detailModel) updateViewportScroll() {
 	}
 }
 
+// wrapFooterHelp splits a footer help string on its double-space item
+// separators and greedily packs the individual "[key] label" items onto lines
+// no wider than maxWidth, so long footers stay visible without overflowing.
+func wrapFooterHelp(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return s
+	}
+	var items []string
+	for _, it := range strings.Split(s, "  ") {
+		it = strings.TrimSpace(it)
+		if it != "" {
+			items = append(items, it)
+		}
+	}
+	if len(items) == 0 {
+		return s
+	}
+	var lines []string
+	var cur string
+	for _, it := range items {
+		if cur == "" {
+			cur = it
+		} else if lipgloss.Width(cur)+2+lipgloss.Width(it) <= maxWidth {
+			cur += "  " + it
+		} else {
+			lines = append(lines, cur)
+			cur = it
+		}
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m detailModel) View() string {
 	if m.err != nil && m.issue == nil {
 		return StyleErrorMessage.Render(fmt.Sprintf("Error: %v", m.err))
@@ -2674,53 +2768,7 @@ func (m detailModel) View() string {
 			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", prompt))
 	}
 
-	var footer string
-	if m.statusMessage != "" {
-		footer = StyleStatusMessage.Render(" " + m.statusMessage + " ")
-	} else if m.filepickerActive {
-		footer = StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
-	} else if m.mode == modeCommentInput || m.mode == modeCommentEdit {
-		footer = StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image  [Ctrl+g] Ext Editor ")
-	} else if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
-		footer = StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
-	} else if m.mode == modeActionSelect {
-		footer = StyleHelp.Render(" [↑/↓/j/k] Navigate  [Enter] Select Action  [0-9/Shortcut] Apply Action  [Esc/Space] Cancel ")
-	} else {
-		enterAction := "Jump to Task"
-		if m.activeViewport == 3 {
-			enterAction = "Open Attachment"
-		}
-		editAction := "Edit"
-		filterAction := ""
-		if m.activeViewport == 1 {
-			editAction = "Edit Comment"
-			filterAction = "  [F] Filter"
-		}
-		mdAction := ""
-		if m.cfg != nil {
-			if m.cfg.RenderMarkdown {
-				mdAction = "  [m] Plain"
-			} else {
-				mdAction = "  [m] Markdown"
-			}
-		}
-		deleteAction := ""
-		if m.activeViewport == 3 && m.issue != nil && len(m.issue.Attachments) > 0 {
-			deleteAction = "  [d] Delete"
-		} else if m.activeViewport == 2 && m.issue != nil && len(m.linkedIssues) > 0 {
-			deleteAction = "  [d] Delete"
-		}
-		editorViewAction := ""
-		if m.activeViewport == 0 && m.issue != nil {
-			editorViewAction = "  [Ctrl+g] Ext View"
-		} else if m.activeViewport == 1 && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
-			act := m.activities[m.commentsCursor]
-			if act.Type == "CommentActivityItem" || act.Type == "VcsChangeActivityItem" {
-				editorViewAction = "  [Ctrl+g] Ext View"
-			}
-		}
-		footer = StyleHelp.Render(fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate  [e] %s  [C] Clone  [y] Yank%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction))
-	}
+	footer := m.footerHelp()
 
 	var parts []string
 	parts = append(parts, StyleTitle.Render(" Issue Detail "))
