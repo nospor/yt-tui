@@ -674,6 +674,30 @@ func (m *issuesModel) effectiveProjectCode() string {
 	return singleProject
 }
 
+func (m *issuesModel) selectedIssueProjectCode() string {
+	cursor := m.table.Cursor()
+	if cursor >= 0 && cursor < len(m.visibleIssueIDs) {
+		selectedID := m.visibleIssueIDs[cursor]
+		for _, issue := range m.issues {
+			if issue.IDReadable == selectedID && issue.Project != nil {
+				code := issue.Project.ShortName
+				if code == "" {
+					code = issue.Project.ID
+				}
+				return code
+			}
+		}
+	}
+	return m.effectiveProjectCode()
+}
+
+func (m *issuesModel) actionList() []config.ActionConfig {
+	if m.cfg == nil {
+		return nil
+	}
+	return m.cfg.GetActions(m.selectedIssueProjectCode())
+}
+
 func (m *issuesModel) initProject(projectCode string, isBack bool) tea.Cmd {
 	return m.initContext(projectCode, "", isBack)
 }
@@ -818,21 +842,22 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 			case "up", "k":
 				m.actionCursor--
 				if m.actionCursor < 0 {
-					m.actionCursor = len(m.cfg.Actions) - 1
+					m.actionCursor = len(m.actionList()) - 1
 				}
 				return m, nil
 			case "down", "j":
 				m.actionCursor++
-				if m.actionCursor >= len(m.cfg.Actions) {
+				if m.actionCursor >= len(m.actionList()) {
 					m.actionCursor = 0
 				}
 				return m, nil
 			case "enter":
-				if len(m.cfg.Actions) > 0 && len(m.table.Rows()) > 0 {
+				actions := m.actionList()
+				if len(actions) > 0 && len(m.table.Rows()) > 0 {
 					cursor := m.table.Cursor()
 					if cursor >= 0 && cursor < len(m.visibleIssueIDs) {
 						issueID := m.visibleIssueIDs[cursor]
-						act := m.cfg.Actions[m.actionCursor]
+						act := actions[m.actionCursor]
 						m.loading = true
 						m.loadingText = "Running action..."
 						client := m.client
@@ -846,7 +871,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 				return m, nil
 			default:
 				// Check shortcuts
-				for _, act := range m.cfg.Actions {
+				for _, act := range m.actionList() {
 					if msg.String() == act.Shortcut {
 						if len(m.table.Rows()) > 0 {
 							cursor := m.table.Cursor()
@@ -1136,7 +1161,7 @@ func (m issuesModel) Update(msg tea.Msg) (issuesModel, tea.Cmd) {
 		case " ":
 			if len(m.table.Rows()) > 0 {
 				cursor := m.table.Cursor()
-				if cursor >= 0 && cursor < len(m.visibleIssueIDs) && m.cfg != nil && len(m.cfg.Actions) > 0 {
+				if cursor >= 0 && cursor < len(m.visibleIssueIDs) && len(m.actionList()) > 0 {
 					m.actionMode = true
 					m.actionCursor = 0
 				}
@@ -1470,11 +1495,12 @@ func (m issuesModel) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, title, tableStr, searchBar, "", help)
 
-	if m.actionMode && m.cfg != nil && len(m.cfg.Actions) > 0 {
+	if m.actionMode {
+		actions := m.actionList()
 		var lines []string
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select Action (or press shortcut):"))
 		lines = append(lines, "")
-		for idx, act := range m.cfg.Actions {
+		for idx, act := range actions {
 			displayStr := fmt.Sprintf("[%s] %s", act.Shortcut, act.Name)
 			if idx == m.actionCursor {
 				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayStr))

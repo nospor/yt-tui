@@ -127,6 +127,30 @@ func (f *FilteredPrioritiesMap) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("filtered_priorities must be either a list of strings or a map of list of strings")
 }
 
+// ActionsMap represents custom actions configured per project, or a default fallback.
+type ActionsMap map[string][]ActionConfig
+
+// UnmarshalJSON handles loading actions either as a list of objects (legacy/fallback) or a map of list of objects.
+func (a *ActionsMap) UnmarshalJSON(data []byte) error {
+	// Try unmarshaling as map first
+	var m map[string][]ActionConfig
+	if err := json.Unmarshal(data, &m); err == nil {
+		*a = m
+		return nil
+	}
+
+	// If that fails, try unmarshaling as a slice of ActionConfig
+	var s []ActionConfig
+	if err := json.Unmarshal(data, &s); err == nil {
+		*a = map[string][]ActionConfig{
+			"default": s,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("actions must be either a list of objects or a map of list of objects")
+}
+
 // Config represents the application configuration.
 type Config struct {
 	URL                 string                `json:"url"`
@@ -151,7 +175,7 @@ type Config struct {
 	FilepickerSortBy    string                `json:"filepicker_sort_by,omitempty"`
 	FilepickerSortOrder string                `json:"filepicker_sort_order,omitempty"`
 	FilepickerLastDir   string                `json:"filepicker_last_dir,omitempty"`
-	Actions             []ActionConfig        `json:"actions,omitempty"`
+	Actions             ActionsMap            `json:"actions,omitempty"`
 	ImageViewer         string                `json:"image_viewer,omitempty"`
 	VcsBaseURL          string                `json:"vcs_base_url,omitempty"`
 	BrowserCommand      string                `json:"browser_command,omitempty"`
@@ -248,6 +272,24 @@ func (cfg *Config) GetFilteredPriorities(projectCode string) []string {
 		return priorities
 	}
 	return cfg.GetCustomPriorities(projectCode)
+}
+
+// GetActions returns the list of custom actions for the given project.
+// If projectCode is empty or not found, it falls back to the "default" key,
+// and finally to nil.
+func (cfg *Config) GetActions(projectCode string) []ActionConfig {
+	if cfg == nil || len(cfg.Actions) == 0 {
+		return nil
+	}
+	if projectCode != "" {
+		if actions, ok := cfg.Actions[projectCode]; ok && len(actions) > 0 {
+			return actions
+		}
+	}
+	if actions, ok := cfg.Actions["default"]; ok && len(actions) > 0 {
+		return actions
+	}
+	return nil
 }
 
 // SetFilteredStates sets the filtered states for the given project.

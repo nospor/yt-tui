@@ -866,7 +866,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		case modeActionSelect:
 			var actions []config.ActionConfig
 			if m.cfg != nil {
-				actions = m.cfg.Actions
+				actions = m.cfg.GetActions(m.issueProjectCode())
 			}
 			totalActions := len(actions) + 1
 
@@ -1920,6 +1920,17 @@ func (m detailModel) filterAssignUsers(query string) []ytcli.User {
 	return result
 }
 
+func (m detailModel) issueProjectCode() string {
+	if m.issue == nil || m.issue.Project == nil {
+		return ""
+	}
+	code := m.issue.Project.ShortName
+	if code == "" {
+		code = m.issue.Project.ID
+	}
+	return code
+}
+
 func (m detailModel) hasActionView() bool {
 	switch m.mode {
 	case modeCommentInput, modeCommentEdit, modeAssignInput, modeStateSelect, modeRepoSelect, modeDeleteAttachmentConfirm, modeDeleteLinkConfirm:
@@ -2797,7 +2808,7 @@ func (m detailModel) View() string {
 
 		var actions []config.ActionConfig
 		if m.cfg != nil {
-			actions = m.cfg.Actions
+			actions = m.cfg.GetActions(m.issueProjectCode())
 		}
 
 		for idx, act := range actions {

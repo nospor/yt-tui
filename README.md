@@ -183,36 +183,36 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 
 ### Configuration Options
 
-| Option                | Type             | Default                                                                          | Description                                                                                                                                                                                 |
-| --------------------- | ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `url`                 | String           | `""`                                                                             | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                             |
-| `token`               | String           | `""`                                                                             | Your permanent YouTrack API token.                                                                                                                                                          |
-| `servers`             | Array of Objects | `[]` (empty)                                                                     | List of YouTrack server configurations (each containing `name`, `url`, `token`, and optionally `vcs_base_url` or `username_separator`) to choose from on startup.                           |
-| `username_separator`   | String           | `""` (defaults to `.`)                                                           | The separator string used to merge first and last names when normalizing assignee inputs (e.g., `_` for `First_Last` or `.` for `first.last`). Can be set globally or per-server.           |
-| `page_size`           | Integer          | `20`                                                                             | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                               |
-| `max_issues`          | Integer          | `500`                                                                            | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects. |
-| `fields`              | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]`                             | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`, `Updated`, `Updater`, `Created`, `Creator`/`Reporter`) as well as custom field names.                 |
-| `custom_types`        | Object           | `{}` (empty)                                                                     | Custom list of issue type options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["Bug", "Task"], "default": ["Bug", "Feature"]}`) to populate the creation dropdown. Supports legacy array format as a fallback.                                                        |
-| `custom_priorities`   | Object           | `{}` (empty)                                                                     | Custom list of issue priority options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["Minor", "Normal"], "default": ["Minor", "Major"]}`) to populate the creation dropdown. Supports legacy array format as a fallback. |
-| `custom_states`       | Object           | `{}` (empty)                                                                     | Custom list of issue state transition options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["New", "In Dev"], "default": ["Open", "Closed"]}`) to populate the state selection modal. Supports legacy array format as a fallback. |
-| `filtered_states`     | Object           | `{}` (empty)                                                                     | Custom/filtered states to display on the tasks list (keyed by project ShortName or ID, e.g. `{"MTEL": ["Open", "In Progress"], "default": ["Open", "Closed"]}`). States not in this list will be filtered out. Supports legacy array format as a fallback. |
-| `filtered_priorities` | Object           | `{}` (empty)                                                                     | Custom/filtered priorities to display on the tasks list (keyed by project ShortName or ID, e.g. `{"MTEL": ["Normal"], "default": ["Normal", "Major"]}`). Priorities not in this list will be filtered out. Supports legacy array format as a fallback. |
-| `sort_column`         | String           | `""`                                                                             | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                         |
-| `sort_direction`      | String           | `""`                                                                             | The sorting direction (`asc` or `desc`).                                                                                                                                                    |
-| `favorite_view`       | String           | `""`                                                                             | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                   |
-| `favorite_views`      | Object           | `{}` (empty)                                                                     | A map of server/connection URLs to their respective favorite views (automatically updated when toggled via keyboard).                                                                       |
-| `work_types`          | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                                                        |
-| `render_markdown`     | Boolean          | `true`                                                                           | Whether to format and render issue descriptions as markdown. Can be toggled inside the issue detail view by pressing `m`.                                                                   |
-| `repo_options`        | Object           | `{}` (empty)                                                                     | Custom list of repository options per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["repo1", "repo2"]}`) for updating the custom `Repo` field. Used as a fallback if options cannot be retrieved from YouTrack directly. |
-| `filepicker_sort_by`  | String           | `""`                                                                             | The criteria by which files in the file picker are sorted (`Name` or `Datetime`).                                                                                           |
-| `filepicker_sort_order`| String          | `""`                                                                             | The sorting direction of the file picker (`asc` or `desc`).                                                                                                                                 |
-| `filepicker_last_dir` | String           | `""`                                                                             | The last directory visited by the file picker.                                                                                                                                             |
-| `actions`             | Array of Objects | `[]` (empty)                                                                     | Custom templated action sequences triggered by `Space`. See [Custom Quick Actions](#-custom-quick-actions) below.                                                                             |
-| `image_viewer`        | String           | `""` (empty)                                                                     | The command or executable to open image attachments (e.g. `sxiv` or `feh`). If empty or not an image file, it defaults to `xdg-open`. When set, pressing Enter on an image attachment downloads all image attachments in the current issue and loads them all into the viewer, automatically starting at the selected one (with support for `sxiv`/`nsxiv`/`imv`'s `-n` and `feh`'s `--start-at` flags). |
-| `vcs_base_url`        | String           | `""` (empty)                                                                     | Base URL of your VCS (e.g. GitLab/GitHub instance) to resolve references like `group/project!mr` to links. Can also be set per-server in the `servers` list.                                |
-| `browser_command`     | String           | `"xdg-open"`                                                                     | The command or executable used to open web browser links (e.g. `google-chrome`).                                                                                                            |
-| `gitlab_command`      | String           | `""` (empty)                                                                     | The command or executable to open GitLab merge requests inside a popup TUI process (e.g. [gitlab-tui](https://github.com/nospor/gitlab-tui)). If empty, GitLab links are opened in the default browser. |
-| `theme`               | String           | `"catppuccin"`                                                                   | The TUI color theme. Supported values: `catppuccin` (Catppuccin Mocha, default) and `teams` (adapted from `teams-tui-go` with green borders, cyan accents, and popups).                     |
+| Option                  | Type             | Default                                                                          | Description                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------- | ---------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`                   | String           | `""`                                                                             | The base URL of your YouTrack instance (e.g. `https://company.youtrack.cloud`).                                                                                                                                                                                                                                                                                                                          |
+| `token`                 | String           | `""`                                                                             | Your permanent YouTrack API token.                                                                                                                                                                                                                                                                                                                                                                       |
+| `servers`               | Array of Objects | `[]` (empty)                                                                     | List of YouTrack server configurations (each containing `name`, `url`, `token`, and optionally `vcs_base_url` or `username_separator`) to choose from on startup.                                                                                                                                                                                                                                        |
+| `username_separator`    | String           | `""` (defaults to `.`)                                                           | The separator string used to merge first and last names when normalizing assignee inputs (e.g., `_` for `First_Last` or `.` for `first.last`). Can be set globally or per-server.                                                                                                                                                                                                                        |
+| `page_size`             | Integer          | `20`                                                                             | The number of issues requested per query page. Larger page sizes fetch more records at once, while smaller sizes load background pages in quicker increments.                                                                                                                                                                                                                                            |
+| `max_issues`            | Integer          | `500`                                                                            | The maximum number of issues to load for a project list. Once this limit is reached, the app will stop fetching new pages of issues to prevent performance degradation on massive projects.                                                                                                                                                                                                              |
+| `fields`                | Array of Strings | `["ID", "Summary", "State", "Priority", "Assignee"]`                             | The list of columns/fields to display on the tasks list. Supports standard fields (`ID`, `Summary`, `State`, `Priority`, `Assignee`, `Type`, `Updated`, `Updater`, `Created`, `Creator`/`Reporter`) as well as custom field names.                                                                                                                                                                       |
+| `custom_types`          | Object           | `{}` (empty)                                                                     | Custom list of issue type options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["Bug", "Task"], "default": ["Bug", "Feature"]}`) to populate the creation dropdown. Supports legacy array format as a fallback.                                                                                                                                                              |
+| `custom_priorities`     | Object           | `{}` (empty)                                                                     | Custom list of issue priority options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["Minor", "Normal"], "default": ["Minor", "Major"]}`) to populate the creation dropdown. Supports legacy array format as a fallback.                                                                                                                                                      |
+| `custom_states`         | Object           | `{}` (empty)                                                                     | Custom list of issue state transition options configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["New", "In Dev"], "default": ["Open", "Closed"]}`) to populate the state selection modal. Supports legacy array format as a fallback.                                                                                                                                            |
+| `filtered_states`       | Object           | `{}` (empty)                                                                     | Custom/filtered states to display on the tasks list (keyed by project ShortName or ID, e.g. `{"MTEL": ["Open", "In Progress"], "default": ["Open", "Closed"]}`). States not in this list will be filtered out. Supports legacy array format as a fallback.                                                                                                                                               |
+| `filtered_priorities`   | Object           | `{}` (empty)                                                                     | Custom/filtered priorities to display on the tasks list (keyed by project ShortName or ID, e.g. `{"MTEL": ["Normal"], "default": ["Normal", "Major"]}`). Priorities not in this list will be filtered out. Supports legacy array format as a fallback.                                                                                                                                                   |
+| `sort_column`           | String           | `""`                                                                             | The column by which the tasks list is sorted (e.g. `ID`, `Summary`, `State`, etc.).                                                                                                                                                                                                                                                                                                                      |
+| `sort_direction`        | String           | `""`                                                                             | The sorting direction (`asc` or `desc`).                                                                                                                                                                                                                                                                                                                                                                 |
+| `favorite_view`         | String           | `""`                                                                             | The serialized view data parameter for the user's favorited tasks list (automatically updated when toggled via keyboard).                                                                                                                                                                                                                                                                                |
+| `favorite_views`        | Object           | `{}` (empty)                                                                     | A map of server/connection URLs to their respective favorite views (automatically updated when toggled via keyboard).                                                                                                                                                                                                                                                                                    |
+| `work_types`            | Array of Strings | `["Development", "Documentation", "Implementation", "Investigation", "Testing"]` | Custom list of work types for time tracking dropdown selection instead of the standard default list.                                                                                                                                                                                                                                                                                                     |
+| `render_markdown`       | Boolean          | `true`                                                                           | Whether to format and render issue descriptions as markdown. Can be toggled inside the issue detail view by pressing `m`.                                                                                                                                                                                                                                                                                |
+| `repo_options`          | Object           | `{}` (empty)                                                                     | Custom list of repository options per project (keyed by project ShortName or ID, e.g. `{"MTEL": ["repo1", "repo2"]}`) for updating the custom `Repo` field. Used as a fallback if options cannot be retrieved from YouTrack directly.                                                                                                                                                                    |
+| `filepicker_sort_by`    | String           | `""`                                                                             | The criteria by which files in the file picker are sorted (`Name` or `Datetime`).                                                                                                                                                                                                                                                                                                                        |
+| `filepicker_sort_order` | String           | `""`                                                                             | The sorting direction of the file picker (`asc` or `desc`).                                                                                                                                                                                                                                                                                                                                              |
+| `filepicker_last_dir`   | String           | `""`                                                                             | The last directory visited by the file picker.                                                                                                                                                                                                                                                                                                                                                           |
+| `actions`               | Object           | `{}` (empty)                                                                     | Custom templated action sequences triggered by `Space`, configured per project (keyed by project ShortName or ID, e.g. `{"MTEL": [...], "default": [...]}`). The `default` key is used when the current issue's project has no dedicated actions. Supports legacy array format as a fallback. See [Custom Quick Actions](#-custom-quick-actions) below.                                                  |
+| `image_viewer`          | String           | `""` (empty)                                                                     | The command or executable to open image attachments (e.g. `sxiv` or `feh`). If empty or not an image file, it defaults to `xdg-open`. When set, pressing Enter on an image attachment downloads all image attachments in the current issue and loads them all into the viewer, automatically starting at the selected one (with support for `sxiv`/`nsxiv`/`imv`'s `-n` and `feh`'s `--start-at` flags). |
+| `vcs_base_url`          | String           | `""` (empty)                                                                     | Base URL of your VCS (e.g. GitLab/GitHub instance) to resolve references like `group/project!mr` to links. Can also be set per-server in the `servers` list.                                                                                                                                                                                                                                             |
+| `browser_command`       | String           | `"xdg-open"`                                                                     | The command or executable used to open web browser links (e.g. `google-chrome`).                                                                                                                                                                                                                                                                                                                         |
+| `gitlab_command`        | String           | `""` (empty)                                                                     | The command or executable to open GitLab merge requests inside a popup TUI process (e.g. [gitlab-tui](https://github.com/nospor/gitlab-tui)). If empty, GitLab links are opened in the default browser.                                                                                                                                                                                                  |
+| `theme`                 | String           | `"catppuccin"`                                                                   | The TUI color theme. Supported values: `catppuccin` (Catppuccin Mocha, default) and `teams` (adapted from `teams-tui-go` with green borders, cyan accents, and popups).                                                                                                                                                                                                                                  |
 
 
 
@@ -220,37 +220,54 @@ If you select one of the configured servers, `yt-tui` will authenticate using th
 
 You can configure custom templates to quickly update issues with predefined command sequences. Pressing `Space` inside either the **Issues List** (on the selected issue) or **Issue Detail** view will open a popup listing these actions. You can navigate the list with arrow keys and hit `Enter` to apply, or directly hit the shortcut key (e.g. `1`-`9`) to apply the template instantly.
 
-Each action template is configured under the `actions` array in `config.json`. Below is an example structure:
+Each action template is configured under the `actions` key in `config.json`. Actions can be configured per project (keyed by project ShortName or ID) with a `default` entry used whenever the current issue's project has no dedicated actions. Below is an example structure:
 
 ```json
-  "actions": [
-    {
-      "name": "In progress",
-      "shortcut": "1",
-      "commands": [
-        {
-          "type": "update_field",
-          "field": "State",
-          "value": "In Progress"
-        }
-      ]
-    },
-    {
-      "name": "Assign to me & Add Comment",
-      "shortcut": "2",
-      "commands": [
-        {
-          "type": "assign",
-          "value": "me"
-        },
-        {
-          "type": "comment",
-          "value": "Starting work on this task."
-        }
-      ]
-    }
-  ]
+  "actions": {
+    "default": [
+      {
+        "name": "In progress",
+        "shortcut": "1",
+        "commands": [
+          {
+            "type": "update_field",
+            "field": "State",
+            "value": "In Progress"
+          }
+        ]
+      },
+      {
+        "name": "Assign to me & Add Comment",
+        "shortcut": "2",
+        "commands": [
+          {
+            "type": "assign",
+            "value": "me"
+          },
+          {
+            "type": "comment",
+            "value": "Starting work on this task."
+          }
+        ]
+      }
+    ],
+    "MTEL": [
+      {
+        "name": "Move to Closed",
+        "shortcut": "3",
+        "commands": [
+          {
+            "type": "update_field",
+            "field": "State",
+            "value": "Closed"
+          }
+        ]
+      }
+    ]
+  }
 ```
+
+The legacy array format (`"actions": [...]`) is still supported and is treated as the `default` project's actions.
 
 Supported action command types:
 - `update_field`: Updates any single-value custom field (e.g., `State`, `Repo`, `Priority`). Requires `field` and `value`.

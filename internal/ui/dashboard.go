@@ -59,6 +59,24 @@ type dashboardDataMsg struct {
 	err      error
 }
 
+func (m dashboardModel) selectedIssueProjectCode() string {
+	if m.issueCursor < 0 || m.issueCursor >= len(m.issues) || m.issues[m.issueCursor].Project == nil {
+		return ""
+	}
+	code := m.issues[m.issueCursor].Project.ShortName
+	if code == "" {
+		code = m.issues[m.issueCursor].Project.ID
+	}
+	return code
+}
+
+func (m dashboardModel) actionList() []config.ActionConfig {
+	if m.cfg == nil {
+		return nil
+	}
+	return m.cfg.GetActions(m.selectedIssueProjectCode())
+}
+
 type dashboardActionFinishedMsg struct {
 	err error
 }
@@ -152,19 +170,20 @@ func (m dashboardModel) Update(msg tea.Msg) (res dashboardModel, retCmd tea.Cmd)
 			case "up", "k":
 				m.actionCursor--
 				if m.actionCursor < 0 {
-					m.actionCursor = len(m.cfg.Actions) - 1
+					m.actionCursor = len(m.actionList()) - 1
 				}
 				return m, nil
 			case "down", "j":
 				m.actionCursor++
-				if m.actionCursor >= len(m.cfg.Actions) {
+				if m.actionCursor >= len(m.actionList()) {
 					m.actionCursor = 0
 				}
 				return m, nil
 			case "enter":
-				if len(m.cfg.Actions) > 0 && len(m.issues) > 0 && m.active == panelIssues {
+				actions := m.actionList()
+				if len(actions) > 0 && len(m.issues) > 0 && m.active == panelIssues {
 					issueID := m.issues[m.issueCursor].IDReadable
-					act := m.cfg.Actions[m.actionCursor]
+					act := actions[m.actionCursor]
 					m.loadingIssues = true
 					m.loadingProj = true
 					m.loadingText = "Running action..."
@@ -178,7 +197,7 @@ func (m dashboardModel) Update(msg tea.Msg) (res dashboardModel, retCmd tea.Cmd)
 				return m, nil
 			default:
 				// Check shortcuts
-				for _, act := range m.cfg.Actions {
+				for _, act := range m.actionList() {
 					if msg.String() == act.Shortcut {
 						if len(m.issues) > 0 && m.active == panelIssues {
 							issueID := m.issues[m.issueCursor].IDReadable
@@ -280,7 +299,7 @@ func (m dashboardModel) Update(msg tea.Msg) (res dashboardModel, retCmd tea.Cmd)
 				}
 			}
 		case " ":
-			if m.active == panelIssues && len(m.issues) > 0 && m.cfg != nil && len(m.cfg.Actions) > 0 {
+			if m.active == panelIssues && len(m.issues) > 0 && len(m.actionList()) > 0 {
 				m.actionMode = true
 				m.actionCursor = 0
 			}
@@ -477,11 +496,12 @@ func (m dashboardModel) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, title, panels, "", help)
 
-	if m.actionMode && m.cfg != nil && len(m.cfg.Actions) > 0 {
+	if m.actionMode {
+		actions := m.actionList()
 		var lines []string
 		lines = append(lines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Render("Select Action (or press shortcut):"))
 		lines = append(lines, "")
-		for idx, act := range m.cfg.Actions {
+		for idx, act := range actions {
 			displayStr := fmt.Sprintf("[%s] %s", act.Shortcut, act.Name)
 			if idx == m.actionCursor {
 				lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render("> "+displayStr))
