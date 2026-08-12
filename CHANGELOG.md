@@ -1,4 +1,20 @@
 
+## [0.8.0] - 2026-08-12
+
+### Features
+
+- *(config)* Support per-project custom actions ([86b665e](https://github.com/nospor/yt-tui/commit/86b665e3e5be3cd5e2e95003cbe132df8ae1cb28))
+
+            Actions can now be configured per project (keyed by project ShortName or
+            ID) with a "default" fallback, matching custom_states/custom_priorities.
+            Legacy array format is still supported and treated as the default
+            project's actions. Resolve actions from the current issue's project in
+            the dashboard, issues list, and issue detail views.
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.7.9 [skip ci] ([f4cfae0](https://github.com/nospor/yt-tui/commit/f4cfae02e32e086b120e2900fd65e08a8621560d))
+
 ## [0.7.9] - 2026-08-06
 
 ### Features
