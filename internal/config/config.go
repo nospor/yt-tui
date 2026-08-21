@@ -170,6 +170,7 @@ type Config struct {
 	FavoriteView        string                `json:"favorite_view,omitempty"`
 	FavoriteViews       map[string]string     `json:"favorite_views,omitempty"`
 	ActivityFilters     []string              `json:"activity_filters,omitempty"`
+	ActivitySortOrder   string                `json:"activity_sort_order,omitempty"`
 	RenderMarkdown      bool                  `json:"render_markdown"`
 	RepoOptions         map[string][]string   `json:"repo_options,omitempty"`
 	FilepickerSortBy    string                `json:"filepicker_sort_by,omitempty"`

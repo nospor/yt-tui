@@ -329,19 +329,29 @@ type ActivityField struct {
 	Name string `json:"name"`
 }
 
-func (a ActivityItem) CreatedTime() string {
+func (a ActivityItem) TimestampMs() int64 {
 	if a.Timestamp == nil {
-		return "Unknown time"
+		return 0
 	}
 	switch val := a.Timestamp.(type) {
 	case float64:
-		t := time.UnixMilli(int64(val))
-		return t.Format("2006-01-02 15:04:05")
+		return int64(val)
 	case int64:
-		t := time.UnixMilli(val)
-		return t.Format("2006-01-02 15:04:05")
+		return val
+	case int:
+		return int64(val)
+	case int32:
+		return int64(val)
 	}
-	return "Unknown time"
+	return 0
+}
+
+func (a ActivityItem) CreatedTime() string {
+	ms := a.TimestampMs()
+	if ms == 0 {
+		return "Unknown time"
+	}
+	return time.UnixMilli(ms).Format("2006-01-02 15:04:05")
 }
 
 // helper to convert interface{} field values to a slice of interfaces.

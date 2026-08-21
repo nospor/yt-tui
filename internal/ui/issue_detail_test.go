@@ -525,7 +525,8 @@ func TestParseDurationToMinutes(t *testing.T) {
 
 func TestActivitiesFilterSelect(t *testing.T) {
 	cfg := &config.Config{
-		ActivityFilters: []string{"Comments", "Spent Time"},
+		ActivityFilters:   []string{"Comments", "Spent Time"},
+		ActivitySortOrder: "asc",
 	}
 	m := newDetailModel(nil, cfg)
 	m.loading = false
@@ -542,6 +543,9 @@ func TestActivitiesFilterSelect(t *testing.T) {
 	if !m.tempFilters["Comments"] || !m.tempFilters["Spent Time"] {
 		t.Errorf("expected Comments and Spent Time filters to be true initially")
 	}
+	if m.tempActivitySortOrder != "asc" {
+		t.Errorf("expected tempActivitySortOrder asc, got %q", m.tempActivitySortOrder)
+	}
 
 	// Press down key (j) to move to the second item ("Spent Time")
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
@@ -555,10 +559,40 @@ func TestActivitiesFilterSelect(t *testing.T) {
 		t.Errorf("expected Spent Time filter to be toggled off (false)")
 	}
 
+	// Move to descending sort option and select it
+	for i := 0; i < 4; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	}
+	if activitySortOptionIndex(m.filterCursor) != 1 {
+		t.Fatalf("expected filter cursor on descending sort option, got %d", m.filterCursor)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+	if m.tempActivitySortOrder != "desc" {
+		t.Errorf("expected tempActivitySortOrder desc after select, got %q", m.tempActivitySortOrder)
+	}
+
 	// Press escape to cancel (should reset mode back to normal and discard changes)
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.mode != modeNormal {
 		t.Errorf("expected normal mode after escape, got %v", m.mode)
+	}
+}
+
+func TestSortActivitiesByDate(t *testing.T) {
+	activities := []ytcli.ActivityItem{
+		{ID: "1", Timestamp: float64(3000)},
+		{ID: "2", Timestamp: float64(1000)},
+		{ID: "3", Timestamp: float64(2000)},
+	}
+
+	sortActivitiesByDate(activities, "asc")
+	if activities[0].ID != "2" || activities[1].ID != "3" || activities[2].ID != "1" {
+		t.Errorf("expected ascending sort by timestamp, got IDs %s, %s, %s", activities[0].ID, activities[1].ID, activities[2].ID)
+	}
+
+	sortActivitiesByDate(activities, "desc")
+	if activities[0].ID != "1" || activities[1].ID != "3" || activities[2].ID != "2" {
+		t.Errorf("expected descending sort by timestamp, got IDs %s, %s, %s", activities[0].ID, activities[1].ID, activities[2].ID)
 	}
 }
 

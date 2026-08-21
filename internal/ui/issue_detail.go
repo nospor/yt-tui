@@ -63,26 +63,27 @@ func isStateClosed(state string) bool {
 }
 
 type detailModel struct {
-	client              *ytcli.Client
-	cfg                 *config.Config
-	issueKey            string
-	issue               *ytcli.Issue
-	activities          []ytcli.ActivityItem
-	loading             bool
-	loadingText         string
-	filterCursor        int
-	tempFilters         map[string]bool
-	err                 error
-	errPopupShow        bool
-	spinner             spinner.Model
-	width               int
-	height              int
-	activeViewport      int // 0 = description, 1 = comments, 2 = links, 3 = attachments
-	fullView            bool
-	descViewport        viewport.Model
-	commentsViewport    viewport.Model
-	linksViewport       viewport.Model
-	attachmentsViewport viewport.Model
+	client                *ytcli.Client
+	cfg                   *config.Config
+	issueKey              string
+	issue                 *ytcli.Issue
+	activities            []ytcli.ActivityItem
+	loading               bool
+	loadingText           string
+	filterCursor          int
+	tempFilters           map[string]bool
+	tempActivitySortOrder string
+	err                   error
+	errPopupShow          bool
+	spinner               spinner.Model
+	width                 int
+	height                int
+	activeViewport        int // 0 = description, 1 = comments, 2 = links, 3 = attachments
+	fullView              bool
+	descViewport          viewport.Model
+	commentsViewport      viewport.Model
+	linksViewport         viewport.Model
+	attachmentsViewport   viewport.Model
 
 	// Comments selection
 	commentsCursor      int
@@ -467,6 +468,11 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		}
 		m.issue = msg.issue
 		m.activities = msg.activities
+		sortOrder := "asc"
+		if m.cfg != nil && m.cfg.ActivitySortOrder != "" {
+			sortOrder = m.cfg.ActivitySortOrder
+		}
+		sortActivitiesByDate(m.activities, sortOrder)
 		m.trackTimeTypes = msg.trackTimeTypes
 		m.repoOptions = msg.repoOptions
 
@@ -1283,16 +1289,23 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			case "up", "k":
 				m.filterCursor--
 				if m.filterCursor < 0 {
-					m.filterCursor = len(ActivityFilterOptions) - 1
+					m.filterCursor = activityFilterPanelItemCount() - 1
 				}
 				return m, nil
 			case "down", "j":
 				m.filterCursor++
-				if m.filterCursor >= len(ActivityFilterOptions) {
+				if m.filterCursor >= activityFilterPanelItemCount() {
 					m.filterCursor = 0
 				}
 				return m, nil
 			case " ":
+				if isActivitySortOption(m.filterCursor) {
+					idx := activitySortOptionIndex(m.filterCursor)
+					if idx >= 0 && idx < len(ActivitySortOrderOptions) {
+						m.tempActivitySortOrder = ActivitySortOrderOptions[idx]
+					}
+					return m, nil
+				}
 				f := ActivityFilterOptions[m.filterCursor]
 				m.tempFilters[f] = !m.tempFilters[f]
 				return m, nil
@@ -1305,6 +1318,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 						}
 					}
 					m.cfg.ActivityFilters = newFilters
+					m.cfg.ActivitySortOrder = m.tempActivitySortOrder
 					_ = config.SaveConfig(m.cfg)
 					m.loading = true
 					m.loadingText = "Filtering activities..."
@@ -1725,6 +1739,13 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.tempFilters = make(map[string]bool)
 				for _, f := range m.cfg.ActivityFilters {
 					m.tempFilters[f] = true
+				}
+				m.tempActivitySortOrder = m.cfg.ActivitySortOrder
+				if m.tempActivitySortOrder == "" {
+					m.tempActivitySortOrder = "asc"
+				}
+				if !strings.EqualFold(m.tempActivitySortOrder, "desc") {
+					m.tempActivitySortOrder = "asc"
 				}
 				return m, nil
 			}
@@ -3140,7 +3161,34 @@ func (m detailModel) View() string {
 		}
 
 		filterLines = append(filterLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
-		filterLines = append(filterLines, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [↑↓/k/j] Navigate   [Space] Toggle   [Enter] Save   [Esc] Cancel "))
+		filterLines = append(filterLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Render(" SORT BY DATE"))
+		filterLines = append(filterLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+
+		for idx, label := range ActivitySortOrderLabels {
+			order := ActivitySortOrderOptions[idx]
+			selected := "( )"
+			if strings.EqualFold(order, m.tempActivitySortOrder) {
+				selected = "(*)"
+			}
+			item := fmt.Sprintf("  %s %s ", selected, label)
+			cursor := len(ActivityFilterOptions) + idx
+			if cursor == m.filterCursor {
+				item = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorBg)).
+					Background(lipgloss.Color(ColorCyan)).
+					Bold(true).
+					Render(item)
+			} else {
+				item = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorText)).
+					Background(lipgloss.Color(ColorSurface)).
+					Render(item)
+			}
+			filterLines = append(filterLines, item)
+		}
+
+		filterLines = append(filterLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+		filterLines = append(filterLines, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [↑↓/k/j] Navigate   [Space] Toggle/Select   [Enter] Save   [Esc] Cancel "))
 
 		popupContent := lipgloss.JoinVertical(lipgloss.Left, filterLines...)
 		popup := lipgloss.NewStyle().
@@ -3715,6 +3763,36 @@ func renderTrackTimeDropdownOptions(options []string, activeIndex int) string {
 }
 
 var ActivityFilterOptions = []string{"Comments", "Spent Time", "VCS Changes", "Change History"}
+
+var ActivitySortOrderOptions = []string{"asc", "desc"}
+
+var ActivitySortOrderLabels = []string{"Ascending", "Descending"}
+
+func activityFilterPanelItemCount() int {
+	return len(ActivityFilterOptions) + len(ActivitySortOrderOptions)
+}
+
+func isActivitySortOption(cursor int) bool {
+	return cursor >= len(ActivityFilterOptions) && cursor < activityFilterPanelItemCount()
+}
+
+func activitySortOptionIndex(cursor int) int {
+	if !isActivitySortOption(cursor) {
+		return -1
+	}
+	return cursor - len(ActivityFilterOptions)
+}
+
+func sortActivitiesByDate(activities []ytcli.ActivityItem, order string) {
+	sort.SliceStable(activities, func(i, j int) bool {
+		ti := activities[i].TimestampMs()
+		tj := activities[j].TimestampMs()
+		if strings.EqualFold(order, "desc") {
+			return ti > tj
+		}
+		return ti < tj
+	})
+}
 
 func mapFiltersToCategories(filters []string) []string {
 	var categories []string
