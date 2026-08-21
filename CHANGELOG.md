@@ -1,4 +1,10 @@
 
+## [0.8.2] - 2026-08-21
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.8.1 [skip ci] ([3bc5529](https://github.com/nospor/yt-tui/commit/3bc5529b3a48a937d432087f881011f4815a9325))
+
 ## [0.8.1] - 2026-08-21
 
 ### Features
