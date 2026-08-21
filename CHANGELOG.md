@@ -1,4 +1,14 @@
 
+## [0.8.1] - 2026-08-21
+
+### Features
+
+- *(ui)* Add @ mention autocomplete for issue comment input ([eabc7cc](https://github.com/nospor/yt-tui/commit/eabc7cc03123f956f846ebdba0d0152e661f3035))
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.8.0 [skip ci] ([d7de825](https://github.com/nospor/yt-tui/commit/d7de825a497c12dbbe41ba9416143ac1284b62fd))
+
 ## [0.8.0] - 2026-08-12
 
 ### Features
