@@ -118,6 +118,13 @@ type detailModel struct {
 	assignFiltered []ytcli.User
 	assignCursor   int
 
+	// @ mention autocomplete for comment input/edit
+	mentionUsers    []ytcli.User
+	mentionFiltered []ytcli.User
+	mentionCursor   int
+	mentionActive   bool
+	mentionStart    int
+
 	// URL Yanking / Opening
 	yankUrls      []string
 	yankUrlCursor int
@@ -259,6 +266,10 @@ type detailActionFinishedMsg struct {
 }
 
 type usersForAssignLoadedMsg struct {
+	users []ytcli.User
+}
+
+type usersForMentionLoadedMsg struct {
 	users []ytcli.User
 }
 
@@ -484,6 +495,11 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		m.assignCursor = 0
 		return m, nil
 
+	case usersForMentionLoadedMsg:
+		m.mentionUsers = msg.users
+		m.updateMentionSuggestions()
+		return m, nil
+
 	case detailActionFinishedMsg:
 		m.loading = false
 		m.mode = modeNormal
@@ -566,158 +582,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 
 		// Handle sub-modes key events
 		switch m.mode {
-		case modeCommentInput:
-			switch msg.String() {
-			case "ctrl+v", "ctrl+shift+v", "ctrl+V":
-				imgBytes, contentType, err := getClipboardImage()
-				if err == nil && len(imgBytes) > 0 {
-					ext := "png"
-					if contentType == "image/jpeg" {
-						ext = "jpg"
-					}
-					filename := fmt.Sprintf("pasted-image-%s-%d.%s", time.Now().Format("20060102-150405"), len(m.pastedCommentImages)+1, ext)
-					m.pastedCommentImages = append(m.pastedCommentImages, PastedImage{
-						Name:        filename,
-						Bytes:       imgBytes,
-						ContentType: contentType,
-					})
-					m.commentInput.InsertString(fmt.Sprintf("![%s](%s)", filename, filename))
-					return m, nil
-				} else if err != nil {
-					m.err = err
-					m.errPopupShow = true
-				}
-			case "ctrl+f":
-				m.filepickerActive = true
-				h := m.height - 14
-				if h < 4 {
-					h = 4
-				}
-				m.filepicker.SetHeight(h)
-				return m, m.filepicker.Init()
-			case "ctrl+g":
-				return m, m.openEditorCmd(m.commentInput.Value(), false)
-			case "alt+enter":
-				m.commentInput.InsertString("\n")
-				return m, nil
-			case "enter":
-				if msg.Alt {
-					m.commentInput.InsertString("\n")
-					return m, nil
-				}
-				val := m.commentInput.Value()
-				if val != "" {
-					m.loading = true
-					pasted := m.pastedCommentImages
-					m.pastedCommentImages = nil
-					return m, func() tea.Msg {
-						// 1. Upload attachments first
-						for _, img := range pasted {
-							var content []byte
-							var readErr error
-							if img.Path != "" {
-								content, readErr = os.ReadFile(img.Path)
-								if readErr != nil {
-									return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", img.Path, readErr)}
-								}
-							} else {
-								content = img.Bytes
-							}
-							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, content); uploadErr != nil {
-								return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
-							}
-						}
-						// 2. Add comment
-						err := m.client.AddComment(m.issue.IDReadable, val)
-						return detailActionFinishedMsg{err: err}
-					}
-				}
-				m.mode = modeNormal
-				m.pastedCommentImages = nil
-			case "esc":
-				m.mode = modeNormal
-				m.pastedCommentImages = nil
-				m.commentInput.Blur()
-			}
-			m.commentInput, cmd = m.commentInput.Update(msg)
-			return m, cmd
-
-		case modeCommentEdit:
-			switch msg.String() {
-			case "ctrl+v", "ctrl+shift+v", "ctrl+V":
-				imgBytes, contentType, err := getClipboardImage()
-				if err == nil && len(imgBytes) > 0 {
-					ext := "png"
-					if contentType == "image/jpeg" {
-						ext = "jpg"
-					}
-					filename := fmt.Sprintf("pasted-image-%s-%d.%s", time.Now().Format("20060102-150405"), len(m.pastedCommentImages)+1, ext)
-					m.pastedCommentImages = append(m.pastedCommentImages, PastedImage{
-						Name:        filename,
-						Bytes:       imgBytes,
-						ContentType: contentType,
-					})
-					m.commentInput.InsertString(fmt.Sprintf("![%s](%s)", filename, filename))
-					return m, nil
-				} else if err != nil {
-					m.err = err
-					m.errPopupShow = true
-				}
-			case "ctrl+f":
-				m.filepickerActive = true
-				h := m.height - 14
-				if h < 4 {
-					h = 4
-				}
-				m.filepicker.SetHeight(h)
-				return m, m.filepicker.Init()
-			case "ctrl+g":
-				return m, m.openEditorCmd(m.commentInput.Value(), false)
-			case "alt+enter":
-				m.commentInput.InsertString("\n")
-				return m, nil
-			case "enter":
-				if msg.Alt {
-					m.commentInput.InsertString("\n")
-					return m, nil
-				}
-				val := m.commentInput.Value()
-				if val != "" && len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
-					m.loading = true
-					commentID := m.activities[m.commentsCursor].GetCommentID()
-					pasted := m.pastedCommentImages
-					m.pastedCommentImages = nil
-					return m, func() tea.Msg {
-						// 1. Upload attachments first
-						for _, img := range pasted {
-							var content []byte
-							var readErr error
-							if img.Path != "" {
-								content, readErr = os.ReadFile(img.Path)
-								if readErr != nil {
-									return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", img.Path, readErr)}
-								}
-							} else {
-								content = img.Bytes
-							}
-							if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, content); uploadErr != nil {
-								return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
-							}
-						}
-						// 2. Update comment
-						err := m.client.UpdateComment(m.issue.IDReadable, commentID, val)
-						return detailActionFinishedMsg{err: err}
-					}
-				}
-				m.mode = modeNormal
-				m.pastedCommentImages = nil
-			case "esc":
-				m.mode = modeNormal
-				m.pastedCommentImages = nil
-				m.commentInput.Blur()
-			}
-			m.commentInput, cmd = m.commentInput.Update(msg)
-			return m, cmd
+		case modeCommentInput, modeCommentEdit:
+			return m.handleCommentInputKey(msg)
 
 		case modeAssignInput:
 			switch msg.String() {
@@ -1754,7 +1620,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 			m.commentInput.SetValue("")
 			m.commentInput.Focus()
 			m.pastedCommentImages = nil
-			return m, nil
+			m.resetMentionState()
+			return m, m.loadUsersForCommentCmd()
 		case " ":
 			m.mode = modeActionSelect
 			m.actionCursor = 0
@@ -1843,7 +1710,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 					m.commentInput.SetValue(act.GetCommentText())
 					m.commentInput.Focus()
 					m.pastedCommentImages = nil
-					return m, nil
+					m.resetMentionState()
+					return m, m.loadUsersForCommentCmd()
 				}
 			}
 			// Edit issue (pushes form pre-filled)
@@ -1895,29 +1763,222 @@ func (m detailModel) filterAssignUsers(query string) []ytcli.User {
 		return nil
 	}
 	q := strings.ToLower(strings.TrimSpace(query))
-	// Special keywords bypass the suggestion list.
 	if q == "me" || q == "unassigned" || q == "unassign" || q == "none" || q == "-" {
 		return nil
 	}
-	if q == "" {
-		result := make([]ytcli.User, len(m.assignUsers))
-		copy(result, m.assignUsers)
-		if len(result) > 8 {
-			result = result[:8]
+	return filterUsersByQuery(m.assignUsers, q, 8)
+}
+
+func (m detailModel) loadUsersForCommentCmd() tea.Cmd {
+	pc := m.issueProjectCode()
+	return func() tea.Msg {
+		var users []ytcli.User
+		if pc != "" {
+			users, _ = m.client.ListProjectMembers(pc)
 		}
-		return result
+		if len(users) == 0 {
+			users, _ = m.client.ListUsers()
+		}
+		return usersForMentionLoadedMsg{users: users}
 	}
-	var result []ytcli.User
-	for _, u := range m.assignUsers {
-		if strings.Contains(strings.ToLower(u.FullName), q) ||
-			strings.Contains(strings.ToLower(u.Login), q) {
-			result = append(result, u)
-			if len(result) >= 8 {
-				break
+}
+
+func (m *detailModel) resetMentionState() {
+	m.mentionUsers = nil
+	m.mentionFiltered = nil
+	m.mentionCursor = 0
+	m.mentionActive = false
+	m.mentionStart = 0
+}
+
+func (m *detailModel) updateMentionSuggestions() {
+	active, start, query := detectMentionQuery(m.commentInput)
+	m.mentionActive = active
+	m.mentionStart = start
+	if !active || len(m.mentionUsers) == 0 {
+		m.mentionFiltered = nil
+		m.mentionCursor = 0
+		return
+	}
+	m.mentionFiltered = filterUsersByQuery(m.mentionUsers, query, 8)
+	if m.mentionCursor >= len(m.mentionFiltered) {
+		m.mentionCursor = 0
+	}
+}
+
+func (m *detailModel) applySelectedMention() bool {
+	if !m.mentionActive || len(m.mentionFiltered) == 0 || m.mentionCursor < 0 || m.mentionCursor >= len(m.mentionFiltered) {
+		return false
+	}
+	selected := m.mentionFiltered[m.mentionCursor]
+	if selected.Login == "" {
+		return false
+	}
+	m.commentInput = insertMentionInTextarea(m.commentInput, m.mentionStart, selected.Login)
+	m.updateMentionSuggestions()
+	return true
+}
+
+func (m detailModel) handleCommentInputKey(msg tea.KeyMsg) (detailModel, tea.Cmd) {
+	var cmd tea.Cmd
+	isEdit := m.mode == modeCommentEdit
+
+	switch msg.String() {
+	case "up":
+		if m.mentionActive && len(m.mentionFiltered) > 0 {
+			m.mentionCursor--
+			if m.mentionCursor < 0 {
+				m.mentionCursor = len(m.mentionFiltered) - 1
+			}
+			return m, nil
+		}
+	case "down":
+		if m.mentionActive && len(m.mentionFiltered) > 0 {
+			m.mentionCursor++
+			if m.mentionCursor >= len(m.mentionFiltered) {
+				m.mentionCursor = 0
+			}
+			return m, nil
+		}
+	case "tab":
+		if m.applySelectedMention() {
+			return m, nil
+		}
+	case "ctrl+v", "ctrl+shift+v", "ctrl+V":
+		imgBytes, contentType, err := getClipboardImage()
+		if err == nil && len(imgBytes) > 0 {
+			ext := "png"
+			if contentType == "image/jpeg" {
+				ext = "jpg"
+			}
+			filename := fmt.Sprintf("pasted-image-%s-%d.%s", time.Now().Format("20060102-150405"), len(m.pastedCommentImages)+1, ext)
+			m.pastedCommentImages = append(m.pastedCommentImages, PastedImage{
+				Name:        filename,
+				Bytes:       imgBytes,
+				ContentType: contentType,
+			})
+			m.commentInput.InsertString(fmt.Sprintf("![%s](%s)", filename, filename))
+			m.updateMentionSuggestions()
+			return m, nil
+		} else if err != nil {
+			m.err = err
+			m.errPopupShow = true
+		}
+	case "ctrl+f":
+		m.filepickerActive = true
+		h := m.height - 14
+		if h < 4 {
+			h = 4
+		}
+		m.filepicker.SetHeight(h)
+		return m, m.filepicker.Init()
+	case "ctrl+g":
+		return m, m.openEditorCmd(m.commentInput.Value(), false)
+	case "alt+enter":
+		m.commentInput.InsertString("\n")
+		m.updateMentionSuggestions()
+		return m, nil
+	case "enter":
+		if msg.Alt {
+			m.commentInput.InsertString("\n")
+			m.updateMentionSuggestions()
+			return m, nil
+		}
+		if m.applySelectedMention() {
+			return m, nil
+		}
+		val := m.commentInput.Value()
+		if val == "" {
+			m.mode = modeNormal
+			m.pastedCommentImages = nil
+			m.resetMentionState()
+			return m, nil
+		}
+		if isEdit {
+			if len(m.activities) > 0 && m.commentsCursor >= 0 && m.commentsCursor < len(m.activities) {
+				m.loading = true
+				commentID := m.activities[m.commentsCursor].GetCommentID()
+				pasted := m.pastedCommentImages
+				m.pastedCommentImages = nil
+				m.resetMentionState()
+				return m, func() tea.Msg {
+					for _, img := range pasted {
+						var content []byte
+						var readErr error
+						if img.Path != "" {
+							content, readErr = os.ReadFile(img.Path)
+							if readErr != nil {
+								return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", img.Path, readErr)}
+							}
+						} else {
+							content = img.Bytes
+						}
+						if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, content); uploadErr != nil {
+							return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
+						}
+					}
+					err := m.client.UpdateComment(m.issue.IDReadable, commentID, val)
+					return detailActionFinishedMsg{err: err}
+				}
+			}
+		} else {
+			m.loading = true
+			pasted := m.pastedCommentImages
+			m.pastedCommentImages = nil
+			m.resetMentionState()
+			return m, func() tea.Msg {
+				for _, img := range pasted {
+					var content []byte
+					var readErr error
+					if img.Path != "" {
+						content, readErr = os.ReadFile(img.Path)
+						if readErr != nil {
+							return detailActionFinishedMsg{err: fmt.Errorf("failed to read file %s: %w", img.Path, readErr)}
+						}
+					} else {
+						content = img.Bytes
+					}
+					if uploadErr := m.client.UploadAttachment(m.issue.IDReadable, img.Name, content); uploadErr != nil {
+						return detailActionFinishedMsg{err: fmt.Errorf("failed to upload %s: %w", img.Name, uploadErr)}
+					}
+				}
+				err := m.client.AddComment(m.issue.IDReadable, val)
+				return detailActionFinishedMsg{err: err}
 			}
 		}
+		m.mode = modeNormal
+		m.pastedCommentImages = nil
+		m.resetMentionState()
+	case "esc":
+		if m.mentionActive && len(m.mentionFiltered) > 0 {
+			m.mentionActive = false
+			m.mentionFiltered = nil
+			m.mentionCursor = 0
+			return m, nil
+		}
+		m.mode = modeNormal
+		m.pastedCommentImages = nil
+		m.resetMentionState()
+		m.commentInput.Blur()
 	}
-	return result
+
+	m.commentInput, cmd = m.commentInput.Update(msg)
+	m.updateMentionSuggestions()
+	return m, cmd
+}
+
+func (m detailModel) renderCommentActionView(title string) string {
+	var parts []string
+	parts = append(parts, title, " ", m.commentInput.View())
+	if m.mentionActive && len(m.mentionFiltered) > 0 {
+		parts = append(parts, "")
+		parts = append(parts, renderAssigneeSuggestions(m.mentionFiltered, m.mentionCursor))
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorCyan)).
+		Width(m.width - 4).
+		Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 func (m detailModel) issueProjectCode() string {
@@ -1950,7 +2011,11 @@ func (m detailModel) footerHelp() string {
 		return StyleHelp.Render(" [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker ")
 	}
 	if m.mode == modeCommentInput || m.mode == modeCommentEdit {
-		return StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image  [Ctrl+g] Ext Editor ")
+		mentionHelp := ""
+		if m.mentionActive && len(m.mentionFiltered) > 0 {
+			mentionHelp = "  [@] ↑/↓ Select  [Tab/Enter] Insert Mention  [Esc] Dismiss Popup"
+		}
+		return StyleHelp.Render(" [Enter] Submit Comment  [Alt+Enter] Newline  [@] Mention" + mentionHelp + "  [Esc] Cancel  [Ctrl+f] Attach File from PC  [Ctrl+v] Paste Clipboard Image  [Ctrl+g] Ext Editor ")
 	}
 	if m.mode == modeDeleteAttachmentConfirm || m.mode == modeDeleteLinkConfirm {
 		return StyleHelp.Render(" [y] Confirm Delete  [n/Esc] Cancel ")
@@ -2000,6 +2065,9 @@ func (m *detailModel) updateViewportSizes() {
 	if m.hasActionView() {
 		if m.mode == modeCommentInput || m.mode == modeCommentEdit {
 			actionHeight = 10
+			if m.mentionActive && len(m.mentionFiltered) > 0 {
+				actionHeight += len(m.mentionFiltered) + 1
+			}
 		} else {
 			actionHeight = 6
 		}
@@ -2672,19 +2740,11 @@ func (m detailModel) View() string {
 	var actionView string
 	switch m.mode {
 	case modeCommentInput:
-		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Add Comment (Press Enter to submit, Alt+Enter for newline, Esc to cancel) ")
-		actionView = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width - 4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.commentInput.View()))
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Add Comment (Press Enter to submit, Alt+Enter for newline, @ to mention, Esc to cancel) ")
+		actionView = m.renderCommentActionView(title)
 	case modeCommentEdit:
-		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Edit Comment (Press Enter to submit, Alt+Enter for newline, Esc to cancel) ")
-		actionView = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(ColorCyan)).
-			Width(m.width - 4).
-			Render(lipgloss.JoinVertical(lipgloss.Left, title, " ", m.commentInput.View()))
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)).Bold(true).Render(" Edit Comment (Press Enter to submit, Alt+Enter for newline, @ to mention, Esc to cancel) ")
+		actionView = m.renderCommentActionView(title)
 	case modeAssignInput:
 		var titleStr string
 		if len(m.assignUsers) == 0 {
