@@ -39,6 +39,7 @@ const (
 	modeTrackTime
 	modeFilterSelect
 	modeRepoSelect
+	modeBoardsSelect
 	modeDeleteAttachmentConfirm
 	modeDeleteLinkConfirm
 	modeActionSelect
@@ -109,6 +110,14 @@ type detailModel struct {
 	stateCursor     int
 	repoOptions     []string
 	repoCursor      int
+	boardsOptions   []string
+	boardsFieldName string
+	boardsHasField  bool
+	boardsUsesAgile bool
+	boardsAgileID   string
+	boardsValues    []string
+	boardsCursor    int
+	tempBoards      map[string]bool
 	actionCursor    int
 	isModified      bool
 	statusMessage   string
@@ -255,11 +264,17 @@ func newDetailModel(client *ytcli.Client, cfg *config.Config) detailModel {
 }
 
 type detailDataMsg struct {
-	issue          *ytcli.Issue
-	activities     []ytcli.ActivityItem
-	trackTimeTypes []ytcli.WorkItemType
-	repoOptions    []string
-	err            error
+	issue           *ytcli.Issue
+	activities      []ytcli.ActivityItem
+	trackTimeTypes  []ytcli.WorkItemType
+	repoOptions     []string
+	boardsOptions   []string
+	boardsFieldName string
+	boardsHasField  bool
+	boardsUsesAgile bool
+	boardsAgileID   string
+	boardsValues    []string
+	err             error
 }
 
 type detailActionFinishedMsg struct {
@@ -321,12 +336,102 @@ func (m detailModel) loadDetailCmd() tea.Cmd {
 			repoOpts = append([]string{"No repo"}, repoOpts...)
 		}
 
+		var boardsOpts []string
+		var boardsUsesAgile bool
+		var boardsAgileID string
+		var boardsValues []string
+		boardsFieldName := issue.BoardsFieldName()
+		boardsHasField := boardsFieldName != ""
+		projectID := ""
+		projectShortName := ""
+		if issue.Project != nil {
+			projectID = issue.Project.ID
+			projectShortName = issue.Project.ShortName
+		}
+		if issue.Project != nil {
+			if info, err := m.client.GetBoardsFieldInfoForIssue(issue.IDReadable, projectID, projectShortName); err == nil && info != nil {
+				if len(info.Options) > 0 {
+					boardsOpts = info.Options
+					boardsHasField = true
+				}
+				if info.FieldName != "" {
+					boardsFieldName = info.FieldName
+					boardsHasField = true
+				}
+				boardsUsesAgile = info.UsesAgileSprints
+				boardsAgileID = info.AgileID
+			}
+		}
+		if boardsUsesAgile {
+			if sprints, err := m.client.GetIssueSprints(issue.IDReadable); err == nil {
+				for _, sprint := range sprints {
+					if sprint.Archived || sprint.Name == "" {
+						continue
+					}
+					boardsValues = append(boardsValues, sprint.Name)
+				}
+			}
+			boardsHasField = true
+			if boardsFieldName == "" {
+				boardsFieldName = ytcli.BoardsFieldLabel()
+			}
+		} else if boardsFieldName == "" && m.cfg != nil {
+			if cfgName := m.cfg.GetBoardsFieldName(projectShortName); cfgName != "" {
+				boardsFieldName = cfgName
+				boardsHasField = true
+			} else if cfgName := m.cfg.GetBoardsFieldName(projectID); cfgName != "" {
+				boardsFieldName = cfgName
+				boardsHasField = true
+			}
+		}
+		if boardsFieldName == "" {
+			if resolved, err := m.client.ResolveBoardsFieldNameFromProject(projectID); err == nil && resolved != "" {
+				boardsFieldName = resolved
+				boardsHasField = true
+			} else if resolved, err := m.client.ResolveBoardsFieldNameFromProject(projectShortName); err == nil && resolved != "" {
+				boardsFieldName = resolved
+				boardsHasField = true
+			}
+		}
+		if boardsHasField && len(boardsOpts) == 0 && boardsFieldName != "" && issue.Project != nil {
+			projectRef := projectID
+			if projectRef == "" {
+				projectRef = projectShortName
+			}
+			if opts, err := m.client.GetProjectCustomFieldOptions(projectRef, boardsFieldName); err == nil && len(opts) > 0 {
+				boardsOpts = opts
+			}
+		}
+		if len(boardsOpts) == 0 && m.cfg != nil && m.cfg.BoardsOptions != nil && issue.Project != nil {
+			if opts, ok := m.cfg.BoardsOptions[issue.Project.ShortName]; ok && len(opts) > 0 {
+				boardsOpts = opts
+				boardsHasField = true
+			} else if opts, ok := m.cfg.BoardsOptions[issue.Project.ID]; ok && len(opts) > 0 {
+				boardsOpts = opts
+				boardsHasField = true
+			}
+		}
+		if len(boardsOpts) > 0 {
+			boardsHasField = true
+		}
+		if boardsFieldName == "" && len(boardsOpts) > 0 {
+			if name, err := m.client.ResolveBoardsFieldNameForSprints(projectID, projectShortName, boardsOpts); err == nil && name != "" {
+				boardsFieldName = name
+			}
+		}
+
 		return detailDataMsg{
-			issue:          issue,
-			activities:     activities,
-			trackTimeTypes: wTypes,
-			repoOptions:    repoOpts,
-			err:            err2,
+			issue:           issue,
+			activities:      activities,
+			trackTimeTypes:  wTypes,
+			repoOptions:     repoOpts,
+			boardsOptions:   boardsOpts,
+			boardsFieldName: boardsFieldName,
+			boardsHasField:  boardsHasField,
+			boardsUsesAgile: boardsUsesAgile,
+			boardsAgileID:   boardsAgileID,
+			boardsValues:    boardsValues,
+			err:             err2,
 		}
 	}
 }
@@ -475,6 +580,12 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 		sortActivitiesByDate(m.activities, sortOrder)
 		m.trackTimeTypes = msg.trackTimeTypes
 		m.repoOptions = msg.repoOptions
+		m.boardsOptions = msg.boardsOptions
+		m.boardsFieldName = msg.boardsFieldName
+		m.boardsHasField = msg.boardsHasField
+		m.boardsUsesAgile = msg.boardsUsesAgile
+		m.boardsAgileID = msg.boardsAgileID
+		m.boardsValues = msg.boardsValues
 
 		// Load custom states for the issue's project
 		var projectCode string
@@ -706,6 +817,55 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.mode = modeNormal
 			case "esc":
 				m.mode = modeNormal
+			}
+			return m, nil
+
+		case modeBoardsSelect:
+			switch msg.String() {
+			case "esc":
+				m.mode = modeNormal
+				return m, nil
+			case "up", "k":
+				m.boardsCursor--
+				if m.boardsCursor < 0 {
+					m.boardsCursor = len(m.boardsOptions) - 1
+				}
+				return m, nil
+			case "down", "j":
+				m.boardsCursor++
+				if m.boardsCursor >= len(m.boardsOptions) {
+					m.boardsCursor = 0
+				}
+				return m, nil
+			case " ":
+				if len(m.boardsOptions) > 0 && m.boardsCursor >= 0 && m.boardsCursor < len(m.boardsOptions) {
+					opt := m.boardsOptions[m.boardsCursor]
+					m.tempBoards[opt] = !m.tempBoards[opt]
+				}
+				return m, nil
+			case "enter":
+				var selected []string
+				for _, opt := range m.boardsOptions {
+					if m.tempBoards[opt] {
+						selected = append(selected, opt)
+					}
+				}
+				m.loading = true
+				m.loadingText = "Updating boards..."
+				issueKey := m.issue.IDReadable
+				fieldName := m.boardsFieldName
+				boardsOpts := append([]string(nil), m.boardsOptions...)
+				usesAgile := m.boardsUsesAgile
+				agileID := m.boardsAgileID
+				return m, func() tea.Msg {
+					var err error
+					if usesAgile {
+						err = m.client.UpdateIssueSprints(issueKey, agileID, selected)
+					} else {
+						err = m.client.UpdateIssueCustomFieldSet(issueKey, fieldName, selected, boardsOpts...)
+					}
+					return detailActionFinishedMsg{err: err}
+				}
 			}
 			return m, nil
 
@@ -1674,6 +1834,71 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "B":
+			if len(m.boardsOptions) == 0 {
+				if m.issue != nil && m.issue.Project != nil {
+					projectID := m.issue.Project.ID
+					projectShortName := m.issue.Project.ShortName
+					if info, err := m.client.GetBoardsFieldInfoForIssue(m.issue.IDReadable, projectID, projectShortName); err == nil && info != nil && len(info.Options) > 0 {
+						m.boardsOptions = info.Options
+						m.boardsHasField = true
+						m.boardsUsesAgile = info.UsesAgileSprints
+						m.boardsAgileID = info.AgileID
+						if info.FieldName != "" {
+							m.boardsFieldName = info.FieldName
+						}
+					}
+				}
+			}
+			if m.boardsUsesAgile && m.issue != nil {
+				if sprints, err := m.client.GetIssueSprints(m.issue.IDReadable); err == nil {
+					m.boardsValues = nil
+					for _, sprint := range sprints {
+						if sprint.Archived || sprint.Name == "" {
+							continue
+						}
+						m.boardsValues = append(m.boardsValues, sprint.Name)
+					}
+				}
+				if m.boardsFieldName == "" {
+					m.boardsFieldName = ytcli.BoardsFieldLabel()
+				}
+			} else if m.issue != nil {
+				preferred := m.boardsFieldName
+				if preferred == "" && m.cfg != nil && m.issue.Project != nil {
+					preferred = m.cfg.GetBoardsFieldName(m.issue.Project.ShortName)
+				}
+				if m.client != nil {
+					if meta, err := m.client.ResolveBoardsFieldFromIssue(m.issue.IDReadable, m.boardsOptions); err == nil && meta != nil {
+						m.boardsFieldName = meta.Name
+					} else if preferred != "" {
+						m.boardsFieldName = preferred
+					}
+				} else if preferred != "" {
+					m.boardsFieldName = preferred
+				}
+			}
+			if len(m.boardsOptions) == 0 {
+				m.statusMessage = "No Boards options configured or available!"
+				m.statusMessageID++
+				currentID := m.statusMessageID
+				return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+					return clearStatusMsg{id: currentID}
+				})
+			}
+			m.mode = modeBoardsSelect
+			m.boardsCursor = 0
+			m.tempBoards = make(map[string]bool)
+			if m.boardsUsesAgile {
+				for _, val := range m.boardsValues {
+					m.tempBoards[val] = true
+				}
+			} else {
+				for _, val := range m.issue.ExtractStringFieldValues(m.boardsFieldName) {
+					m.tempBoards[val] = true
+				}
+			}
+			return m, nil
 		case "a":
 			m.mode = modeAssignInput
 			m.textInput.Placeholder = "Type name to search or enter freely..."
@@ -2044,6 +2269,9 @@ func (m detailModel) footerHelp() string {
 	if m.mode == modeActionSelect {
 		return StyleHelp.Render(" [↑/↓/j/k] Navigate  [Enter] Select Action  [0-9/Shortcut] Apply Action  [Esc/Space] Cancel ")
 	}
+	if m.mode == modeBoardsSelect {
+		return StyleHelp.Render(" [↑/↓/k/j] Navigate  [Space] Toggle  [Enter] Save  [Esc] Cancel ")
+	}
 	enterAction := "Jump to Task"
 	if m.activeViewport == 3 {
 		enterAction = "Open Attachment"
@@ -2077,7 +2305,11 @@ func (m detailModel) footerHelp() string {
 			editorViewAction = "  [Ctrl+g] Ext View"
 		}
 	}
-	helpStr := fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate  [e] %s  [C] Clone  [y] Yank  [o] Open%s%s%s%s  [?] Help  [q] Quit ", enterAction, editAction, filterAction, mdAction, deleteAction, editorViewAction)
+	helpStr := fmt.Sprintf(" [Esc] Back  [Tab] Pane  [Space] Action  [Enter] %s  [c] Comment  [Ctrl+f] Attach  [t] Time  [s] State  [R] Repo  [a] Assign  [E] Estimate", enterAction)
+	if m.boardsHasField && len(m.boardsOptions) > 0 {
+		helpStr += "  [B] Boards"
+	}
+	helpStr += fmt.Sprintf("  [e] %s  [C] Clone  [y] Yank  [o] Open%s%s%s%s  [?] Help  [q] Quit ", editAction, filterAction, mdAction, deleteAction, editorViewAction)
 	return StyleHelp.Render(wrapFooterHelp(helpStr, m.width-4))
 }
 
@@ -2684,6 +2916,28 @@ func (m detailModel) View() string {
 		repoStr,
 		estStr,
 	)
+	if m.boardsHasField {
+		var boardsVal string
+		if m.boardsUsesAgile {
+			if len(m.boardsValues) > 0 {
+				boardsVal = strings.Join(m.boardsValues, ", ")
+			} else {
+				boardsVal = "N/A"
+			}
+		} else {
+			values := issue.ExtractStringFieldValues(m.boardsFieldName)
+			if len(values) > 0 {
+				boardsVal = strings.Join(values, ", ")
+			} else {
+				boardsVal = issue.ExtractStringField(m.boardsFieldName)
+			}
+			if boardsVal == "" {
+				boardsVal = "N/A"
+			}
+		}
+		boardsStr := StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(boardsVal)
+		row2 = fmt.Sprintf("%s  Boards: %s", row2, boardsStr)
+	}
 	row3 := fmt.Sprintf("Assignee: %s  Creator: %s (%s)  Updated by: %s (%s)",
 		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(issue.Assignee()),
 		StyleNormal.Foreground(lipgloss.Color(ColorCyan)).Render(creatorVal),
@@ -3191,6 +3445,57 @@ func (m detailModel) View() string {
 		filterLines = append(filterLines, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [↑↓/k/j] Navigate   [Space] Toggle/Select   [Enter] Save   [Esc] Cancel "))
 
 		popupContent := lipgloss.JoinVertical(lipgloss.Left, filterLines...)
+		popup := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(ColorViolet)).
+			Background(lipgloss.Color(ColorSurface)).
+			Padding(1, 2).
+			Render(popupContent)
+
+		popupWidth := lipgloss.Width(popup)
+		popupHeight := strings.Count(popup, "\n") + 1
+		x := (m.width - popupWidth) / 2
+		y := (m.height - popupHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		view = overlayLines(view, popup, x, y)
+	}
+
+	if m.mode == modeBoardsSelect {
+		var boardsLines []string
+		boardsLines = append(boardsLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorViolet)).Background(lipgloss.Color(ColorSurface)).Render("📋  Select Boards - "+m.issue.IDReadable))
+		boardsLines = append(boardsLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+
+		for idx, opt := range m.boardsOptions {
+			checked := "[ ]"
+			if m.tempBoards[opt] {
+				checked = "[x]"
+			}
+			item := fmt.Sprintf("  %s %s ", checked, opt)
+			if idx == m.boardsCursor {
+				itemStyled := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorBg)).
+					Background(lipgloss.Color(ColorCyan)).
+					Bold(true).
+					Render(item)
+				boardsLines = append(boardsLines, itemStyled)
+			} else {
+				itemStyled := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorText)).
+					Background(lipgloss.Color(ColorSurface)).
+					Render(item)
+				boardsLines = append(boardsLines, itemStyled)
+			}
+		}
+
+		boardsLines = append(boardsLines, lipgloss.NewStyle().Background(lipgloss.Color(ColorSurface)).Render(""))
+		boardsLines = append(boardsLines, StyleHelp.Copy().Background(lipgloss.Color(ColorSurface)).Render(" [↑↓/k/j] Navigate   [Space] Toggle   [Enter] Save   [Esc] Cancel "))
+
+		popupContent := lipgloss.JoinVertical(lipgloss.Left, boardsLines...)
 		popup := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(ColorViolet)).

@@ -858,6 +858,7 @@ func (m AppModel) renderHelpPopup() string {
 			{"t", "Log work time"},
 			{"s", "Change issue state"},
 			{"R", "Assign repository"},
+			{"B", "Edit boards/sprints"},
 			{"a", "Assign user"},
 			{"E", "Edit estimation"},
 			{"e", "Edit desc/comment"},

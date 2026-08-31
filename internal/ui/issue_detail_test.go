@@ -676,6 +676,75 @@ func TestDetailModel_EditEstimation(t *testing.T) {
 	}
 }
 
+func TestDetailModel_EditBoards(t *testing.T) {
+	issue := &ytcli.Issue{
+		ID:         "1",
+		IDReadable: "SRDS-256",
+		Summary:    "Test boards",
+		CustomFields: []ytcli.CustomField{
+			{
+				Name: "Boards",
+				Value: []interface{}{
+					map[string]interface{}{"name": "Sprint 1", "$type": "VersionBundleElement"},
+				},
+			},
+		},
+	}
+	m := newDetailModel(nil, nil)
+	m.loading = false
+	m.mode = modeNormal
+	m, _ = m.Update(detailDataMsg{
+		issue:           issue,
+		activities:      []ytcli.ActivityItem{},
+		boardsOptions:   []string{"Sprint 1", "Sprint 2", "Sprint 3"},
+		boardsFieldName: "Boards",
+		boardsHasField:  true,
+	})
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("B")})
+	if m.mode != modeBoardsSelect {
+		t.Fatalf("expected modeBoardsSelect, got %v", m.mode)
+	}
+	if !m.tempBoards["Sprint 1"] {
+		t.Errorf("expected Sprint 1 to be pre-selected")
+	}
+	if m.tempBoards["Sprint 2"] {
+		t.Errorf("expected Sprint 2 to be unchecked initially")
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	if !m.tempBoards["Sprint 2"] {
+		t.Errorf("expected Sprint 2 to be toggled on")
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.mode != modeBoardsSelect {
+		t.Errorf("expected to stay in modeBoardsSelect while saving, got %v", m.mode)
+	}
+	if !m.loading {
+		t.Errorf("expected loading to be true while saving boards")
+	}
+
+	m, _ = m.Update(detailActionFinishedMsg{err: nil})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after boards save finished, got %v", m.mode)
+	}
+
+	m, _ = m.Update(detailDataMsg{
+		issue:           issue,
+		activities:      []ytcli.ActivityItem{},
+		boardsOptions:   []string{"Sprint 1", "Sprint 2", "Sprint 3"},
+		boardsFieldName: "Boards",
+		boardsHasField:  true,
+	})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("B")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.mode != modeNormal {
+		t.Errorf("expected normal mode after escape, got %v", m.mode)
+	}
+}
+
 func TestDetailModel_ReproduceLayoutBug(t *testing.T) {
 	m := newDetailModel(nil, nil)
 	m.width = 120

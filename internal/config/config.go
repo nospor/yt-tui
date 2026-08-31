@@ -173,6 +173,8 @@ type Config struct {
 	ActivitySortOrder   string                `json:"activity_sort_order,omitempty"`
 	RenderMarkdown      bool                  `json:"render_markdown"`
 	RepoOptions         map[string][]string   `json:"repo_options,omitempty"`
+	BoardsOptions       map[string][]string   `json:"boards_options,omitempty"`
+	BoardsFieldName     map[string]string     `json:"boards_field_name,omitempty"`
 	FilepickerSortBy    string                `json:"filepicker_sort_by,omitempty"`
 	FilepickerSortOrder string                `json:"filepicker_sort_order,omitempty"`
 	FilepickerLastDir   string                `json:"filepicker_last_dir,omitempty"`
@@ -219,6 +221,22 @@ func (cfg *Config) GetCustomPriorities(projectCode string) []string {
 		return priorities
 	}
 	return DefaultPriorities
+}
+
+// GetBoardsFieldName returns the configured boards/sprint custom field name for a project.
+func (cfg *Config) GetBoardsFieldName(projectCode string) string {
+	if cfg == nil || len(cfg.BoardsFieldName) == 0 {
+		return ""
+	}
+	if projectCode != "" {
+		if name, ok := cfg.BoardsFieldName[projectCode]; ok && name != "" {
+			return name
+		}
+	}
+	if name, ok := cfg.BoardsFieldName["default"]; ok && name != "" {
+		return name
+	}
+	return ""
 }
 
 // GetCustomTypes returns the list of custom types for the given project.

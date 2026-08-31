@@ -48,6 +48,14 @@ type Sprint struct {
 	Archived bool   `json:"archived,omitempty"`
 }
 
+// BoardsFieldInfo describes the sprint/boards field and its selectable values.
+type BoardsFieldInfo struct {
+	FieldName        string
+	Options          []string
+	AgileID          string
+	UsesAgileSprints bool
+}
+
 // CustomField represents a YouTrack issue custom field.
 type CustomField struct {
 	ID    string      `json:"id"`
@@ -177,6 +185,61 @@ func (i Issue) ExtractStringField(fieldName string) string {
 	return ""
 }
 
+// ExtractStringFieldValues extracts individual values from a named custom field.
+// For multi-value fields it returns each element; for single-value fields it returns a one-element slice.
+func (i Issue) ExtractStringFieldValues(fieldName string) []string {
+	for _, cf := range i.CustomFields {
+		if cf.Name == fieldName {
+			return stringifyValues(cf.Value)
+		}
+	}
+	return nil
+}
+
+// HasCustomField reports whether the issue has a custom field with the given name.
+func (i Issue) HasCustomField(fieldName string) bool {
+	for _, cf := range i.CustomFields {
+		if strings.EqualFold(cf.Name, fieldName) {
+			return true
+		}
+	}
+	return false
+}
+
+// BoardsFieldLabel is the default UI label for agile sprint boards.
+func BoardsFieldLabel() string {
+	return "Boards"
+}
+
+// BoardsFieldName returns the name of the boards/sprint custom field on the issue, if present.
+func (i Issue) BoardsFieldName() string {
+	candidates := []string{"Boards", "Board", "Sprint", "Sprints"}
+	for _, candidate := range candidates {
+		if i.HasCustomField(candidate) {
+			for _, cf := range i.CustomFields {
+				if strings.EqualFold(cf.Name, candidate) {
+					return cf.Name
+				}
+			}
+		}
+	}
+	for _, cf := range i.CustomFields {
+		if isBoardsLikeFieldName(cf.Name) {
+			return cf.Name
+		}
+	}
+	return ""
+}
+
+func isBoardsLikeFieldName(name string) bool {
+	lower := strings.ToLower(name)
+	switch lower {
+	case "fix versions", "affected versions", "fixed in build":
+		return false
+	}
+	return strings.Contains(lower, "board") || strings.Contains(lower, "sprint")
+}
+
 // State returns the state of the issue.
 func (i Issue) State() string {
 	stateFields := []string{"State", "Status", "Stage", "Workflow State"}
@@ -260,6 +323,30 @@ func (i Issue) UpdaterName() string {
 		return "N/A"
 	}
 	return i.Updater.DisplayName()
+}
+
+// stringifyValues converts a custom field value into a slice of strings.
+func stringifyValues(v interface{}) []string {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case []interface{}:
+		var result []string
+		for _, item := range val {
+			itemStr := stringifyValue(item)
+			if itemStr != "" {
+				result = append(result, itemStr)
+			}
+		}
+		return result
+	default:
+		itemStr := stringifyValue(v)
+		if itemStr == "" {
+			return nil
+		}
+		return []string{itemStr}
+	}
 }
 
 // stringifyValue safely converts YouTrack custom field values to a string.
