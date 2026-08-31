@@ -607,3 +607,155 @@ func TestUpdateIssueSprints(t *testing.T) {
 		t.Errorf("expected 1 add call, got %d", addCalls)
 	}
 }
+
+func TestUpdateIssueBoardsAgile(t *testing.T) {
+	var addCalls, deleteCalls int
+
+	getIssueResponse := `{
+		"id": "3-551",
+		"idReadable": "SRDS-218",
+		"project": {"id": "0-3", "shortName": "SRDS"}
+	}`
+	agilesResponse := `[{
+		"id": "204-9",
+		"name": "SRDS Sprint",
+		"projects": [{"id": "0-3", "shortName": "SRDS"}],
+		"sprints": [
+			{"id": "218-7", "name": "Sprint 1", "archived": false},
+			{"id": "218-9", "name": "Sprint 3", "archived": false}
+		],
+		"sprintsSettings": {
+			"disableSprints": false,
+			"sprintSyncField": {"name": "Boards", "field": {"name": "Boards"}}
+		}
+	}]`
+	issueFieldsResponse := `[
+		{"name": "Priority", "$type": "SingleEnumIssueCustomField", "projectCustomField": {"field": {"name": "Priority"}, "bundle": {"values": [{"name": "Normal"}]}}}
+	]`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218") && strings.Contains(r.URL.RawQuery, "idReadable"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(getIssueResponse))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218/customFields"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(issueFieldsResponse))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"id":"218-7","name":"Sprint 1","archived":false}]`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218") && strings.Contains(r.URL.RawQuery, "fields=id"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/agiles/204-9/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[
+				{"id":"218-7","name":"Sprint 1","archived":false},
+				{"id":"218-9","name":"Sprint 3","archived":false}
+			]`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/agiles"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(agilesResponse))
+		case r.Method == http.MethodDelete:
+			deleteCalls++
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/sprints/218-9/issues"):
+			addCalls++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		default:
+			t.Fatalf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
+		}
+	}))
+	defer server.Close()
+
+	c := &Client{
+		baseURL:    server.URL,
+		token:      "test-token",
+		httpClient: server.Client(),
+	}
+
+	if err := c.UpdateIssueBoards("SRDS-218", []string{"Sprint 3"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleteCalls != 1 {
+		t.Errorf("expected 1 delete call, got %d", deleteCalls)
+	}
+	if addCalls != 1 {
+		t.Errorf("expected 1 add call, got %d", addCalls)
+	}
+}
+
+func TestUpdateIssueBoardsCustomField(t *testing.T) {
+	getIssueResponse := `{
+		"id": "3-551",
+		"idReadable": "SRDS-218",
+		"project": {"id": "0-0", "shortName": "SRDS"},
+		"customFields": []
+	}`
+	issueFieldsResponse := `[
+		{
+			"name": "Boards",
+			"$type": "MultiVersionIssueCustomField",
+			"projectCustomField": {
+				"field": {"name": "Boards"},
+				"bundle": {"values": [
+					{"name": "Sprint 1"},
+					{"name": "Sprint 6"}
+				]}
+			}
+		}
+	]`
+
+	var postBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if strings.Contains(r.URL.Path, "/issues/SRDS-218/customFields") {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(issueFieldsResponse))
+				return
+			}
+			if strings.Contains(r.URL.Path, "/agiles") {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(getIssueResponse))
+		case http.MethodPost:
+			buf := make([]byte, r.ContentLength)
+			_, _ = r.Body.Read(buf)
+			postBody = string(buf)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"1"}`))
+		default:
+			t.Fatalf("unexpected method %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	c := &Client{
+		baseURL:    server.URL,
+		token:      "test-token",
+		httpClient: server.Client(),
+	}
+
+	if err := c.UpdateIssueBoards("SRDS-218", []string{"Sprint 6"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantBody := `{"$type":"Issue","customFields":[{"$type":"MultiVersionIssueCustomField","name":"Boards","value":[{"$type":"VersionBundleElement","name":"Sprint 6"}]}]}`
+	var want, got map[string]interface{}
+	if err := json.Unmarshal([]byte(wantBody), &want); err != nil {
+		t.Fatalf("bad wantBody: %v", err)
+	}
+	if err := json.Unmarshal([]byte(postBody), &got); err != nil {
+		t.Fatalf("bad post body %q: %v", postBody, err)
+	}
+	wantJSON, _ := json.Marshal(want)
+	gotJSON, _ := json.Marshal(got)
+	if string(wantJSON) != string(gotJSON) {
+		t.Errorf("expected body %s, got %s", wantJSON, gotJSON)
+	}
+}

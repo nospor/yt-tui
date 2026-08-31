@@ -276,6 +276,19 @@ Supported action command types:
 - `update_field`: Updates any single-value custom field (e.g., `State`, `Repo`, `Priority`). Requires `field` and `value`.
 - `comment`: Adds a comment to the issue. Requires `value` containing the comment text.
 - `assign`: Assigns the issue to a user (use `"me"`, `"unassigned"`, or any valid username). Requires `value`.
+- `update_board`: Replaces the issue's board/sprint assignments with the given value(s). Use `value` for a single sprint name or comma-separated names, or `values` for an array (e.g. `["Sprint 1", "Sprint 2"]`). An empty `value` clears all board assignments. Works with agile-board sprints and multi-value custom fields (auto-detected per project).
+
+Example board action:
+
+```json
+{
+  "name": "Sprint 5",
+  "shortcut": "5",
+  "commands": [
+    { "type": "update_board", "value": "Sprint 5" }
+  ]
+}
+```
 
 ---
 

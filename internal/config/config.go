@@ -380,9 +380,10 @@ func (cfg *Config) SetFavoriteView(url string, view string) {
 }
 
 type ActionCommand struct {
-	Type  string `json:"type"`
-	Field string `json:"field,omitempty"`
-	Value string `json:"value"`
+	Type   string   `json:"type"`
+	Field  string   `json:"field,omitempty"`
+	Value  string   `json:"value"`
+	Values []string `json:"values,omitempty"`
 }
 
 type ActionConfig struct {

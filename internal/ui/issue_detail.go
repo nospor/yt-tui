@@ -853,17 +853,8 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				m.loading = true
 				m.loadingText = "Updating boards..."
 				issueKey := m.issue.IDReadable
-				fieldName := m.boardsFieldName
-				boardsOpts := append([]string(nil), m.boardsOptions...)
-				usesAgile := m.boardsUsesAgile
-				agileID := m.boardsAgileID
 				return m, func() tea.Msg {
-					var err error
-					if usesAgile {
-						err = m.client.UpdateIssueSprints(issueKey, agileID, selected)
-					} else {
-						err = m.client.UpdateIssueCustomFieldSet(issueKey, fieldName, selected, boardsOpts...)
-					}
+					err := m.client.UpdateIssueBoards(issueKey, selected)
 					return detailActionFinishedMsg{err: err}
 				}
 			}

@@ -400,6 +400,38 @@ func (c *Client) UpdateIssueSprints(issueID, agileID string, sprintNames []strin
 	return nil
 }
 
+// UpdateIssueBoards replaces the issue's board/sprint assignments with sprintNames.
+// Empty sprintNames clears all assignments. Agile sprint API or custom field API is
+// chosen automatically based on project configuration.
+func (c *Client) UpdateIssueBoards(issueID string, sprintNames []string) error {
+	if c.baseURL == "" || c.token == "" {
+		return errors.New("missing YouTrack connection URL or token")
+	}
+
+	issue, err := c.GetIssue(issueID)
+	if err != nil {
+		return err
+	}
+	if issue == nil || issue.Project == nil {
+		return fmt.Errorf("issue %s has no project", issueID)
+	}
+
+	projectID := issue.Project.ID
+	projectShortName := issue.Project.ShortName
+	info, err := c.GetBoardsFieldInfoForIssue(issueID, projectID, projectShortName)
+	if err != nil {
+		return err
+	}
+	if info == nil || (info.FieldName == "" && info.AgileID == "") {
+		return fmt.Errorf("boards field not found for issue %s", issueID)
+	}
+
+	if info.UsesAgileSprints {
+		return c.UpdateIssueSprints(issueID, info.AgileID, sprintNames)
+	}
+	return c.UpdateIssueCustomFieldSet(issueID, info.FieldName, sprintNames, info.Options...)
+}
+
 func (c *Client) getIssueInternalID(issueID string) (string, error) {
 	baseURL := c.baseURL
 	if !strings.HasSuffix(baseURL, "/") {
