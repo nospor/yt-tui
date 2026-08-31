@@ -1,4 +1,24 @@
 
+## [0.8.3] - 2026-08-31
+
+### Features
+
+- *(detail)* Add Boards sprint editing in issue detail view ([b0f93cd](https://github.com/nospor/yt-tui/commit/b0f93cd9742a19ffa28214b222f2da5783323f67))
+
+            Display sprint/board assignment after Estimation and allow multi-select
+            editing with B. Load options from agile boards or custom fields, and
+            save via agile sprint API when no Boards custom field exists (e.g.
+            SRDS).
+- *(actions)* Add update_board custom quick action ([b9f988e](https://github.com/nospor/yt-tui/commit/b9f988e0a6ec83b7882716513c43eec2c9bb4659))
+
+            Expose board/sprint updates in Space action templates with replace
+            semantics. Add UpdateIssueBoards client helper shared by [B] editing
+            and quick actions.
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.8.2 [skip ci] ([d43bd9d](https://github.com/nospor/yt-tui/commit/d43bd9d2bb316480578b08df81ac4fbee6da1a47))
+
 ## [0.8.2] - 2026-08-21
 
 ### Miscellaneous Tasks
