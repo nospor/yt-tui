@@ -46,6 +46,16 @@ type Sprint struct {
 	Start    int64  `json:"start,omitempty"`
 	Finish   int64  `json:"finish,omitempty"`
 	Archived bool   `json:"archived,omitempty"`
+	Agile    *Agile `json:"agile,omitempty"`
+}
+
+// MatchesAgile reports whether the sprint belongs to agileID. Unknown parent
+// (missing agile) is treated as a match so callers can still display the name.
+func (s Sprint) MatchesAgile(agileID string) bool {
+	if agileID == "" || s.Agile == nil || s.Agile.ID == "" {
+		return true
+	}
+	return s.Agile.ID == agileID
 }
 
 // BoardsFieldInfo describes the sprint/boards field and its selectable values.

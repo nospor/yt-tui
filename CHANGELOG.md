@@ -1,4 +1,16 @@
 
+## [Unreleased]
+
+### Bug Fixes
+
+- *(actions)* Ignore other-board sprint membership in update_board
+
+            SRDS tickets can sit on more than one agile board. Replacing
+            sprints now only adds/removes cards on the board that actually
+            contains the named sprint (e.g. Sprint 9), instead of DELETE-ing
+            a sprint from a different board such as SRDS ONE Project Overview
+            and failing with "Entity with id 218-26 not found".
+
 ## [0.8.3] - 2026-08-31
 
 ### Features

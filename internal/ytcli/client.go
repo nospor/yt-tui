@@ -279,7 +279,7 @@ func (c *Client) GetIssueSprints(issueID string) ([]Sprint, error) {
 		baseURL += "/"
 	}
 
-	apiURL := baseURL + "api/issues/" + issueID + "/sprints?fields=id,name,archived&$top=100"
+	apiURL := baseURL + "api/issues/" + issueID + "/sprints?fields=id,name,archived,agile(id,name)&$top=100"
 
 	req, err := c.newRequest("GET", apiURL, nil)
 	if err != nil {
@@ -325,9 +325,13 @@ func (c *Client) UpdateIssueSprints(issueID, agileID string, sprintNames []strin
 		return err
 	}
 	nameToID := make(map[string]string, len(allSprints))
+	boardSprintIDs := make(map[string]struct{}, len(allSprints))
 	for _, sprint := range allSprints {
 		if sprint.Name != "" {
 			nameToID[sprint.Name] = sprint.ID
+		}
+		if sprint.ID != "" {
+			boardSprintIDs[sprint.ID] = struct{}{}
 		}
 	}
 
@@ -337,9 +341,10 @@ func (c *Client) UpdateIssueSprints(issueID, agileID string, sprintNames []strin
 	}
 	currentByName := make(map[string]string, len(currentSprints))
 	for _, sprint := range currentSprints {
-		if sprint.Name != "" {
-			currentByName[sprint.Name] = sprint.ID
+		if sprint.Name == "" || !sprintOnAgileBoard(sprint, agileID, boardSprintIDs) {
+			continue
 		}
+		currentByName[sprint.Name] = sprint.ID
 	}
 
 	desired := make(map[string]struct{}, len(sprintNames))
@@ -361,6 +366,9 @@ func (c *Client) UpdateIssueSprints(issueID, agileID string, sprintNames []strin
 		delBody, delStatus, err := c.doRequest(delReq)
 		if err != nil {
 			return err
+		}
+		if delStatus == http.StatusNotFound {
+			continue
 		}
 		if delStatus != http.StatusOK && delStatus != http.StatusNoContent {
 			return parseAPIError(delStatus, delBody)
@@ -427,9 +435,48 @@ func (c *Client) UpdateIssueBoards(issueID string, sprintNames []string) error {
 	}
 
 	if info.UsesAgileSprints {
-		return c.UpdateIssueSprints(issueID, info.AgileID, sprintNames)
+		agileID := info.AgileID
+		if !optionsContainAll(info.Options, sprintNames) {
+			if better, err := c.getBoardsFieldInfoFromAgile(projectID, projectShortName, sprintNames...); err == nil && better != nil && better.AgileID != "" {
+				agileID = better.AgileID
+			}
+		}
+		return c.UpdateIssueSprints(issueID, agileID, sprintNames)
 	}
 	return c.UpdateIssueCustomFieldSet(issueID, info.FieldName, sprintNames, info.Options...)
+}
+
+func sprintOnAgileBoard(sprint Sprint, agileID string, boardSprintIDs map[string]struct{}) bool {
+	if agileID == "" {
+		return true
+	}
+	if sprint.Agile != nil && sprint.Agile.ID != "" {
+		return sprint.Agile.ID == agileID
+	}
+	if sprint.ID == "" {
+		return false
+	}
+	_, ok := boardSprintIDs[sprint.ID]
+	return ok
+}
+
+func optionsContainAll(options, names []string) bool {
+	if len(names) == 0 {
+		return true
+	}
+	have := make(map[string]struct{}, len(options))
+	for _, opt := range options {
+		have[opt] = struct{}{}
+	}
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if _, ok := have[name]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Client) getIssueInternalID(issueID string) (string, error) {
@@ -2643,7 +2690,7 @@ func (c *Client) fetchBundleValues(projectID, fieldID, bundleID string) ([]strin
 	return result, nil
 }
 
-func (c *Client) getBoardsFieldInfoFromAgile(projectID, projectShortName string) (*BoardsFieldInfo, error) {
+func (c *Client) getBoardsFieldInfoFromAgile(projectID, projectShortName string, sprintHints ...string) (*BoardsFieldInfo, error) {
 	if c.baseURL == "" || c.token == "" {
 		return nil, errors.New("missing YouTrack connection URL or token")
 	}
@@ -2694,6 +2741,7 @@ func (c *Client) getBoardsFieldInfoFromAgile(projectID, projectShortName string)
 		return nil, err
 	}
 
+	var candidates []*BoardsFieldInfo
 	for _, agile := range agiles {
 		matched := false
 		for _, project := range agile.Projects {
@@ -2743,23 +2791,67 @@ func (c *Client) getBoardsFieldInfoFromAgile(projectID, projectShortName string)
 			continue
 		}
 
-		if fieldName == "" {
-			fieldName = c.resolveBoardsFieldName(projectID, projectShortName)
-		}
-		if fieldName == "" {
-			if name, err := c.ResolveBoardsFieldNameForSprints(projectID, projectShortName, options); err == nil {
-				fieldName = name
-			}
-		}
-
-		return &BoardsFieldInfo{
+		candidates = append(candidates, &BoardsFieldInfo{
 			FieldName: fieldName,
 			Options:   options,
 			AgileID:   agile.ID,
-		}, nil
+		})
 	}
 
-	return nil, nil
+	info := pickBoardsFieldInfo(candidates, sprintHints)
+	if info == nil {
+		return nil, nil
+	}
+	if info.FieldName == "" {
+		info.FieldName = c.resolveBoardsFieldName(projectID, projectShortName)
+	}
+	if info.FieldName == "" {
+		if name, err := c.ResolveBoardsFieldNameForSprints(projectID, projectShortName, info.Options); err == nil {
+			info.FieldName = name
+		}
+	}
+	return info, nil
+}
+
+func pickBoardsFieldInfo(candidates []*BoardsFieldInfo, sprintHints []string) *BoardsFieldInfo {
+	if len(candidates) == 0 {
+		return nil
+	}
+	var hints []string
+	for _, name := range sprintHints {
+		if name != "" {
+			hints = append(hints, name)
+		}
+	}
+	if len(hints) == 0 {
+		return candidates[0]
+	}
+
+	best := candidates[0]
+	bestScore := -1
+	for _, info := range candidates {
+		have := make(map[string]struct{}, len(info.Options))
+		for _, opt := range info.Options {
+			have[opt] = struct{}{}
+		}
+		score := 0
+		all := true
+		for _, name := range hints {
+			if _, ok := have[name]; ok {
+				score++
+			} else {
+				all = false
+			}
+		}
+		if all {
+			return info
+		}
+		if score > bestScore {
+			bestScore = score
+			best = info
+		}
+	}
+	return best
 }
 
 func (c *Client) resolveBoardsFieldName(projectID, projectShortName string) string {

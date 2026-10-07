@@ -365,7 +365,7 @@ func (m detailModel) loadDetailCmd() tea.Cmd {
 		if boardsUsesAgile {
 			if sprints, err := m.client.GetIssueSprints(issue.IDReadable); err == nil {
 				for _, sprint := range sprints {
-					if sprint.Archived || sprint.Name == "" {
+					if sprint.Archived || sprint.Name == "" || !sprint.MatchesAgile(boardsAgileID) {
 						continue
 					}
 					boardsValues = append(boardsValues, sprint.Name)
@@ -1845,7 +1845,7 @@ func (m detailModel) Update(msg tea.Msg) (res detailModel, cmd tea.Cmd) {
 				if sprints, err := m.client.GetIssueSprints(m.issue.IDReadable); err == nil {
 					m.boardsValues = nil
 					for _, sprint := range sprints {
-						if sprint.Archived || sprint.Name == "" {
+						if sprint.Archived || sprint.Name == "" || !sprint.MatchesAgile(m.boardsAgileID) {
 							continue
 						}
 						m.boardsValues = append(m.boardsValues, sprint.Name)

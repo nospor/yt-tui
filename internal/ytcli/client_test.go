@@ -608,6 +608,108 @@ func TestUpdateIssueSprints(t *testing.T) {
 	}
 }
 
+func TestUpdateIssueSprintsIgnoresOtherBoardMembership(t *testing.T) {
+	var addCalls, deleteCalls int
+	var deletedPaths []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[
+				{"id":"218-26","name":"First sprint","archived":false,"agile":{"id":"204-13","name":"SRDS ONE Project Overview"}},
+				{"id":"218-7","name":"Sprint 1","archived":false,"agile":{"id":"204-9","name":"SRDS Sprint"}}
+			]`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218") && strings.Contains(r.URL.RawQuery, "fields=id"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/agiles/204-9/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[
+				{"id":"218-7","name":"Sprint 1","archived":false},
+				{"id":"218-16","name":"Sprint 9","archived":false}
+			]`))
+		case r.Method == http.MethodDelete:
+			deleteCalls++
+			deletedPaths = append(deletedPaths, r.URL.Path)
+			if strings.Contains(r.URL.Path, "218-26") {
+				t.Errorf("must not delete other-board sprint: %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/sprints/218-16/issues"):
+			addCalls++
+			if !strings.Contains(r.URL.Path, "/agiles/204-9/") {
+				t.Errorf("expected add on board 204-9, got %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	c := &Client{
+		baseURL:    server.URL,
+		token:      "test-token",
+		httpClient: server.Client(),
+	}
+
+	if err := c.UpdateIssueSprints("SRDS-218", "204-9", []string{"Sprint 9"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleteCalls != 1 {
+		t.Errorf("expected 1 delete call, got %d (%v)", deleteCalls, deletedPaths)
+	}
+	if addCalls != 1 {
+		t.Errorf("expected 1 add call, got %d", addCalls)
+	}
+}
+
+func TestUpdateIssueSprintsDeleteNotFound(t *testing.T) {
+	var addCalls int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"id":"218-7","name":"Sprint 1","archived":false,"agile":{"id":"204-9"}}]`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218") && strings.Contains(r.URL.RawQuery, "fields=id"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/agiles/204-9/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[
+				{"id":"218-7","name":"Sprint 1","archived":false},
+				{"id":"218-16","name":"Sprint 9","archived":false}
+			]`))
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"Not Found","error_description":"Entity with id 218-7 not found"}`))
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/sprints/218-16/issues"):
+			addCalls++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	c := &Client{
+		baseURL:    server.URL,
+		token:      "test-token",
+		httpClient: server.Client(),
+	}
+
+	if err := c.UpdateIssueSprints("SRDS-218", "204-9", []string{"Sprint 9"}); err != nil {
+		t.Fatalf("404 on delete should be ignored, got %v", err)
+	}
+	if addCalls != 1 {
+		t.Errorf("expected 1 add call, got %d", addCalls)
+	}
+}
+
 func TestUpdateIssueBoardsAgile(t *testing.T) {
 	var addCalls, deleteCalls int
 
@@ -683,6 +785,116 @@ func TestUpdateIssueBoardsAgile(t *testing.T) {
 	}
 	if addCalls != 1 {
 		t.Errorf("expected 1 add call, got %d", addCalls)
+	}
+}
+
+func TestUpdateIssueBoardsPicksBoardContainingSprint(t *testing.T) {
+	var addCalls, deleteCalls int
+
+	getIssueResponse := `{
+		"id": "3-551",
+		"idReadable": "SRDS-218",
+		"project": {"id": "0-3", "shortName": "SRDS"}
+	}`
+	agilesResponse := `[
+		{
+			"id": "204-13",
+			"name": "SRDS ONE Project Overview",
+			"projects": [{"id": "0-3", "shortName": "SRDS"}],
+			"sprints": [
+				{"id": "218-26", "name": "First sprint", "archived": false}
+			],
+			"sprintsSettings": {"disableSprints": false}
+		},
+		{
+			"id": "204-9",
+			"name": "SRDS Sprint",
+			"projects": [{"id": "0-3", "shortName": "SRDS"}],
+			"sprints": [
+				{"id": "218-7", "name": "Sprint 1", "archived": false},
+				{"id": "218-16", "name": "Sprint 9", "archived": false}
+			],
+			"sprintsSettings": {"disableSprints": false}
+		}
+	]`
+	issueFieldsResponse := `[
+		{"name": "Priority", "$type": "SingleEnumIssueCustomField", "projectCustomField": {"field": {"name": "Priority"}, "bundle": {"values": [{"name": "Normal"}]}}}
+	]`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218") && strings.Contains(r.URL.RawQuery, "idReadable"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(getIssueResponse))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218/customFields"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(issueFieldsResponse))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[{"id":"218-26","name":"First sprint","archived":false,"agile":{"id":"204-13","name":"SRDS ONE Project Overview"}}]`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues/SRDS-218") && strings.Contains(r.URL.RawQuery, "fields=id"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/agiles/204-9/sprints"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[
+				{"id":"218-7","name":"Sprint 1","archived":false},
+				{"id":"218-16","name":"Sprint 9","archived":false}
+			]`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/agiles"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(agilesResponse))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/api/admin/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodDelete:
+			deleteCalls++
+			if strings.Contains(r.URL.Path, "218-26") {
+				t.Errorf("must not delete overview-board sprint: %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/sprints/218-16/issues"):
+			addCalls++
+			if !strings.Contains(r.URL.Path, "/agiles/204-9/") {
+				t.Errorf("expected add on SRDS Sprint board 204-9, got %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"3-551"}`))
+		default:
+			t.Fatalf("unexpected request %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
+		}
+	}))
+	defer server.Close()
+
+	c := &Client{
+		baseURL:    server.URL,
+		token:      "test-token",
+		httpClient: server.Client(),
+	}
+
+	if err := c.UpdateIssueBoards("SRDS-218", []string{"Sprint 9"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleteCalls != 0 {
+		t.Errorf("expected no deletes of other-board sprints, got %d", deleteCalls)
+	}
+	if addCalls != 1 {
+		t.Errorf("expected 1 add call to Sprint 9, got %d", addCalls)
+	}
+}
+
+func TestSprintMatchesAgile(t *testing.T) {
+	other := Sprint{ID: "218-26", Name: "First sprint", Agile: &Agile{ID: "204-13"}}
+	if other.MatchesAgile("204-9") {
+		t.Error("sprint on another board should not match")
+	}
+	same := Sprint{ID: "218-16", Name: "Sprint 9", Agile: &Agile{ID: "204-9"}}
+	if !same.MatchesAgile("204-9") {
+		t.Error("sprint on target board should match")
+	}
+	unknown := Sprint{ID: "218-16", Name: "Sprint 9"}
+	if !unknown.MatchesAgile("204-9") {
+		t.Error("sprint with unknown parent should still display")
 	}
 }
 
