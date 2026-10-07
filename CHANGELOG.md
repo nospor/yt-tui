@@ -1,15 +1,13 @@
 
-## [Unreleased]
+## [0.8.4] - 2026-10-07
 
 ### Bug Fixes
 
-- *(actions)* Ignore other-board sprint membership in update_board
+- *(actions)* Only update the agile board that contains the target sprint ([5489861](https://github.com/nospor/yt-tui/commit/5489861ab6f61c3df588f3737d658c6b6a74c937))
 
-            SRDS tickets can sit on more than one agile board. Replacing
-            sprints now only adds/removes cards on the board that actually
-            contains the named sprint (e.g. Sprint 9), instead of DELETE-ing
-            a sprint from a different board such as SRDS ONE Project Overview
-            and failing with "Entity with id 218-26 not found".
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.8.3 [skip ci] ([1cfa98a](https://github.com/nospor/yt-tui/commit/1cfa98aa37306812cf4d33b34437f9e0a4a9a8c8))
 
 ## [0.8.3] - 2026-08-31
 
