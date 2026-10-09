@@ -1,4 +1,17 @@
 
+## [0.8.5] - 2026-10-09
+
+### Features
+
+- *(filepicker)* Add zoxide directory jump in attach file browser ([b831d35](https://github.com/nospor/yt-tui/commit/b831d35990db58f57faa843b514addecf8315f6d))
+
+            Jump to frequent folders from the Ctrl+f picker with z instead of
+            walking the directory tree by hand.
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.8.4 [skip ci] ([05cbdc2](https://github.com/nospor/yt-tui/commit/05cbdc2703c4005ec208f4b4f1385dcbeb02fdf9))
+
 ## [0.8.4] - 2026-10-07
 
 ### Bug Fixes
