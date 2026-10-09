@@ -363,7 +363,7 @@ Example board action:
 * `Enter` (in Attachments viewport): Download the highlighted attachment and open it with `xdg-open`.
 * `d` (in Links viewport): Delete the highlighted link (with confirmation).
 * `d` (in Attachments viewport): Delete the highlighted attachment (with confirmation).
-* `Ctrl+f`: Open the file browser popup to pick and attach files from your computer to the issue immediately.
+* `Ctrl+f`: Open the file browser popup to pick and attach files from your computer to the issue immediately. Press `z` in the file browser to jump to a directory from [zoxide](https://github.com/ajeetdsouza/zoxide) (`zoxide` must be on `PATH`). Type to filter, `↑`/`↓` to move, `Enter` to jump, `Esc` to return to the browser.
 * `Ctrl+g`: View the description (when focusing the Description viewport) or the currently selected comment (when focusing the Comments viewport) in your preferred external editor without saving changes.
 * `Space`: Open the custom quick Actions popup to quickly update the issue using a templated sequence (either select via list or hit shortcut number). Includes a built-in `[f]` Toggle Full View action to expand/collapse the active pane.
 * `c`: Add a comment. Type your comment and press `Enter` to submit, `Alt+Enter` to insert a newline (multiline), or `Esc` to cancel. Type `@` to open a **mention autocomplete** dropdown (same project members/users as assign). Filter by typing after `@`; use `↑`/`↓` to navigate, `Tab` or `Enter` to insert `@login`, and `Esc` to dismiss the popup without cancelling the comment. You can also press `Ctrl+v` to paste and upload an image from the system clipboard, `Ctrl+f` to open the file browser popup to pick and attach files from your computer, or `Ctrl+g` to write/edit the comment in your preferred external editor.
@@ -395,7 +395,7 @@ Example board action:
 * `a`-`z` (on dropdown fields): Pressing the first letter of an option jumps directly to that choice.
 * `Ctrl+g` (on Description field): Open preferred external editor (using the `$EDITOR` environment variable) to write/edit the description.
 * `Ctrl+v` (on Description field): Paste an image directly from the system clipboard (Linux `xclip`/`wl-paste`, macOS, Windows). This injects standard Markdown image syntax and uploads the image to YouTrack on form submission.
-* `Ctrl+f` (on Description field): Open the file browser popup to pick and attach files from your computer. Supports sorting results by name/datetime (pressing `s`) and order asc/desc (pressing `o`). Last directory and sorting options are persisted in your config file.
+* `Ctrl+f` (on Description field): Open the file browser popup to pick and attach files from your computer. Supports sorting results by name/datetime (pressing `s`) and order asc/desc (pressing `o`). Press `z` to open a [zoxide](https://github.com/ajeetdsouza/zoxide) directory jump overlay (`zoxide` must be on `PATH`): type to filter, `↑`/`↓` to move, `Enter` to jump, `Esc` to return to the browser. Last directory and sorting options are persisted in your config file.
 * `Ctrl+s` (or `Enter` on text inputs): Submit the form and save/create/clone the issue.
 * `Esc`: Cancel and discard changes.
 

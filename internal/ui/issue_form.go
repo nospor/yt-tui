@@ -72,6 +72,7 @@ type formModel struct {
 
 	filepicker       filepicker.Model
 	filepickerActive bool
+	zoxide           zoxideOverlay
 }
 
 func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
@@ -129,6 +130,7 @@ func newFormModel(client *ytcli.Client, cfg *config.Config) formModel {
 		typeIndex:     0, // Default to "(Default)"
 		priorityIndex: 0, // Default to "(Default)"
 		filepicker:    fp,
+		zoxide:        newZoxideOverlay(),
 	}
 }
 
@@ -344,6 +346,7 @@ func (m *formModel) setupForm(data string) tea.Cmd {
 	m.userCursor = 0
 	m.pastedImages = nil
 	m.filepickerActive = false
+	m.zoxide = m.zoxide.close()
 	m.applyInputSizes()
 
 	var cmds []tea.Cmd
@@ -387,10 +390,23 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 	m.applyInputSizes()
 
 	if m.filepickerActive {
+		zres := applyFilepickerZoxide(m.zoxide, m.filepicker, msg)
+		m.zoxide = zres.Overlay
+		m.filepicker = zres.Picker
+		if zres.Handled {
+			if zres.Jumped && m.cfg != nil {
+				m.cfg.FilepickerSortBy = m.filepicker.SortBy.String()
+				m.cfg.FilepickerSortOrder = m.filepicker.SortOrder.String()
+				m.cfg.FilepickerLastDir = m.filepicker.CurrentDirectory
+				_ = config.SaveConfig(m.cfg)
+			}
+			return m, zres.Cmd
+		}
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			if msg.String() == "esc" || msg.String() == "q" {
 				m.filepickerActive = false
+				m.zoxide = m.zoxide.close()
 				if m.cfg != nil {
 					m.cfg.FilepickerSortBy = m.filepicker.SortBy.String()
 					m.cfg.FilepickerSortOrder = m.filepicker.SortOrder.String()
@@ -403,6 +419,7 @@ func (m formModel) Update(msg tea.Msg) (formModel, tea.Cmd) {
 			m.filepicker, fpCmd = m.filepicker.Update(msg)
 			if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
 				m.filepickerActive = false
+				m.zoxide = m.zoxide.close()
 				if m.cfg != nil {
 					m.cfg.FilepickerSortBy = m.filepicker.SortBy.String()
 					m.cfg.FilepickerSortOrder = m.filepicker.SortOrder.String()
@@ -1127,7 +1144,11 @@ func (m formModel) View() string {
 
 	var helpText string
 	if m.filepickerActive {
-		helpText = " [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [q/Esc] Close picker "
+		if m.zoxide.active {
+			helpText = " Type to filter  [↑/↓] Move  [Enter] Jump to directory  [Esc] Back to browser "
+		} else {
+			helpText = " [j/k/↑/↓] Navigate  [Enter] Select  [h/Esc] Parent Dir  [s] Toggle Sort Type  [o] Toggle Sort Order  [z] zoxide  [q/Esc] Close picker "
+		}
 	} else if m.focusIndex == fieldDescription {
 		helpText = " [Tab/Shift-Tab] Navigate  [Ctrl+v] Paste Img  [Ctrl+f] Attach File  [Ctrl+g] External Editor  [Ctrl+s] Submit  [Esc] Back "
 	} else if m.focusIndex == fieldSummary {
@@ -1145,30 +1166,7 @@ func (m formModel) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, title, formContent, "", help)
 	if m.filepickerActive {
-		// Clip or pad base view to m.height lines to prevent terminal scrolling
-		lines := strings.Split(view, "\n")
-		if len(lines) > m.height {
-			lines = lines[:m.height]
-			view = strings.Join(lines, "\n")
-		} else if len(lines) < m.height {
-			for len(lines) < m.height {
-				lines = append(lines, "")
-			}
-			view = strings.Join(lines, "\n")
-		}
-
-		popup := m.renderFilePickerPopup()
-		popupWidth := lipgloss.Width(popup)
-		popupHeight := strings.Count(popup, "\n") + 1
-		x := (m.width - popupWidth) / 2
-		y := (m.height - popupHeight) / 2
-		if x < 0 {
-			x = 0
-		}
-		if y < 0 {
-			y = 0
-		}
-		view = overlayLines(view, popup, x, y)
+		view = overlayFilepickerPopups(view, m.renderFilePickerPopup(), m.zoxide.render(m.width, m.height), m.width, m.height)
 	}
 
 	if m.errPopupShow && m.err != nil {
@@ -1253,7 +1251,7 @@ func (m formModel) renderFilePickerPopup() string {
 
 	fpView.WriteString(m.filepicker.View())
 
-	sortInfo := fmt.Sprintf("Sort: %s (%s)  [s] Toggle Type  [o] Toggle Order", m.filepicker.SortBy.String(), m.filepicker.SortOrder.String())
+	sortInfo := fmt.Sprintf("Sort: %s (%s)  [s] Toggle Type  [o] Toggle Order  [z] zoxide", m.filepicker.SortBy.String(), m.filepicker.SortOrder.String())
 	fpView.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorCyan)).
 		Background(lipgloss.Color(ColorSurface)).

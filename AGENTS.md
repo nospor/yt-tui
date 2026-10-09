@@ -28,8 +28,8 @@ Built using Bubble Tea (`bubbletea`), Lip Gloss (`lipgloss`), and Bubbles compon
 * [dashboard.go](internal/ui/dashboard.go) - The homepage listing "My Open Issues" and available "Projects".
 * [projects.go](internal/ui/projects.go) - A panel rendering a list of YouTrack projects.
 * [issues.go](internal/ui/issues.go) - The issues list view with filtering and paginated results.
-* [issue_detail.go](internal/ui/issue_detail.go) - Renders descriptions, fields, and comments for a single ticket.
-* [issue_form.go](internal/ui/issue_form.go) - Form inputs for creating and cloning issues.
+* [issue_detail.go](internal/ui/issue_detail.go) - Renders descriptions, fields, and comments for a single ticket. Ctrl+f opens the attach file picker; `z` in that picker opens a nested zoxide jump overlay (`QueryZoxideDirs` / `zoxide query -l`).
+* [issue_form.go](internal/ui/issue_form.go) - Form inputs for creating and cloning issues. Same Ctrl+f file picker and `z` zoxide jump as issue detail.
 * [styles.go](internal/ui/styles.go) - Catppuccin Mocha color scheme definitions and style helper functions.
 * [keys.go](internal/ui/keys.go) - Unified hotkey configurations.
 

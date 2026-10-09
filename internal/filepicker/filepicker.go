@@ -313,6 +313,19 @@ func (m Model) Init() tea.Cmd {
 	return m.readDir(m.CurrentDirectory, m.ShowHidden)
 }
 
+// JumpToDirectory switches the picker to path, resets cursor/history, and
+// reloads that directory.
+func (m Model) JumpToDirectory(path string) (Model, tea.Cmd) {
+	m.CurrentDirectory = path
+	m.selected = 0
+	m.min = 0
+	m.max = m.Height - 1
+	m.selectedStack = newStack()
+	m.minStack = newStack()
+	m.maxStack = newStack()
+	return m, m.Init()
+}
+
 // SetHeight sets the height of the filepicker.
 func (m *Model) SetHeight(height int) {
 	m.Height = height
