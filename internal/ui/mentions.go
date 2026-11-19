@@ -23,7 +23,10 @@ func textareaCursorOffset(ta textarea.Model) int {
 	for i := 0; i < row; i++ {
 		offset += len([]rune(lines[i])) + 1
 	}
-	offset += ta.LineInfo().CharOffset
+	// CharOffset is the column on the current soft-wrapped row. The caret's
+	// index in the hard line is the start of that row plus the column.
+	info := ta.LineInfo()
+	offset += info.StartColumn + info.ColumnOffset
 	return offset
 }
 
