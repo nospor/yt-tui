@@ -1,4 +1,18 @@
 
+## [0.8.6] - 2026-11-19
+
+### Bug Fixes
+
+- *(ui)* Keep the mention list closed when a comment line wraps ([e502aa6](https://github.com/nospor/yt-tui/commit/e502aa686c9a06165a2e1a011fc58667df72d522))
+
+            The caret column on a soft-wrapped row was treated as the index in the
+            full line, so typing past the edge looked like the cursor was still
+            inside @mention.
+
+### Miscellaneous Tasks
+
+- Update CHANGELOG.md for v0.8.5 [skip ci] ([9068c07](https://github.com/nospor/yt-tui/commit/9068c07826e6cd613b77adb09a97b6e68dd80fb4))
+
 ## [0.8.5] - 2026-10-09
 
 ### Features
